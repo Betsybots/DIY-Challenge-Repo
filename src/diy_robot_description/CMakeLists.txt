@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.10)
 project(diy_robot_description)
 
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY urdf launch config rviz
+  DIRECTORY urdf launch #config rviz
   DESTINATION share/${PROJECT_NAME}
 )
 

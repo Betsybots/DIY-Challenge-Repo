@@ -1,0 +1,35 @@
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Axes: true
+      Marker Scale: 1.0
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Plane: XY
+      Color: 160; 160; 160
+      Cell Size: 1.0
+      Line Style: Lines
+      Cell Count: 20
+      Alpha: 0.5
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Lidar Points
+      Enabled: true
+      Topic: /lidar_points
+      Queue Size: 1
+      Color Transformer: RGB8
+      Size (m): 0.01
+      Decay Time: 0
+  Global Options:
+    Fixed Frame: lidar_link
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Focal Point: 0; 0; 0
+      Distance: 2.0
+      Pitch: 0.5
+      Yaw: 0.7
+      Orthographic: false

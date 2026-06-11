@@ -1,0 +1,109 @@
+<?xml version="1.0" ?>
+<sdf version='1.9'>
+  <model name='diy_challenge_robot'>
+    <link name='base_link'>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>8</mass>
+        <inertia>
+          <ixx>0.10000000000000001</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.10000000000000001</iyy>
+          <iyz>0</iyz>
+          <izz>0.10000000000000001</izz>
+        </inertia>
+      </inertial>
+      <collision name='base_link_collision'>
+        <pose>0 0 0.203 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.61 0.406 0.406</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name='base_link_visual'>
+        <pose>0 0 0.15 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.406 0.406 0.3</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse>0.25 0.25 0.25 1</diffuse>
+          <ambient>0.25 0.25 0.25 1</ambient>
+        </material>
+      </visual>
+      <visual name='base_link_fixed_joint_lump__camera_link_visual_1'>
+        <pose>0.2 0 0.2 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.09 0.025 0.025</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse>0.125 0.5 1 1</diffuse>
+          <ambient>0.125 0.5 1 1</ambient>
+        </material>
+      </visual>
+      <visual name='base_link_fixed_joint_lump__gps_link_visual_2'>
+        <pose>0 0 0.42 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.02</length>
+            <radius>0.040000000000000001</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <visual name='base_link_fixed_joint_lump__imu_link_visual_3'>
+        <pose>0 0 0.25 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.03 0.03 0.015</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse>0.125 1 0.25 1</diffuse>
+          <ambient>0.125 1 0.25 1</ambient>
+        </material>
+      </visual>
+      <visual name='base_link_fixed_joint_lump__lidar_link_visual_4'>
+        <pose>0 0 0.38 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.059999999999999998</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>1 0.5 0 1</diffuse>
+          <ambient>1 0.5 0 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <frame name='camera_to_optical' attached_to='camera_link'>
+      <pose>0 0 0 -1.5708 0 -1.5708</pose>
+    </frame>
+    <frame name='camera_optical_link' attached_to='camera_to_optical'/>
+    <frame name='base_to_camera' attached_to='base_link'>
+      <pose>0.2 0 0.2 0 -0 0</pose>
+    </frame>
+    <frame name='camera_link' attached_to='base_to_camera'/>
+    <frame name='base_to_gps' attached_to='base_link'>
+      <pose>0 0 0.42 0 -0 0</pose>
+    </frame>
+    <frame name='gps_link' attached_to='base_to_gps'/>
+    <frame name='base_to_imu' attached_to='base_link'>
+      <pose>0 0 0.25 0 -0 0</pose>
+    </frame>
+    <frame name='imu_link' attached_to='base_to_imu'/>
+    <frame name='base_to_lidar' attached_to='base_link'>
+      <pose>0 0 0.38 0 -0 0</pose>
+    </frame>
+    <frame name='lidar_link' attached_to='base_to_lidar'/>
+  </model>
+</sdf>

@@ -1,0 +1,157 @@
+<?xml version="1.0"?>
+<!--
+  DIY Challenge 2026 — Robot Description
+  ========================================
+  Frame conventions follow REP-103 and REP-105.
+  All extrinsics below are PLACEHOLDER values.
+  Replace every "CALIB:" comment with measured/calibrated values
+  before running autonomous navigation.
+
+  Frame tree (required by Nav2 & FAST-LIO2):
+    map
+     └── odom            (published by navsat_transform / EKF2)
+          └── base_link  (published by EKF1 via /odometry/filtered)
+               ├── lidar_link   <- fixed, from lidar_imu_calib
+               ├── imu_link     <- fixed, from lidar_imu_calib
+               ├── camera_link  <- fixed, from cam_lidar_calib
+               └── gps_link     <- fixed, measured lever arm
+
+  Robot body: 406 mm L × 406 mm W × 406 mm H (16" × 16" × 16")
+  All dimensions in metres, angles in radians.
+-->
+<robot name="diy_challenge_robot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ═══════════════════════════════════════ MATERIALS ══ -->
+  <material name="dark_grey">
+    <color rgba="0.2 0.2 0.2 1.0"/>
+  </material>
+  <material name="blue">
+    <color rgba="0.1 0.4 0.8 1.0"/>
+  </material>
+  <material name="green">
+    <color rgba="0.1 0.8 0.2 1.0"/>
+  </material>
+  <material name="orange">
+    <color rgba="0.9 0.4 0.0 1.0"/>
+  </material>
+  <material name="white">
+    <color rgba="0.9 0.9 0.9 1.0"/>
+  </material>
+
+  <!-- ═══════════════════════════════════════ BASE LINK ══ -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.406 0.406 0.3"/>
+      </geometry>
+      <origin xyz="0 0 0.15" rpy="0 0 0"/>
+      <material name="dark_grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.610 0.406 0.406"/>
+      </geometry>
+      <origin xyz="0 0 0.203" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="8.0"/>
+      <inertia ixx="0.1" ixy="0.0" ixz="0.0"
+               iyy="0.1" iyz="0.0"
+               izz="0.1"/>
+    </inertial>
+  </link>
+
+  <!-- ═══════════════════════════════════════ LIDAR LINK ══
+       Hesai QT64 — mounted on top centre of chassis.
+       CALIB: Replace xyz and rpy with lidar_imu_calib extrinsic output.
+             extrinsic_T goes into xyz, extrinsic_R (Euler) into rpy. -->
+  <link name="lidar_link">
+    <visual>
+      <geometry>
+        <cylinder length="0.08" radius="0.06"/>
+      </geometry>
+      <material name="orange"/>
+    </visual>
+  </link>
+
+  <joint name="base_to_lidar" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <!-- CALIB: Replace with lidar_imu_calib result for lidar→imu, then
+                compute imu→base_link to get this transform. -->
+    <origin xyz="0.0 0.0 0.38" rpy="0.0 0.0 0.0"/>
+  </joint>
+
+  <!-- ═══════════════════════════════════════ IMU LINK ══
+       Dedicated 6-DOF IMU (NOT the D435i built-in IMU).
+       CALIB: Replace with lidar_imu_calib extrinsic result.
+             This is the IMU→LiDAR transform inverse. -->
+  <link name="imu_link">
+    <visual>
+      <geometry>
+        <box size="0.03 0.03 0.015"/>
+      </geometry>
+      <material name="green"/>
+    </visual>
+  </link>
+
+  <joint name="base_to_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <!-- CALIB: Replace with measured/calibrated IMU mount position. -->
+    <origin xyz="0.0 0.0 0.25" rpy="0.0 0.0 0.0"/>
+  </joint>
+
+  <!-- ═══════════════════════════════════════ CAMERA LINK ══
+       RealSense D435i — mounted front of chassis, facing forward.
+       CALIB: Replace with cam_lidar_calib extrinsic result.
+             camera_link is the standard RealSense optical frame origin. -->
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="0.09 0.025 0.025"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+  </link>
+
+  <joint name="base_to_camera" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <!-- CALIB: Replace xyz with measured mount position.
+                rpy: camera faces forward (+x of base_link), need
+                RealSense→ROS optical convention if using stereo topics. -->
+    <origin xyz="0.20 0.0 0.20" rpy="0.0 0.0 0.0"/>
+  </joint>
+
+  <!-- Camera optical frame (required by apriltag_ros and realsense2_ros) -->
+  <link name="camera_optical_link"/>
+  <joint name="camera_to_optical" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_optical_link"/>
+    <!-- ROS optical convention: x right, y down, z into scene -->
+    <origin xyz="0 0 0" rpy="-1.5707963 0 -1.5707963"/>
+  </joint>
+
+  <!-- ═══════════════════════════════════════ GPS LINK ══
+       RTK GNSS antenna phase centre.
+       CALIB: Physically measure the 3D offset from antenna phase centre
+              to base_link origin (geometric centre at floor level).
+              An uncompensated 10 cm lever arm causes systematic heading error. -->
+  <link name="gps_link">
+    <visual>
+      <geometry>
+        <cylinder length="0.02" radius="0.04"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="base_to_gps" type="fixed">
+    <parent link="base_link"/>
+    <child link="gps_link"/>
+    <!-- CALIB: Replace with physically measured antenna phase centre position. -->
+    <origin xyz="0.0 0.0 0.42" rpy="0.0 0.0 0.0"/>
+  </joint>
+
+</robot>
