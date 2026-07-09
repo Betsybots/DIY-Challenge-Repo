@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="Straw Bale">
+    <static>true</static>
+    <link name="bale_link">
+      <visual name="body_visual">
+      	<geometry>
+          <mesh>
+            <uri>meshes/strawbale_noise.dae</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="body_collision">
+      	<geometry>
+          <mesh>
+            <uri>meshes/strawbale_noise.dae</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

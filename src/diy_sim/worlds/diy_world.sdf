@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <sdf version='1.9'>
-  <world name='empty'>
+  <world name='obstacle_track'>
   
   <!-- Physics definitions -->
     <physics name='1ms' type='ignored'>
@@ -21,6 +21,17 @@
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
         <render_engine>ogre2</render_engine>
     </plugin>
+    <gazebo>
+        <plugin filename="libignition-gazebo-pose-publisher-system.so"
+              name="ignition::gazebo::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <publish_visual_pose>false</publish_visual_pose>
+          <publish_nested_model_pose>true</publish_nested_model_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <static_publisher>false</static_publisher>
+        </plugin>
+    </gazebo>
+    
     <!--
     <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
         <render_engine>ogre2</render_engine>
@@ -104,6 +115,112 @@
       <self_collide>false</self_collide>
     </model>
     
+    <include>
+        <name>ground_plane_image</name>
+        <uri>../models/grass_plane/model.sdf</uri>
+    </include>
+
+    <include>
+        <name>model_0</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <!-- <pose>1.5374999999999979 9.45 0.175 0 0 0.0</pose> -->
+        <pose>0 -1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_1</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>0 1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_2</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>1 -1 0 0 0 1.5707</pose>
+    </include>
+    <include>
+        <name>model_3</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>1 1 0 0 0 1.5707</pose>
+    </include>
+    <include>
+        <name>model_4</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>2 -1 0 0 1.5707 0.0</pose>
+    </include>
+    <include>
+        <name>model_5</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>2 1 0 0 1.5707 0.0</pose>
+    </include>
+    <include>
+        <name>model_6</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>3 -1 0 0.707 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_7</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>3 1 0 0.707 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_8</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>4 0 0 0 0 1.5707</pose>
+    </include>
+    <include>
+        <name>model_9</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>4 1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_10</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>5 -1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_11</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>5 1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_12</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>6 -1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_13</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>6 1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_14</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>7 -1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_15</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>7 1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_16</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>8 0 0 0 0 1.5707</pose>
+    </include>
+    <include>
+        <name>model_17</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>8 1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_18</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>9 -1 0 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>model_19</name>
+        <uri>../models/straw_bale/model.sdf</uri>
+        <pose>9 1 0 0 0 0.0</pose>
+    </include>
     <!-- Robot Description -->
     <!--
     <include>

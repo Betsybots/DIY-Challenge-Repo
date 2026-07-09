@@ -34,6 +34,7 @@
   <xacro:property name="wheel_zoff" value="0.06985"/> <!-- 2.75 inches--> 
   <xacro:property name="drive_wheel_xoff" value="0.1254125"/><!-- 4.9375 inches-->
   <xacro:property name="rear_wheel_xoff" value="0.1476375"/><!-- 5.8125 inches-->
+  <xacro:property name="castor_wheel_radius" value="0.01"/> <!-- 3.71875 inches-->
   
   <xacro:property name="camera_screw_zoff" value="-0.0385"/>
   <xacro:property name="camera_screw_xoff" value="-0.007"/>
@@ -62,7 +63,7 @@
   </xacro:imu_v1>
 
   <material name="transparent_blue">
-    <color rgba="0.0 0.0 1.0 0.25"/>
+    <color rgba="0.0 0.0 1.0 0.75"/>
   </material>
   <material name="blue">
     <color rgba="0.0 0.0 1.0 1.0"/>
@@ -151,7 +152,7 @@
       <geometry>
         <box size="${base_length} ${base_width} ${base_height}"/>
       </geometry>
-      <material name="transparent_blue"/>
+      <material name="blue"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/> <!-- change based on TF -->
@@ -161,11 +162,67 @@
     </collision>
   </link>
   
+  <link name="caster">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.1" ixy="0.0" ixz="0.0" iyy="0.1" iyz="0.0" izz="0.1"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="${wheel_radius}"/>
+      </geometry>
+      <material name="green"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="${wheel_radius}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="chassis_caster_ball" type="continuous">
+    <parent link="chassis"/>
+    <child link="caster"/>
+    <origin xyz="${-1*rear_wheel_xoff} 0.0 ${-1*wheel_zoff}" rpy="0 0 0"/>
+  </joint>
+  
   <xacro:wheel prefix="drivewhl_l" x_reflect="1" y_reflect="1" wheel_xoff="${drive_wheel_xoff}" joint_type="continuous"/>
   <xacro:wheel prefix="drivewhl_r" x_reflect="1" y_reflect="-1" wheel_xoff="${drive_wheel_xoff}" joint_type="continuous"/>
-  <xacro:wheel prefix="rearwhl_l" x_reflect="-1" y_reflect="1" wheel_xoff="${rear_wheel_xoff}" joint_type="continuous"/>
+  <!--<xacro:wheel prefix="rearwhl_l" x_reflect="-1" y_reflect="1" wheel_xoff="${rear_wheel_xoff}" joint_type="continuous"/>
   <xacro:wheel prefix="rearwhl_r" x_reflect="-1" y_reflect="-1" wheel_xoff="${rear_wheel_xoff}" joint_type="continuous"/>
-  
+  -->
+  <gazebo>
+    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+        <left_joint>drivewhl_l_joint</left_joint>
+        <right_joint>drivewhl_r_joint</right_joint>
+        <wheel_separation>${base_width+2*wheel_ygap}</wheel_separation> <!-- Adjust to your robot's width (meters) -->
+        <wheel_radius>${wheel_radius}</wheel_radius>     <!-- Adjust to your wheel radius (meters) -->
+        <topic>cmd_vel</topic>
+        <robot_param_node>/robot_state_publisher</robot_param_node>
+    </plugin>
+  </gazebo>
+  <gazebo>
+    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+        <topic>joint_states</topic> <joint_name>drivewhl_l_joint</joint_name>
+        <joint_name>drivewhl_r_joint</joint_name>
+    </plugin>
+  </gazebo>
+   <!-- INSERT GROUND TRUTH POSE PUBLISHER HERE -->
+  <gazebo>
+    <plugin filename="libignition-gazebo-pose-publisher-system.so"
+          name="ignition::gazebo::systems::PosePublisher">
+      <publish_link_pose>false</publish_link_pose>
+      <publish_visual_pose>false</publish_visual_pose>
+      <publish_nested_model_pose>true</publish_nested_model_pose>
+      <use_pose_vector_msg>true</use_pose_vector_msg>
+      <static_publisher>false</static_publisher>
+      <publish_model_pose>true</publish_model_pose>
+    </plugin>
+  </gazebo>
+
 <!--
   <link name="wheel_1">
     <inertial>

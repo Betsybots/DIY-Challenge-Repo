@@ -46,10 +46,10 @@
     <gazebo reference="imu_link">
       <sensor type="imu" name="imu_sensor">
         <always_on>1</always_on>
-        <update_rate>50</update_rate>
+        <update_rate>100</update_rate>
         <visualize>true</visualize>
         <topic>imu</topic>
-        <frame_name>imu_link</frame_name>
+        <ignition_frame_id>imu_link</ignition_frame_id>
         <plugin filename="ignition-gazebo-imu-system" name="ignition::gazebo::systems::Imu">
         </plugin>
       </sensor>

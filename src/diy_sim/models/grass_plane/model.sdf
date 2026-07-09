@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="grass_plane">
+    <static>true</static>
+    <link name="grass_plane_link">
+      <visual name="body_visual">
+      	<geometry>
+          <mesh><uri>meshes/grass_plane.dae</uri></mesh>
+        </geometry>
+      </visual>
+      <collision name="body_collision">
+      	<geometry>
+          <mesh><uri>meshes/grass_plane.dae</uri></mesh>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>100 100</size>
+          </plane>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.8</mu> <!-- Coulomb friction coefficient -->
+              <mu2>0.8</mu2> <!-- Second friction direction -->
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+  </model>
+</sdf>
