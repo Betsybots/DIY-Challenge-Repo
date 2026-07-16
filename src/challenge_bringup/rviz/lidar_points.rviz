@@ -18,18 +18,10 @@ Visualization Manager:
     - Class: rviz_default_plugins/PointCloud2
       Name: Lidar Points
       Enabled: true
-      Topic: /lidar_points
+      Topic: /lidar/points
       Queue Size: 1
       Color Transformer: RGB8
       Size (m): 0.01
       Decay Time: 0
   Global Options:
-    Fixed Frame: lidar_link
-  Views:
-    Current:
-      Class: rviz_default_plugins/Orbit
-      Focal Point: 0; 0; 0
-      Distance: 2.0
-      Pitch: 0.5
-      Yaw: 0.7
-      Orthographic: false
+    Fixed Frame: juggernaut/base_footprint/gpu_lidar
