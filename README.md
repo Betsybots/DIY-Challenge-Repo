@@ -1,6 +1,6 @@
 # DIY Challenge Repo
 
-ROS 2 Humble · Jetson Nano · Hesai QT64 · FAST-LIO2 · Nav2
+ROS 2 Humble · Jetson Orin Nano · Hesai QT64 · FAST-LIO2 · LIO-SAM · Nav2
 
 Autonomous robot software stack for the DIY Robot Challenge 2026.  
 Full documentation: **[docs/DIY_Challenge_Robot_Guide.pdf](docs/DIY_Challenge_Robot_Guide.pdf)**  
@@ -12,7 +12,7 @@ GPU / CUDA guide: **[docs/Jetson_GPU_Guide.pdf](docs/Jetson_GPU_Guide.pdf)**
 
 ```bash
 # 1. Clone with all third-party packages
-git clone --recurse-submodules https://github.com/vasu536/DIY-Challenge-Repo.git
+git clone --recurse-submodules https://github.com/Betsybots/DIY-Challenge-Repo.git
 cd DIY-Challenge-Repo
 
 # 2. Build everything (patches + rosdep + colcon)
@@ -38,22 +38,25 @@ scripts/run_robot.sh jetson
 ```
 DIY-Challenge-Repo/
 ├── src/                        ← ROS 2 packages (your code)
-│   ├── challenge_bringup/      ← Top-level launch, Nav2 config, maps
-│   ├── diy_cmd_vel_mux/        ← Priority-based velocity multiplexer
+│   ├── challenge_bringup/      ← Top-level launch, Nav2 config, maps, RViz configs
+│   ├── diy_cmd_vel_mux/        ← Priority-based velocity multiplexer (joy / nav / e-stop)
 │   ├── diy_estop_controller/   ← STM32 heartbeat watchdog / e-stop
-│   ├── diy_localization/       ← FAST-LIO2 + EKF1 + EKF2 + navsat
-│   └── diy_robot_description/  ← URDF / robot_state_publisher
+│   ├── diy_localization/       ← FAST-LIO2 + dual EKF fusion (wheel+IMU → lidar)
+│   ├── diy_motor_control_legacy/ ← Differential drive motor controller (wheel odometry)
+│   ├── diy_robot_description/  ← URDF / robot_state_publisher
+│   ├── diy_sim/                ← Gazebo simulation world and plugins
+│   └── plan_b/                 ← Autonomous motion plan executor (waypoint sequencer)
 ├── third_party_ws/src/         ← Git submodules (auto-cloned)
-│   ├── FAST_LIO/               ← Lidar-inertial odometry
-│   ├── LIO-SAM/                ← Offline mapping (loop closure)
+│   ├── FAST_LIO/               ← Lidar-inertial odometry (runtime localization)
+│   ├── LIO-SAM/                ← Offline mapping with loop closure (prior map generation)
 │   ├── imu_utils_ros2_humble/  ← IMU Allan variance calibration
 │   ├── lidar_imu_calib/        ← Lidar↔IMU extrinsic calibration
 │   ├── livox_ros_driver2/      ← Hesai QT64 lidar driver
-│   └── ndt_omp_ros2/           ← NDT-based scan matching
-├── scripts/                    ← Operational shell scripts
+│   └── ndt_omp_ros2/           ← NDT-OMP scan matching (map-based localization)
+├── scripts/                    ← Operational and test shell scripts
 ├── profiles/                   ← Device environment files
 ├── patches/                    ← Build-fix patches applied by setup.sh
-├── docs/                       ← PDF guide + source generator
+├── docs/                       ← PDF guides + source generators
 └── setup.sh                    ← One-command first-time setup
 ```
 
@@ -63,11 +66,11 @@ DIY-Challenge-Repo/
 
 | Component | Part |
 |-----------|------|
-| Compute | NVIDIA Jetson Nano (4 GB, JetPack 5.x) |
+| Compute | NVIDIA Jetson Orin Nano (8 GB, JetPack 6.x) |
 | Lidar | Hesai QT64 (64-beam, 10 Hz, Ethernet) |
 | Camera / IMU | Intel RealSense D435i |
 | Motor controller | STM32 via micro-ROS (USB serial) |
-| GPS | UBLOX (optional, for EKF2 global fusion) |
+| Encoders | Dead-wheel encoders (non-driven, slip-free odometry) |
 
 ---
 
@@ -82,8 +85,8 @@ The **[DIY_Challenge_Robot_Guide.pdf](docs/DIY_Challenge_Robot_Guide.pdf)** is t
 | Tune SLAM / EKF / Nav2 parameters | §3 — Configuration & Calibration |
 | Switch between Jetson / laptop / Raspberry Pi | §4 — Device Profiles |
 | **Set up the robot from scratch (new hardware)** | **§5 — First-Time Setup on Robot Hardware** |
-| SSH into the Jetson / headless access | §5.6 — Accessing the Jetson Nano |
-| Understand GPU usage and lock CPU/GPU clocks | §5.7 — Jetson Nano Performance |
+| SSH into the Jetson / headless access | §5.6 — Accessing the Jetson Orin Nano |
+| Understand GPU usage and lock CPU/GPU clocks | §5.7 — Jetson Orin Nano Performance |
 | Build and connect the micro-ROS agent (STM32) | §5.5 — micro-ROS Agent Setup |
 | Calibrate the IMU or lidar-IMU extrinsics | §6 — Calibration Procedures |
 | Run on competition day (pre-flight, launch, E-stop) | §7 — Competition Day Operations |
@@ -120,6 +123,10 @@ The **[DIY_Challenge_Robot_Guide.pdf](docs/DIY_Challenge_Robot_Guide.pdf)** is t
 | `scripts/calibrate_extrinsics.sh [PROFILE]` | Lidar↔IMU extrinsic calibration |
 | `scripts/debug_robot.sh [PROFILE]` | Single-node debug launch |
 | `scripts/deploy_bundle.sh` | Push updated configs to the robot over SSH |
+| `scripts/test_step1_wheel_odom.sh [--viz rviz\|foxglove] [PROFILE]` | Test wheel odometry + joystick |
+| `scripts/test_step2_fused_odom.sh [--viz rviz\|foxglove] [PROFILE]` | Test wheel odom + IMU EKF fusion |
+| `scripts/test_step3_fastlio.sh [--viz rviz\|foxglove] [PROFILE]` | Test FAST-LIO2 lidar odometry |
+| `scripts/test_step4_motion_plan.sh [--viz rviz\|foxglove] [fastlio\|fused] [PROFILE]` | Autonomous motion plan demo |
 
 ---
 
@@ -155,10 +162,10 @@ Build-fix patches for `lidar_imu_calib`, `livox_ros_driver2`, and `ndt_omp_ros2`
 
 ## Prerequisites
 
-- Ubuntu 22.04 (JetPack 5.x on Jetson Nano)
+- Ubuntu 22.04 (JetPack 6.x on Jetson Orin Nano)
 - ROS 2 Humble (`/opt/ros/humble/setup.bash` must exist)
 - `colcon-common-extensions`, `python3-rosdep`, `git`
-- Jetson Nano: add user to `dialout` group for STM32 USB serial access
+- Jetson Orin Nano: add user to `dialout` group for STM32 USB serial access
 
 See **§5.1** of the PDF guide for the full prerequisites list.
 
