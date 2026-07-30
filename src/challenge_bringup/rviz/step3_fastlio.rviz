@@ -1,0 +1,49 @@
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Axes: true
+      Marker Scale: 0.5
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Plane: XY
+      Color: 160; 160; 160
+      Cell Size: 1.0
+      Cell Count: 20
+      Alpha: 0.5
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Hesai Points
+      Enabled: true
+      Topic: /hesai/points
+      Queue Size: 1
+      Color Transformer: FlatColor
+      Color: 100; 200; 255
+      Size (m): 0.02
+      Decay Time: 0.1
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Registered Cloud (FAST-LIO2)
+      Enabled: true
+      Topic: /cloud_registered
+      Queue Size: 1
+      Color Transformer: FlatColor
+      Color: 255; 255; 100
+      Size (m): 0.02
+      Decay Time: 2.0
+    - Class: rviz_default_plugins/Odometry
+      Name: FAST-LIO2 Odometry
+      Enabled: true
+      Topic: /lidar_odometry
+      Keep: 500
+      Color: 0; 200; 0
+      Angle Tolerance: 0.05
+      Position Tolerance: 0.05
+  Global Options:
+    Fixed Frame: camera_init
+    Frame Rate: 30
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Scale: 50

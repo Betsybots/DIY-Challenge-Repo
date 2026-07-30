@@ -1,32 +1,32 @@
 motions:
   - type: STRAIGHT
     distance: 4.0
-    linear_velocity: 1.0
+    linear_velocity: 0.3
 
   - type: TURN
     angle: 1.5708
-    angular_velocity: 0.6
+    angular_velocity: 0.3
 
   - type: STRAIGHT
     distance: 4.0
-    linear_velocity: 1.0
+    linear_velocity: 0.3
 
   - type: TURN
     angle: 1.5708
-    angular_velocity: 0.6
+    angular_velocity: 0.3
 
   - type: STRAIGHT
     distance: 4.0
-    linear_velocity: 1.0
+    linear_velocity: 0.3
 
   - type: TURN
     angle: 1.5708
-    angular_velocity: 0.6
+    angular_velocity: 0.3
 
   - type: STRAIGHT
     distance: 4.0
-    linear_velocity: 1.0
+    linear_velocity: 0.3
     
   - type: TURN
     angle: 1.5708
-    angular_velocity: 0.6
+    angular_velocity: 0.3

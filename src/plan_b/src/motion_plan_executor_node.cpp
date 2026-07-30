@@ -7,6 +7,7 @@
 
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "yaml-cpp/yaml.h"
 
@@ -34,8 +35,8 @@ public:
   : Node("motion_plan_executor")
   {
     plan_file_ = this->declare_parameter<std::string>("plan_file", "");
-    pose_topic_ = this->declare_parameter<std::string>("pose_topic", "/ground_truth_pose");
-    cmd_topic_ = this->declare_parameter<std::string>("cmd_topic", "/cmd_vel");
+    pose_topic_ = this->declare_parameter<std::string>("pose_topic", "/odometry/filtered");
+    cmd_topic_ = this->declare_parameter<std::string>("cmd_topic", "/cmd_vel_nav");
 
     if (plan_file_.empty()) {
       RCLCPP_FATAL(this->get_logger(), "Parameter 'plan_file' is required.");
@@ -44,7 +45,7 @@ public:
 
     load_plan(plan_file_);
 
-    pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+    pose_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
       pose_topic_,
       rclcpp::QoS(10),
       std::bind(&MotionPlanExecutor::pose_callback, this, std::placeholders::_1));
@@ -137,15 +138,26 @@ private:
     }
   }
 
-  void pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
+  void pose_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
   {
-    last_pose_ = *msg;
+    last_pose_.header = msg->header;
+    last_pose_.pose = msg->pose.pose;
     has_pose_ = true;
   }
 
   void control_loop()
   {
     if (!has_pose_) {
+      publish_stop();
+      return;
+    }
+
+    // Staleness check — stop if odometry is older than 0.5s
+    const auto age = (this->now() - last_pose_.header.stamp).seconds();
+    if (age > 0.5) {
+      RCLCPP_WARN_THROTTLE(
+        this->get_logger(), *this->get_clock(), 1000,
+        "Pose stale (%.2fs) — stopping robot", age);
       publish_stop();
       return;
     }
@@ -234,7 +246,7 @@ private:
 
   std::vector<Command> commands_;
 
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
