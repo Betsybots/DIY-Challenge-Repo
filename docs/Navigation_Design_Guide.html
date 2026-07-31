@@ -449,18 +449,18 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
 
   <div class="grid2">
     <div class="card">
-      <div class="card-title"><span class="dot dot-orange"></span>EKF1 — High Rate Local (ekf_wimu.yaml)</div>
+      <div class="card-title"><span class="dot dot-orange"></span>EKF1 — Wheel + IMU Only, 100 Hz (ekf_wimu.yaml)</div>
       <p>Fuses dead-wheel encoder odometry (<code>/wheel_cmd_vel</code>) with IMU angular velocity
-      (<code>/imu/data</code>) to produce <code>/wimu_odom</code> at 50–100 Hz. This is fast,
-      smooth, and fills the gaps between lidar updates. It drifts over time but is excellent over
-      short intervals.</p>
+      (<code>/imu/data</code>) to produce <code>/wimu_odom</code> at 50–100 Hz. No lidar involved —
+      this runs fast, fills the gaps between lidar updates, and keeps pose estimates smooth.
+      It drifts slowly over time but is very accurate over short intervals.</p>
     </div>
     <div class="card">
-      <div class="card-title"><span class="dot dot-green"></span>EKF2 — Accurate Fused Output (ekf_local.yaml)</div>
-      <p>Takes <code>/wimu_odom</code> (high-rate smooth) and <code>/lidar_odometry</code>
+      <div class="card-title"><span class="dot dot-green"></span>EKF2 — Wheel + IMU + Lidar, 50 Hz (ekf_local.yaml)</div>
+      <p>Takes <code>/wimu_odom</code> (fast, smooth, drifts) and <code>/lidar_odometry</code>
       (FAST-LIO2, accurate, lower rate) and fuses them into <code>/odometry/filtered</code>.
-      The result is both smooth and accurate — MPPI gets 50 Hz smooth inputs, drift is corrected
-      every lidar scan.</p>
+      The result is both smooth and drift-corrected — MPPI gets 50 Hz smooth inputs, and every
+      lidar scan pulls the estimate back to ground truth.</p>
     </div>
   </div>
 </div>
