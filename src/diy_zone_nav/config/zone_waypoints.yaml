@@ -1,0 +1,138 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# zone_waypoints.yaml
+# Course zone definitions for the DIY Robot Challenge 2026 obstacle course.
+#
+# IMPORTANT: These coordinates are PLACEHOLDERS.
+#   Fill in real x/y values after the LIO-SAM offline mapping run.
+#   Coordinates are in the MAP frame (metres, origin = start line).
+#
+# HOW TO GET REAL COORDINATES:
+#   1. Run offline_mapping.launch.py and drive the full course.
+#   2. Save GlobalMap.pcd via /lio_sam/save_map service.
+#   3. Launch NDT localizer + RViz.
+#   4. Drive (or teleoperate) to each zone boundary.
+#   5. Echo /odometry/filtered and record x, y at each zone entry/exit.
+#   6. Replace the placeholder values below.
+#
+# ZONE FORMAT:
+#   Each zone has:
+#     x, y        — centre of the zone trigger point (map frame metres)
+#     radius      — entry trigger distance (metres) — robot enters zone when closer than this
+#     exit_radius — exit trigger distance (metres) — robot leaves zone when farther than this
+#                   exit_radius > radius adds hysteresis to prevent mode flip-flopping
+#     mode        — nav mode to activate: SLOW_NAV | BLIND_DRIVE | NAVIGATE_AROUND | PUSH_THROUGH
+#     label       — human-readable name for logging
+#
+# COURSE SEQUENCE (counterclockwise):
+#   START → Ramp+270° helix → Flat bridge+Tunnel → Wide→Narrow →
+#   Gravel → Flat+180° turn → Pothole → Wide (haybales) →
+#   Buckets → Hoops → 180° slanted bank → Car wash → FINISH
+# ─────────────────────────────────────────────────────────────────────────────
+
+zones:
+
+  # ── Zone 1: Ramp + 270° Helix ─────────────────────────────────────────────
+  # Trigger SLOW_NAV before the ramp approach.
+  # IMU pitch/roll will spike here — important for FAST-LIO2 health monitoring.
+  - label:       "ramp_helix"
+    x:           5.0      # PLACEHOLDER — measure after mapping
+    y:           2.0      # PLACEHOLDER
+    radius:      1.5      # enter SLOW_NAV when within 1.5m of this point
+    exit_radius: 3.0      # return to NORMAL_NAV when 3.0m away
+    mode:        "SLOW_NAV"
+
+  # ── Zone 2: Flat Bridge + Tunnel ──────────────────────────────────────────
+  # BLIND_DRIVE: foil-lined tunnel blocks lidar and RF completely.
+  # NDT-OMP will lose match here. EKF1 (wheel+IMU) takes over.
+  # Freeze map->odom TF at entry, restore at exit.
+  - label:       "tunnel_entry"
+    x:           12.0     # PLACEHOLDER
+    y:           4.0      # PLACEHOLDER
+    radius:      1.0      # tight trigger — must enter BLIND_DRIVE right at tunnel mouth
+    exit_radius: 2.5
+    mode:        "BLIND_DRIVE"
+
+  # ── Tunnel exit zone (DOCUMENTATION ONLY — NOT LOADED) ───────────────────
+  # Bug44/45 fix: this block is commented out intentionally.
+  #
+  # PROBLEM: although mode=NORMAL_NAV makes transitionTo() a noop, enterZone()
+  # still sets active_zone_idx_, blocking ALL other zone entry checks until the
+  # robot travels > exit_radius from this point.  If narrow_section lies within
+  # exit_radius of tunnel_exit, the robot will reach the narrow gap at full
+  # NORMAL_NAV speed without the SLOW_NAV trigger ever firing — crash risk.
+  #
+  # BLIND_DRIVE exit is driven purely by NDT fitness (blind_drive_exit_fitness
+  # _threshold) after blind_drive_min_duration_s.  No geometric exit zone is
+  # required.  Keep this as a coordinate reference comment for mapping runs.
+  #
+  # Approximate location (fill in after mapping):
+  #   x: 15.0   y: 4.5   (far end of foil-lined tunnel, map frame)
+  #
+  # If a distance-based failsafe is added in the future, re-enable this zone
+  # with a distinct mode (e.g. a new TUNNEL_EXIT enum value) so the state
+  # machine can handle it without the active_zone_idx_ blocking side-effect.
+
+  # ── Zone 3: Wide → Narrow Section ─────────────────────────────────────────
+  # 16" robot in 20" track = 2" clearance per side.
+  # At default inflation_radius=0.45m the global costmap marks the walls as
+  # lethal and Smac will declare the path impassable before we even enter.
+  # Reduce inflation_radius to 0.2m on entry (= 7.9" clearance each side),
+  # which gives the planner just enough room. Restored to 0.45m on exit.
+  # ndt_fitness_gate: log WARN if NDT fitness > 0.5 — need <4cm lateral accuracy.
+  - label:            "narrow_section"
+    x:                18.0     # PLACEHOLDER
+    y:                6.0      # PLACEHOLDER
+    radius:           1.5
+    exit_radius:      3.0
+    mode:             "SLOW_NAV"
+    inflation_radius: 0.2      # override global_costmap inflation on entry
+    ndt_fitness_gate: 0.5      # warn if NDT is weak before committing to 2" clearance
+
+  # ── Zone 4: Gravel Section ────────────────────────────────────────────────
+  # Wheel slip on gravel degrades odometry. Slow down.
+  - label:       "gravel"
+    x:           22.0     # PLACEHOLDER
+    y:           8.0      # PLACEHOLDER
+    radius:      2.0
+    exit_radius: 4.0
+    mode:        "SLOW_NAV"
+
+  # ── Zone 5: 180° Bank Turn ────────────────────────────────────────────────
+  # 8.5° lateral tilt. SLOW_NAV prevents tip risk and reduces IMU corruption.
+  - label:       "bank_turn"
+    x:           28.0     # PLACEHOLDER
+    y:           5.0      # PLACEHOLDER
+    radius:      2.0
+    exit_radius: 4.0
+    mode:        "SLOW_NAV"
+
+  # ── Zone 6: Bucket Obstacle Section ──────────────────────────────────────
+  # 2–9 randomly placed 5-gallon buckets. Live costmap required.
+  # NAVIGATE_AROUND = full obstacle_layer active, dynamic Smac replanning.
+  - label:       "bucket_obstacles"
+    x:           20.0     # PLACEHOLDER
+    y:           15.0     # PLACEHOLDER
+    radius:      3.0
+    exit_radius: 5.0
+    mode:        "NAVIGATE_AROUND"
+
+  # ── Zone 7: Car Wash ──────────────────────────────────────────────────────
+  # Hanging rubber ribbons look like a solid wall to lidar.
+  # PUSH_THROUGH disables obstacle_layer (or raises max_obstacle_height).
+  # Robot drives straight through on fixed heading — ribbons are flexible.
+  - label:       "car_wash"
+    x:           8.0      # PLACEHOLDER
+    y:           18.0     # PLACEHOLDER
+    radius:      1.5
+    exit_radius: 3.0
+    mode:        "PUSH_THROUGH"
+
+# ── Finish line ───────────────────────────────────────────────────────────────
+# When robot passes this point on lap 2, transition to DONE and stop.
+finish_line:
+  x:      2.0             # PLACEHOLDER — same area as START
+  y:      0.5             # PLACEHOLDER
+  radius: 1.0             # stop when within 1.0m of finish on lap 2
+
+# ── Race settings ─────────────────────────────────────────────────────────────
+total_laps: 2             # competition rule 3.7.1: obstacle course = 2 laps

@@ -14,8 +14,9 @@
 #   Result: smooth 50 Hz output that is continuously corrected by lidar.
 #
 # INPUTS:
-#   /wimu_odom       — EKF1 output: wheel+IMU fused at 100 Hz
-#   /lidar_odometry  — FAST-LIO2 lidar-inertial odometry at 10 Hz
+#   /wimu_odom              — EKF1 output: wheel+IMU fused at 100 Hz
+#   /lidar_odometry_gated   — FAST-LIO2 lidar-inertial odometry at 10 Hz
+#                             (gated by lidar_odom_gate_node — blocked during BLIND_DRIVE)
 #
 # OUTPUT:
 #   /odometry/filtered — fused odom-frame estimate for Nav2 MPPI (50 Hz)
@@ -66,7 +67,7 @@ ekf_filter_node_odom:
         # 10 Hz accurate pose from lidar-inertial odometry.
         # Used for x, y, yaw (full pose) — this is the drift correction source.
         # Velocities also used as they are well-estimated by FAST-LIO2.
-        odom1: /lidar_odometry
+        odom1: /lidar_odometry_gated   # gated by lidar_odom_gate_node — blocked during BLIND_DRIVE
         odom1_config: [true,  true,  false,   # x  y  z   — use lidar position
                        false, false, true,    # roll pitch yaw — use lidar heading
                        true,  true,  false,   # vx vy vz   — use lidar velocity

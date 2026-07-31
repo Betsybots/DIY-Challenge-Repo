@@ -27,6 +27,7 @@ echo "║  DIY Challenge Robot — LAUNCH    ║"
 echo "╚══════════════════════════════════╝"
 echo "  Profile  : ${DIY_ROBOT_PROFILE}"
 echo "  Nav2     : ${DIY_USE_NAV2}"
+echo "  Zone nav : ${DIY_USE_ZONE_NAV:-false}"
 echo "  Lidar    : ${DIY_USE_HESAI}"
 echo "  SLAM     : ${DIY_USE_LOCALIZATION}"
 echo "  Mux mode : ${DIY_MUX_MODE}"
@@ -36,6 +37,7 @@ echo ""
 ros2 launch challenge_bringup challenge_master.launch.py \
     use_joystick:="${DIY_USE_JOYSTICK:-false}" \
     use_nav2:="${DIY_USE_NAV2}" \
+    use_zone_nav:="${DIY_USE_ZONE_NAV:-false}" \
     use_realsense:="${DIY_USE_REALSENSE}" \
     use_motor_driver:="${DIY_USE_MOTOR_DRIVER}" \
     use_hesai:="${DIY_USE_HESAI}" \

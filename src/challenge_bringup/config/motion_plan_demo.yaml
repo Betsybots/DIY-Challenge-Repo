@@ -5,7 +5,7 @@
 # Meets requirement §0.2.4.1: forward motion + controlled 90° turn + return to forward motion
 #
 # The robot executes this sequence under its own control using odometry feedback.
-# Motion is initiated autonomously (ros2 param set /cmd_vel_mux mode AUTONOMOUS).
+# Motion is initiated autonomously (ros2 param set /cmd_vel_mux_node mode AUTONOMOUS).
 # Manual stop is acceptable per competition rules after sequence completes.
 #
 # Speeds are conservative for first hardware demo.

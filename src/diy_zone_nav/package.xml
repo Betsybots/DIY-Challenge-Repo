@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>diy_zone_nav</name>
+  <version>0.1.0</version>
+  <description>
+    Zone-aware navigation state machine for DIY Robot Challenge 2026.
+    Monitors robot position against pre-defined course zone waypoints and
+    switches navigation mode (NORMAL_NAV / SLOW_NAV / BLIND_DRIVE /
+    NAVIGATE_AROUND / PUSH_THROUGH) accordingly.
+  </description>
+
+  <maintainer email="team@juggernauts.local">Team Juggernauts</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>rcl_interfaces</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

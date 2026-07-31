@@ -12,16 +12,17 @@ WHY THIS NODE EXISTS
   the arbitration logic explicit, auditable, and reconfigurable at runtime.
 
 DATA FLOW
-    /cmd_vel_joy  ──┐
-    /cmd_vel_nav  ──┤──► [CmdVelMuxNode] ──► /cmd_vel_safe ──► motor driver
-    /estop_active ──┘             │
-                                  └──► /mux_mode (monitoring)
+    /cmd_vel_joy       ──┐
+    /cmd_vel_nav       ──┤──► [CmdVelMuxNode] ──► /cmd_vel_safe ──► motor driver
+    /cmd_vel_zone_nav  ──┤           │
+    /estop_active      ──┘           └──► /mux_mode (monitoring)
 
 TOPIC CONTRACT
   Subscribers:
-    /cmd_vel_joy   (geometry_msgs/Twist) — teleop_twist_joy output
-    /cmd_vel_nav   (geometry_msgs/Twist) — Nav2 FollowPath controller output
-    /estop_active  (std_msgs/Bool)       — latched advisory from diy_estop_controller
+    /cmd_vel_joy       (geometry_msgs/Twist) — teleop_twist_joy output
+    /cmd_vel_nav       (geometry_msgs/Twist) — Nav2 FollowPath controller output
+    /cmd_vel_zone_nav  (geometry_msgs/Twist) — zone_nav_manager BLIND_DRIVE output
+    /estop_active      (std_msgs/Bool)       — latched advisory from diy_estop_controller
 
   Publishers:
     /cmd_vel_safe  (geometry_msgs/Twist) — goes to differential-drive node
@@ -33,6 +34,9 @@ OPERATING MODES
                 Used for manual pilot override and competition safety walks.
   AUTONOMOUS  — /cmd_vel_nav passes through; joystick input is ignored.
                 Normal competition run mode.
+  BLIND_DRIVE — /cmd_vel_zone_nav passes through; Nav2 + joystick ignored.
+                Active during tunnel dead-reckoning (zone_nav_manager sets this
+                via SetParameters when entering/exiting BLIND_DRIVE state).
   ESTOP_LOCK  — Hard zero velocity published on every tick regardless of inputs.
                 Cannot be exited by anything except /estop_active going False.
 
@@ -53,7 +57,7 @@ RUNTIME MODE SWITCH
 
 import rclpy
 from rclpy.node import Node
-from rclpy.time import Duration
+from rclpy.duration import Duration
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Bool, String
 from rcl_interfaces.msg import SetParametersResult
@@ -64,18 +68,25 @@ from rcl_interfaces.msg import SetParametersResult
 # ─────────────────────────────────────────────────────────────────────────────
 class Mode:
     """
-    Namespace for the three valid operating modes of the mux.
+    Namespace for the four valid operating modes of the mux.
 
     Using a class with class-level string attributes (rather than an Enum)
     keeps the mode values as plain strings that are directly compatible with
     ROS 2 parameter strings and the /mux_mode String topic.
     """
-    JOYSTICK   = 'JOYSTICK'    # Manual pilot control via gamepad
-    AUTONOMOUS = 'AUTONOMOUS'  # Nav2 fully in charge
-    ESTOP_LOCK = 'ESTOP_LOCK'  # Hard stop — only STM32 can release
+    JOYSTICK    = 'JOYSTICK'     # Manual pilot control via gamepad
+    AUTONOMOUS  = 'AUTONOMOUS'   # Nav2 fully in charge
+    BLIND_DRIVE = 'BLIND_DRIVE'  # Tunnel dead-reckoning — zone_nav_manager owns cmd_vel
+    ESTOP_LOCK  = 'ESTOP_LOCK'   # Hard stop — only STM32 can release
 
     # Set used for O(1) membership checks in validation paths
-    VALID = {JOYSTICK, AUTONOMOUS, ESTOP_LOCK}
+    VALID = {JOYSTICK, AUTONOMOUS, BLIND_DRIVE, ESTOP_LOCK}
+
+    # Modes that can be set manually (via ros2 param set or SetParameters RPC).
+    # ESTOP_LOCK is intentionally excluded: it must only be entered via
+    # /estop_active (hardware signal from the STM32).  Allowing it as a manual
+    # param would permanently lock the robot until hardware releases the e-stop.
+    MANUAL_SETTABLE = {JOYSTICK, AUTONOMOUS, BLIND_DRIVE}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -90,47 +101,73 @@ class CmdVelMuxNode(Node):
     """
 
     def __init__(self):
-        super().__init__('cmd_vel_mux')  # ROS 2 node name visible in ros2 node list
+        super().__init__('cmd_vel_mux_node')  # ROS 2 node name visible in ros2 node list
 
         # ── Declare ROS 2 parameters ──────────────────────────────────────────
         # Parameters declared here can be overridden via:
         #   1. A params YAML file passed to the launch file
         #   2. `ros2 param set` at runtime (if add_on_set_parameters_callback allows it)
         self.declare_parameter('mode', Mode.JOYSTICK)
-        self.declare_parameter('joy_staleness_timeout_s', 2.0)   # joystick watchdog
-        self.declare_parameter('nav_staleness_timeout_s', 1.0)   # nav watchdog
-        self.declare_parameter('publish_rate_hz', 20.0)          # output rate
+        self.declare_parameter('joy_staleness_timeout_s', 2.0)    # joystick watchdog
+        self.declare_parameter('nav_staleness_timeout_s', 1.0)    # nav watchdog
+        self.declare_parameter('zone_staleness_timeout_s', 0.5)   # blind-drive watchdog
+        self.declare_parameter('publish_rate_hz', 20.0)           # output rate
 
         # ── Read initial parameter values ─────────────────────────────────────
-        self._current_mode = self.get_parameter('mode').get_parameter_value().string_value
-        self._joy_timeout  = self.get_parameter('joy_staleness_timeout_s').get_parameter_value().double_value
-        self._nav_timeout  = self.get_parameter('nav_staleness_timeout_s').get_parameter_value().double_value
-        pub_rate           = self.get_parameter('publish_rate_hz').get_parameter_value().double_value
+        self._current_mode  = self.get_parameter('mode').get_parameter_value().string_value
+        self._joy_timeout   = self.get_parameter('joy_staleness_timeout_s').get_parameter_value().double_value
+        self._nav_timeout   = self.get_parameter('nav_staleness_timeout_s').get_parameter_value().double_value
+        self._zone_timeout  = self.get_parameter('zone_staleness_timeout_s').get_parameter_value().double_value
+        pub_rate            = self.get_parameter('publish_rate_hz').get_parameter_value().double_value
 
-        # Guard against an invalid mode being passed via launch args
-        if self._current_mode not in Mode.VALID:
+        # Guard against an invalid initial mode being passed via launch args or YAML.
+        # Use MANUAL_SETTABLE (not VALID) so ESTOP_LOCK cannot be set as the startup
+        # mode — if it were, the robot would be permanently locked because _estop_active
+        # starts False and the _estop_cb release path checks `self._estop_active` first.
+        if self._current_mode not in Mode.MANUAL_SETTABLE:
             self.get_logger().warn(
                 f"Invalid initial mode '{self._current_mode}', defaulting to JOYSTICK")
             self._current_mode = Mode.JOYSTICK
+
+        # Guard against a non-positive publish rate (division by zero below).
+        if pub_rate <= 0.0:
+            self.get_logger().warn(
+                f"Invalid publish_rate_hz {pub_rate}, defaulting to 20.0")
+            pub_rate = 20.0
+
+        # Non-positive staleness timeouts would make every source permanently
+        # stale, so the mux would only ever emit zeros.
+        for attr, name, default in (
+            ('_joy_timeout',  'joy_staleness_timeout_s',  2.0),
+            ('_nav_timeout',  'nav_staleness_timeout_s',  1.0),
+            ('_zone_timeout', 'zone_staleness_timeout_s', 0.5),
+        ):
+            if getattr(self, attr) <= 0.0:
+                self.get_logger().warn(
+                    f"Invalid {name} {getattr(self, attr)}, defaulting to {default}")
+                setattr(self, attr, default)
 
         # ── Internal state ────────────────────────────────────────────────────
         # Hold the most-recently received Twist from each source.
         # Initialised to all-zeros (safe default: no motion).
         self._joy_twist   = Twist()   # latest joystick command
         self._nav_twist   = Twist()   # latest Nav2 command
+        self._zone_twist  = Twist()   # latest zone_nav_manager BLIND_DRIVE command
         # Timestamps (rclpy.time.Time) for the staleness watchdog.
         # None means no message has been received yet on that topic.
         self._joy_stamp   = None
         self._nav_stamp   = None
+        self._zone_stamp  = None
         # Mirror of /estop_active — set True by the E-stop callback.
         self._estop_active = False
 
         # ── Subscriptions ─────────────────────────────────────────────────────
         # Queue depth 10 is sufficient — we only care about the latest message,
         # and the publish timer fires at 20 Hz so the queue drains quickly.
-        self.create_subscription(Twist, '/cmd_vel_joy',   self._joy_cb,   10)
-        self.create_subscription(Twist, '/cmd_vel_nav',   self._nav_cb,   10)
-        self.create_subscription(Bool,  '/estop_active',  self._estop_cb, 10)
+        self.create_subscription(Twist, '/cmd_vel_joy',       self._joy_cb,   10)
+        self.create_subscription(Twist, '/cmd_vel_nav',       self._nav_cb,   10)
+        self.create_subscription(Twist, '/cmd_vel_zone_nav',  self._zone_cb,  10)
+        self.create_subscription(Bool,  '/estop_active',      self._estop_cb, 10)
 
         # ── Publishers ────────────────────────────────────────────────────────
         # /cmd_vel_safe — the motor driver subscribes here; queue=10 is fine
@@ -152,21 +189,33 @@ class CmdVelMuxNode(Node):
         self.add_on_set_parameters_callback(self._param_cb)
 
         self.get_logger().info(
-            f"cmd_vel_mux started. Initial mode: {self._current_mode}")
+            f"cmd_vel_mux_node started. Initial mode: {self._current_mode}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Subscriber callbacks — simply store the latest value + arrival timestamp
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Runtime-adjustable staleness timeouts → the attribute each one drives.
+    _TIMEOUT_PARAMS = {
+        'joy_staleness_timeout_s':  '_joy_timeout',
+        'nav_staleness_timeout_s':  '_nav_timeout',
+        'zone_staleness_timeout_s': '_zone_timeout',
+    }
+
     def _joy_cb(self, msg: Twist):
         """Cache the latest joystick Twist and record arrival time for staleness check."""
         self._joy_twist = msg
-        self._joy_stamp = self.get_clock().now()  # wall time on robot, sim time in bags
+        self._joy_stamp = self.get_clock().now()
 
     def _nav_cb(self, msg: Twist):
         """Cache the latest Nav2 Twist and record arrival time for staleness check."""
         self._nav_twist = msg
         self._nav_stamp = self.get_clock().now()
+
+    def _zone_cb(self, msg: Twist):
+        """Cache the latest zone_nav_manager Twist (BLIND_DRIVE commands)."""
+        self._zone_twist = msg
+        self._zone_stamp = self.get_clock().now()
 
     def _estop_cb(self, msg: Bool):
         """
@@ -225,32 +274,41 @@ class CmdVelMuxNode(Node):
         # ── Branch 2: Joystick mode ───────────────────────────────────────────
         elif self._current_mode == Mode.JOYSTICK:
             if self._joy_stamp is None:
-                # Joystick has never published — motor stays stopped
                 pass
             elif (now - self._joy_stamp) > Duration(seconds=self._joy_timeout):
-                # Joystick went silent: operator may have dropped the controller.
-                # Throttle the warning to once per 2 s to avoid log noise.
-                self.get_logger().warn_throttle(
-                    self.get_clock(), 2000,
-                    'Joystick topic stale — publishing zero velocity')
+                self.get_logger().warning(
+                    'Joystick topic stale — publishing zero velocity',
+                    throttle_duration_sec=2.0, clock=self.get_clock())
             else:
-                # Fresh message: forward it as-is
                 out = self._joy_twist
 
         # ── Branch 3: Autonomous mode ─────────────────────────────────────────
         elif self._current_mode == Mode.AUTONOMOUS:
             if self._nav_stamp is None:
-                # Nav2 not publishing yet (still initialising)
                 pass
             elif (now - self._nav_stamp) > Duration(seconds=self._nav_timeout):
-                # Nav2 stopped publishing — could be a planner pause or crash.
-                # Stop the robot rather than hold the last command.
-                self.get_logger().warn_throttle(
-                    self.get_clock(), 1000,
-                    'Nav2 cmd_vel stale — publishing zero velocity')
+                self.get_logger().warning(
+                    'Nav2 cmd_vel stale — publishing zero velocity',
+                    throttle_duration_sec=1.0, clock=self.get_clock())
             else:
-                # Fresh Nav2 command: forward it
                 out = self._nav_twist
+
+        # ── Branch 4: Blind drive mode ────────────────────────────────────────
+        # zone_nav_manager publishes fixed-heading commands on /cmd_vel_zone_nav.
+        # Nav2 and joystick are both ignored — only the zone_nav_manager drives.
+        # Short staleness timeout (0.5 s): if zone_nav_manager dies during the
+        # tunnel, robot stops rather than holding last command.
+        elif self._current_mode == Mode.BLIND_DRIVE:
+            if self._zone_stamp is None:
+                self.get_logger().warning(
+                    'BLIND_DRIVE active but /cmd_vel_zone_nav not publishing yet',
+                    throttle_duration_sec=2.0, clock=self.get_clock())
+            elif (now - self._zone_stamp) > Duration(seconds=self._zone_timeout):
+                self.get_logger().warning(
+                    'BLIND_DRIVE: /cmd_vel_zone_nav stale — publishing zero velocity',
+                    throttle_duration_sec=0.5, clock=self.get_clock())
+            else:
+                out = self._zone_twist
 
         # ── Publish the resolved velocity ─────────────────────────────────────
         self._pub.publish(out)
@@ -272,18 +330,25 @@ class CmdVelMuxNode(Node):
         unsafe changes here without a TOCTOU race condition.
 
         Rejection cases:
-          - mode is not one of Mode.VALID
+          - mode is not in Mode.MANUAL_SETTABLE (ESTOP_LOCK cannot be set manually)
           - mode change requested while E-stop is active (safety lock)
         """
+        # Phase 1 — validate everything. Nothing is applied yet, so a request
+        # that is rejected halfway through cannot leave us half-updated.
+        pending = []
         for param in params:
             if param.name == 'mode':
                 new_mode = param.value
 
                 # Reject unknown mode strings early
-                if new_mode not in Mode.VALID:
+                if new_mode not in Mode.MANUAL_SETTABLE:
                     return SetParametersResult(
                         successful=False,
-                        reason=f"Invalid mode '{new_mode}'. Valid: {Mode.VALID}")
+                        reason=(
+                            f"Invalid mode '{new_mode}'. "
+                            f"Manually settable modes: {sorted(Mode.MANUAL_SETTABLE)}. "
+                            "ESTOP_LOCK can only be set by the hardware e-stop signal."
+                        ))
 
                 # Prevent bypassing ESTOP_LOCK via a parameter change
                 if self._estop_active and new_mode != Mode.ESTOP_LOCK:
@@ -291,9 +356,33 @@ class CmdVelMuxNode(Node):
                         successful=False,
                         reason='E-stop is active — cannot change mode out of ESTOP_LOCK')
 
+                pending.append(('mode', new_mode))
+
+            elif param.name in self._TIMEOUT_PARAMS:
+                # These were previously accepted but never applied, so a runtime
+                # change silently did nothing.
+                if param.value <= 0.0:
+                    return SetParametersResult(
+                        successful=False,
+                        reason=f"{param.name} must be > 0 (got {param.value})")
+                pending.append((param.name, param.value))
+
+            elif param.name == 'publish_rate_hz':
+                # The timer period is fixed at construction; changing this at
+                # runtime would be silently ignored, so reject it outright.
+                return SetParametersResult(
+                    successful=False,
+                    reason='publish_rate_hz cannot be changed at runtime')
+
+        # Phase 2 — apply.
+        for name, value in pending:
+            if name == 'mode':
                 self.get_logger().info(
-                    f"Mode changed: {self._current_mode} → {new_mode}")
-                self._current_mode = new_mode
+                    f"Mode changed: {self._current_mode} → {value}")
+                self._current_mode = value
+            else:
+                setattr(self, self._TIMEOUT_PARAMS[name], value)
+                self.get_logger().info(f"{name} changed to {value}")
 
         return SetParametersResult(successful=True)
 
@@ -315,7 +404,10 @@ def main(args=None):
         pass                   # normal Ctrl-C shutdown — not an error
     finally:
         node.destroy_node()    # clean up subscriptions, publishers, timers
-        rclpy.shutdown()       # release DDS middleware
+        # rclpy.shutdown() raises RCLError if the context is already down,
+        # which happens when the default SIGINT handler got there first.
+        if rclpy.ok():
+            rclpy.shutdown()   # release DDS middleware
 
 
 if __name__ == '__main__':

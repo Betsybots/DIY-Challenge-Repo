@@ -17,7 +17,7 @@
 #   ./scripts/test_step4_motion_plan.sh fused   jetson
 #
 # To trigger autonomous run:
-#   ros2 param set /cmd_vel_mux mode AUTONOMOUS
+#   ros2 param set /cmd_vel_mux_node mode AUTONOMOUS
 #
 # Verify:
 #   ros2 topic echo /mux_mode           — should show AUTONOMOUS
@@ -64,7 +64,7 @@ echo "  Visualization : ${VIZ_MODE}"
 echo ""
 echo "  ⚡ Mux starts in JOYSTICK mode."
 echo "  ⚡ Switch to autonomous when ready:"
-echo "     ros2 param set /cmd_vel_mux mode AUTONOMOUS"
+echo "     ros2 param set /cmd_vel_mux_node mode AUTONOMOUS"
 echo ""
 echo "  Press Ctrl-C to stop all nodes."
 echo ""
@@ -116,10 +116,10 @@ viz_start "${RVIZ_CONFIG}"
 
 echo ""
 echo "  When ready to run autonomously:"
-echo "    ros2 param set /cmd_vel_mux mode AUTONOMOUS"
+echo "    ros2 param set /cmd_vel_mux_node mode AUTONOMOUS"
 echo ""
 echo "  To abort and return to joystick:"
-echo "    ros2 param set /cmd_vel_mux mode JOYSTICK"
+echo "    ros2 param set /cmd_vel_mux_node mode JOYSTICK"
 echo ""
 
 wait

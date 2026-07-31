@@ -19,7 +19,7 @@ Source a profile, then launch:
   ros2 launch challenge_bringup challenge_master.launch.py
 
 CLI overrides are also supported without editing this file:
-  ros2 launch challenge_bringup challenge_master.launch.py use_nav2:=true mux_mode:=TELEOP
+  ros2 launch challenge_bringup challenge_master.launch.py use_nav2:=true mux_mode:=JOYSTICK
 
 STARTUP ORDER
 ─────────────
@@ -33,30 +33,69 @@ STARTUP ORDER
    8. joystick_drive         — conditionally enabled
    9. differential_drive     — motor driver subscribing /cmd_vel_safe (mux output)
   10. nav2 bringup           — conditionally enabled
-  11. rviz2                  — conditionally enabled (off by default to save resources)
+  11. zone_nav               — zone-aware state machine; requires use_nav2=true
+  12. rviz2                  — conditionally enabled (off by default to save resources)
 
 Launch arguments (all correspond to DIY_* profile variables):
-  use_joystick       bool  Enable joystick teleop          (default false)
-  use_nav2           bool  Enable Nav2 autonomous stack     (default false)
-  use_realsense      bool  Enable RealSense D435i driver    (default true)
-  use_motor_driver   bool  Enable differential-drive node   (default true)
-  use_hesai          bool  Enable Hesai QT64 lidar driver   (default true)
-  use_micro_ros      bool  Enable micro-ROS agent (STM32)   (default true)
-  use_localization   bool  Enable FAST-LIO2 + EKF stack     (default true)
-  use_rviz           bool  Launch RViz2                     (default false)
-  mux_mode           str   cmd_vel_mux startup mode         (default AUTONOMOUS)
-  fastlio_config     str   FAST-LIO2 config filename        (see diy_localization/config/)
+  use_joystick       bool  Enable joystick teleop              (default false)
+  use_nav2           bool  Enable Nav2 autonomous stack         (default false)
+  use_zone_nav       bool  Enable zone-aware nav state machine  (default false)
+  use_realsense      bool  Enable RealSense D435i driver        (default true)
+  use_motor_driver   bool  Enable differential-drive node       (default true)
+  use_hesai          bool  Enable Hesai QT64 lidar driver       (default true)
+  use_micro_ros      bool  Enable micro-ROS agent (STM32)       (default true)
+  use_localization   bool  Enable FAST-LIO2 + EKF stack         (default true)
+  use_rviz           bool  Launch RViz2                         (default false)
+  mux_mode           str   cmd_vel_mux startup mode             (default AUTONOMOUS)
+  fastlio_config     str   FAST-LIO2 config filename            (see diy_localization/config/)
+  waypoints_file     str   Override zone_waypoints.yaml path    (default: package default)
 """
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+
+
+def _zone_nav_launch(context, use_zone_nav_lc, waypoints_file_lc):
+    """
+    OpaqueFunction that conditionally includes zone_nav.launch.py.
+
+    OpaqueFunction is used (rather than a plain IncludeLaunchDescription with
+    IfCondition) because we need to inspect the waypoints_file value at runtime
+    to decide whether to forward it or let zone_nav.launch.py use its own
+    default.  IfCondition can gate the include but cannot modify launch_arguments
+    based on another argument's resolved value.
+    """
+    if context.perform_substitution(use_zone_nav_lc).lower() != 'true':
+        return []
+
+    zone_nav_pkg = get_package_share_directory('diy_zone_nav')
+    zone_nav_launch = os.path.join(zone_nav_pkg, 'launch', 'zone_nav.launch.py')
+
+    launch_args = {}
+    wp_file = context.perform_substitution(waypoints_file_lc).strip()
+    if wp_file:
+        # Caller overrode the waypoints file (e.g. for a custom map run).
+        launch_args['waypoints_file'] = wp_file
+
+    # Tell zone_nav.launch.py NOT to start another gate node — master launches
+    # it unconditionally under IfCondition(use_localization) so EKF2 always
+    # has a /lidar_odometry_gated input, even when use_zone_nav=false.
+    launch_args['launch_gate'] = 'false'
+
+    return [
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(zone_nav_launch),
+            launch_arguments=launch_args.items(),
+        )
+    ]
 
 
 def generate_launch_description():
@@ -71,6 +110,7 @@ def generate_launch_description():
     # OpaqueFunction for that (see localization.launch.py for an example).
     use_joystick     = LaunchConfiguration('use_joystick')
     use_nav2         = LaunchConfiguration('use_nav2')
+    use_zone_nav     = LaunchConfiguration('use_zone_nav')
     use_realsense    = LaunchConfiguration('use_realsense')
     use_motor_driver = LaunchConfiguration('use_motor_driver')
     use_hesai        = LaunchConfiguration('use_hesai')
@@ -79,6 +119,7 @@ def generate_launch_description():
     use_rviz         = LaunchConfiguration('use_rviz')
     mux_mode         = LaunchConfiguration('mux_mode')
     fastlio_config   = LaunchConfiguration('fastlio_config')
+    waypoints_file   = LaunchConfiguration('waypoints_file')
 
     return LaunchDescription([
 
@@ -88,6 +129,7 @@ def generate_launch_description():
         #   ros2 launch challenge_bringup challenge_master.launch.py use_nav2:=true
         DeclareLaunchArgument('use_joystick',     default_value='false'),
         DeclareLaunchArgument('use_nav2',         default_value='false'),
+        DeclareLaunchArgument('use_zone_nav',     default_value='false'),
         DeclareLaunchArgument('use_realsense',    default_value='true'),
         DeclareLaunchArgument('use_motor_driver', default_value='true'),
         DeclareLaunchArgument('use_hesai',        default_value='true'),
@@ -99,6 +141,11 @@ def generate_launch_description():
             'fastlio_config',
             default_value='fast_lio_hesai_qt64.yaml',
             # Change to swap sensor configs without editing this file
+        ),
+        DeclareLaunchArgument(
+            'waypoints_file',
+            default_value='',   # empty → zone_nav.launch.py uses its package default
+            description='Absolute path to zone_waypoints.yaml; leave blank for the default',
         ),
 
         # ── BLOCK 2: Robot description  (URDF → TF static transforms) ─────────
@@ -157,9 +204,9 @@ def generate_launch_description():
         # and emits the winning command on /cmd_vel_safe.
         # Startup mode controls which source is active at launch:
         #   AUTONOMOUS — forward /cmd_vel_nav  (competition default)
-        #   TELEOP     — forward /cmd_vel_joy  (manual driving / testing)
-        #   ESTOP      — zero velocity regardless of any inputs
-        # Switch mode at runtime:  ros2 param set /cmd_vel_mux_node mode TELEOP
+        #   JOYSTICK   — forward /cmd_vel_joy  (manual driving / testing)
+        #   ESTOP_LOCK — zero velocity regardless of any inputs
+        # Switch mode at runtime:  ros2 param set /cmd_vel_mux_node mode JOYSTICK
         Node(
             package='diy_cmd_vel_mux',
             executable='cmd_vel_mux_node',
@@ -237,8 +284,8 @@ def generate_launch_description():
         # Includes joystick_drive.launch.py which starts:
         #   joy_node         — reads gamepad → sensor_msgs/Joy
         #   teleop_twist_joy — converts Joy → geometry_msgs/Twist on /cmd_vel_joy
-        # The mux must be in TELEOP mode to forward /cmd_vel_joy to the output:
-        #   ros2 param set /cmd_vel_mux_node mode TELEOP
+        # The mux must be in JOYSTICK mode to forward /cmd_vel_joy to the output:
+        #   ros2 param set /cmd_vel_mux_node mode JOYSTICK
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(pkg_dir, 'launch', 'joystick_drive.launch.py')
@@ -287,7 +334,40 @@ def generate_launch_description():
             }.items(),
         ),
 
-        # ── BLOCK 12: RViz2  (developer / debug visualisation) ─────────────────
+        # ── BLOCK 12: Zone-aware navigation state machine ──────────────────────
+        # Monitors robot position against course zones and adjusts Nav2 behaviour
+        # (speed limit via /speed_limit, costmap inflation, obstacle layer enable)
+        # and the cmd_vel_mux mode (AUTONOMOUS ↔ BLIND_DRIVE) accordingly.
+        #
+        # Launches zone_nav_manager_node only (launch_gate:=false is passed so
+        # zone_nav.launch.py does NOT start a second gate node — we start it
+        # below under Block 12b, always, whenever use_localization is true).
+        #
+        # REQUIRES: use_nav2=true — the state machine calls Nav2 costmap and
+        # controller_server SetParameters services.  Starting zone_nav without
+        # Nav2 is harmless (service calls are skipped when the service is not
+        # ready) but the robot will not respond to zone transitions.
+        #
+        # Optional: pass waypoints_file:=/absolute/path/to/zone_waypoints.yaml
+        # to override the default shipped with the package.
+        OpaqueFunction(function=_zone_nav_launch, args=[use_zone_nav, waypoints_file]),
+
+        # ── BLOCK 12b: Lidar odometry gate ─────────────────────────────────────
+        # MUST run whenever localization is active — NOT only when zone_nav is on.
+        # EKF2 (ekf_local.yaml odom1_topic) subscribes to /lidar_odometry_gated.
+        # Without this node, EKF2 receives no lidar odometry and degrades to
+        # wheel-encoder + IMU fusion only, causing significant drift outdoors.
+        # Default nav_mode is "INIT" which leaves the gate open (pass-through),
+        # so localization accuracy is unaffected when zone_nav is disabled.
+        Node(
+            package='diy_zone_nav',
+            executable='lidar_odom_gate_node',
+            name='lidar_odom_gate',
+            output='screen',
+            condition=IfCondition(use_localization),
+        ),
+
+        # ── BLOCK 13: RViz2  (developer / debug visualisation) ─────────────────
         # Disabled by default to conserve CPU/GPU on the Jetson during competition.
         # Enable for debugging:  ros2 launch ... use_rviz:=true
         Node(

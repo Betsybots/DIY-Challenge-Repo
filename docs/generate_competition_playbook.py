@@ -378,7 +378,7 @@ ros2 launch diy_localization localization.launch.py \\
     story.append(H2('5.1  Drive to Start Line (Manual Mode)'))
     story += CB('Switch to joystick/teleop mode to position at the start line:', '''\
 # Enable joystick from a second terminal
-ros2 topic pub /cmd_vel_mux/mode std_msgs/msg/String "data: JOYSTICK" --once
+ros2 param set /cmd_vel_mux_node mode JOYSTICK
 
 # Or restart challenge_master with joystick enabled:
 ros2 launch challenge_bringup challenge_master.launch.py \\

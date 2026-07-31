@@ -1,0 +1,86 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# zone_nav_manager.yaml
+# Tuning parameters for the zone-aware navigation state machine.
+# All speed values are in m/s. All time values are in seconds.
+# ─────────────────────────────────────────────────────────────────────────────
+
+zone_nav_manager:
+  ros__parameters:
+
+    # ── Zone waypoints file ──────────────────────────────────────────────────
+    # Absolute path to zone_waypoints.yaml. Filled in by zone_nav.launch.py.
+    zone_waypoints_file: ""
+
+    # ── State machine update rate ────────────────────────────────────────────
+    update_rate_hz: 10.0      # how often to evaluate zone membership (Hz)
+
+    # ── Course laps ──────────────────────────────────────────────────────────
+    total_laps: 2             # transition to DONE after this many finish-line crossings
+
+    # ── Speed profiles (m/s) ─────────────────────────────────────────────────
+    # These are published on /speed_limit (nav2_msgs/SpeedLimit, percentage=false)
+    # and applied by controller_server::setSpeedLimit().
+    #
+    # NOTE: do NOT try to set FollowPath.vx_max dynamically — MPPI copies
+    # base_constraints into constraints only on reset()/setSpeedLimit(), so a
+    # dynamic vx_max write is silently ignored. /speed_limit is the real API.
+    #
+    # NORMAL_NAV — publishes speed_limit 0.0 == NO_SPEED_LIMIT, which restores
+    # the configured FollowPath.vx_max (0.6) in nav2_params.yaml.
+    normal_vx_max: 0.6
+
+    # SLOW_NAV — ramp, helix, narrow, gravel, bank turn
+    slow_vx_max: 0.20
+
+    # NAVIGATE_AROUND (bucket zone) — slow enough for dynamic replanning at close range
+    navigate_around_vx_max: 0.30
+
+    # PUSH_THROUGH (car wash) — slow, straight, obstacle layers disabled
+    push_vx_max: 0.20
+
+    # BLIND_DRIVE (tunnel) — wheel+IMU dead reckoning, Nav2 bypassed entirely.
+    # Published directly on /cmd_vel_zone_nav; not a Nav2 speed limit.
+    blind_drive_vx: 0.18
+
+    # ── Tunnel BLIND_DRIVE settings ──────────────────────────────────────────
+    # Minimum time to keep driving blind after the entry trigger before NDT
+    # fitness is allowed to end the blind drive.
+    blind_drive_min_duration_s: 2.0
+
+    # Hard failsafe: if NDT fitness never recovers (tunnel longer than mapped,
+    # ndt_localizer dead, map mismatch) we must not dead-reckon forward forever.
+    # At blind_drive_vx 0.18 m/s this caps the blind run at ~2.7 m.
+    # Must be > blind_drive_min_duration_s or the node refuses to start.
+    blind_drive_max_duration_s: 15.0
+
+    # NDT fitness score threshold: resume normal nav when score drops below this.
+    # Deliberately stricter than ndt_localizer.yaml's fitness_score_threshold (1.0):
+    # we only trust re-localisation once the match is clearly good.
+    blind_drive_exit_fitness_threshold: 0.8
+
+    # ── Default inflation_radius values ──────────────────────────────────────
+    # Restored when exiting a zone that overrode them.
+    # Must match inflation_layer.inflation_radius in nav2_params.yaml.
+    default_inflation_radius:       0.45   # global_costmap
+    local_default_inflation_radius: 0.40   # local_costmap
+
+    # ── SetParameters service paths ──────────────────────────────────────────
+    # Costmap2DROS runs as a sub-node named <name> inside a namespace that
+    # already ends in <name> (planner_server builds
+    # Costmap2DROS("global_costmap", get_namespace(), "global_costmap")),
+    # so the fully-qualified node is /global_costmap/global_costmap.
+    # Getting these wrong makes every costmap tweak a silent no-op.
+    global_costmap_param_service: "/global_costmap/global_costmap/set_parameters"
+    local_costmap_param_service:  "/local_costmap/local_costmap/set_parameters"
+    mux_param_service:            "/cmd_vel_mux_node/set_parameters"
+
+    # ── Topics ───────────────────────────────────────────────────────────────
+    speed_limit_topic:   "/speed_limit"         # nav2_msgs/SpeedLimit -> controller_server
+    mux_mode_topic:      "/mux_mode"            # std_msgs/String — mux's reported mode
+    start_signal_topic:  "/green_light"         # std_msgs/Bool — race start
+    odom_topic:          "/odometry/filtered"   # EKF2 output — used for position
+    ndt_fitness_topic:   "/ndt_fitness_score"   # std_msgs/Float32 — tunnel exit gate
+    nav_mode_topic:      "/nav_mode"            # std_msgs/String — published state
+
+    # ── Logging ──────────────────────────────────────────────────────────────
+    verbose: true    # log zone entry/exit and state transitions
