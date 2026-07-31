@@ -383,7 +383,7 @@ h4 { font-size: 12px; font-weight: 600; color: var(--subtext); margin: 14px 0 6p
 p { color: var(--subtext); margin-bottom: 10px; }
 p strong { color: var(--text); font-weight: 600; }
 
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; user-select: contain; -webkit-user-select: text; }
 .card-title { font-size: 12px; font-weight: 600; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .dot-cyan   { background: var(--cyan); }
