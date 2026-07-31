@@ -882,108 +882,137 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
 
   <div class="diagram-container">
     <div class="diagram-label">Navigation State Machine — Mode Transitions</div>
-
-<svg viewBox="0 0 900 460" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif">
-  <defs>
-    <marker id="sm-arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6 z" fill="#475569"/>
-    </marker>
-    <marker id="sm-grn"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#22c55e"/></marker>
-    <marker id="sm-cyan" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#06b6d4"/></marker>
-    <marker id="sm-red"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#ef4444"/></marker>
-    <marker id="sm-pur"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#a855f7"/></marker>
-    <marker id="sm-org"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#f97316"/></marker>
-  </defs>
-
-  <rect width="900" height="460" fill="#0f172a" rx="8"/>
-
-  <!-- ── START (top center) ── -->
-  <rect x="330" y="20" width="240" height="52" rx="26" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
-  <text x="450" y="42" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="700">START</text>
-  <text x="450" y="58" text-anchor="middle" fill="#64748b" font-size="9">detect green light signal</text>
-
-  <!-- START → NORMAL_NAV -->
-  <line x1="450" y1="72" x2="450" y2="108" stroke="#22c55e" stroke-width="1.5" marker-end="url(#sm-grn)"/>
-  <text x="458" y="94" fill="#86efac" font-size="8">green light</text>
-
-  <!-- ── NORMAL_NAV (center) ── -->
-  <rect x="290" y="108" width="320" height="64" rx="8" fill="#14532d" stroke="#22c55e" stroke-width="2"/>
-  <text x="450" y="131" text-anchor="middle" fill="#86efac" font-size="12" font-weight="700">NORMAL_NAV</text>
-  <text x="450" y="147" text-anchor="middle" fill="#86efac" font-size="9">Nav2 Smac + MPPI  ·  Full speed</text>
-  <text x="450" y="161" text-anchor="middle" fill="#4ade80" font-size="8">← default mode — always returns here →</text>
-
-  <!-- NORMAL_NAV → DONE (right) -->
-  <line x1="610" y1="140" x2="780" y2="140" stroke="#475569" stroke-width="1.5" marker-end="url(#sm-arr)"/>
-  <text x="692" y="133" text-anchor="middle" fill="#94a3b8" font-size="8">lap 2 complete</text>
-
-  <!-- ── DONE (right) ── -->
-  <rect x="780" y="112" width="100" height="56" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
-  <text x="830" y="134" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="700">DONE</text>
-  <text x="830" y="148" text-anchor="middle" fill="#64748b" font-size="8">stop at</text>
-  <text x="830" y="160" text-anchor="middle" fill="#64748b" font-size="8">finish line</text>
-
-  <!-- ── 4 sub-states (bottom row) ── -->
-  <!-- positions: SLOW=80, BLIND=270, NAVIGATE=490, PUSH=700 (cx) -->
-
-  <!-- NORMAL → SLOW -->
-  <line x1="370" y1="172" x2="155" y2="248" stroke="#06b6d4" stroke-width="1.5" marker-end="url(#sm-cyan)"/>
-  <text x="240" y="210" text-anchor="middle" fill="#a5f3fc" font-size="8">narrow / ramp / bank</text>
-
-  <!-- NORMAL → BLIND -->
-  <line x1="415" y1="172" x2="310" y2="248" stroke="#ef4444" stroke-width="1.5" marker-end="url(#sm-red)"/>
-  <text x="342" y="218" text-anchor="middle" fill="#fca5a5" font-size="8">tunnel entry</text>
-
-  <!-- NORMAL → NAVIGATE -->
-  <line x1="485" y1="172" x2="530" y2="248" stroke="#a855f7" stroke-width="1.5" marker-end="url(#sm-pur)"/>
-  <text x="530" y="218" text-anchor="middle" fill="#c4b5fd" font-size="8">bucket zone</text>
-
-  <!-- NORMAL → PUSH -->
-  <line x1="540" y1="172" x2="690" y2="248" stroke="#f97316" stroke-width="1.5" marker-end="url(#sm-org)"/>
-  <text x="650" y="218" text-anchor="middle" fill="#fdba74" font-size="8">car wash zone</text>
-
-  <!-- ── SLOW_NAV ── -->
-  <rect x="20" y="248" width="160" height="72" rx="8" fill="#164e63" stroke="#06b6d4" stroke-width="1.5"/>
-  <text x="100" y="270" text-anchor="middle" fill="#a5f3fc" font-size="10" font-weight="700">SLOW_NAV</text>
-  <text x="100" y="284" text-anchor="middle" fill="#7dd3fc" font-size="8">Nav2 reduced speed</text>
-  <text x="100" y="296" text-anchor="middle" fill="#7dd3fc" font-size="8">0.2 m/s</text>
-  <text x="100" y="310" text-anchor="middle" fill="#0ea5e9" font-size="8">narrow/ramp/bank</text>
-  <!-- SLOW → NORMAL -->
-  <path d="M100,248 C100,220 370,200 370,172" fill="none" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#sm-cyan)"/>
-  <text x="200" y="215" text-anchor="middle" fill="#a5f3fc" font-size="8">zone exit</text>
-
-  <!-- ── BLIND_DRIVE ── -->
-  <rect x="220" y="248" width="160" height="72" rx="8" fill="#450a0a" stroke="#ef4444" stroke-width="1.5"/>
-  <text x="300" y="270" text-anchor="middle" fill="#fca5a5" font-size="10" font-weight="700">BLIND_DRIVE</text>
-  <text x="300" y="284" text-anchor="middle" fill="#fca5a5" font-size="8">Wheel + IMU only</text>
-  <text x="300" y="296" text-anchor="middle" fill="#fca5a5" font-size="8">fixed heading</text>
-  <text x="300" y="310" text-anchor="middle" fill="#ef4444" font-size="8">⚡ tunnel (lidar dead)</text>
-  <!-- BLIND → NORMAL -->
-  <path d="M300,248 C300,220 415,200 415,172" fill="none" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#sm-red)"/>
-  <text x="375" y="220" text-anchor="middle" fill="#fca5a5" font-size="8">lidar restored</text>
-
-  <!-- ── NAVIGATE_AROUND ── -->
-  <rect x="420" y="248" width="180" height="72" rx="8" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5"/>
-  <text x="510" y="268" text-anchor="middle" fill="#c4b5fd" font-size="10" font-weight="700">NAVIGATE_AROUND</text>
-  <text x="510" y="282" text-anchor="middle" fill="#c4b5fd" font-size="8">live costmap active</text>
-  <text x="510" y="295" text-anchor="middle" fill="#c4b5fd" font-size="8">dynamic replan</text>
-  <text x="510" y="309" text-anchor="middle" fill="#a855f7" font-size="8">bucket obstacle section</text>
-  <!-- NAVIGATE → NORMAL -->
-  <path d="M510,248 C510,220 485,200 485,172" fill="none" stroke="#a855f7" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#sm-pur)"/>
-  <text x="530" y="230" text-anchor="middle" fill="#c4b5fd" font-size="8">cleared</text>
-
-  <!-- ── PUSH_THROUGH ── -->
-  <rect x="640" y="248" width="175" height="72" rx="8" fill="#422006" stroke="#f97316" stroke-width="1.5"/>
-  <text x="727" y="268" text-anchor="middle" fill="#fdba74" font-size="10" font-weight="700">PUSH_THROUGH</text>
-  <text x="727" y="282" text-anchor="middle" fill="#fdba74" font-size="8">straight drive</text>
-  <text x="727" y="295" text-anchor="middle" fill="#fdba74" font-size="8">obstacle layer OFF</text>
-  <text x="727" y="309" text-anchor="middle" fill="#f97316" font-size="8">car wash ribbons</text>
-  <!-- PUSH → NORMAL -->
-  <path d="M727,248 C727,220 540,200 540,172" fill="none" stroke="#f97316" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#sm-org)"/>
-  <text x="668" y="222" text-anchor="middle" fill="#fdba74" font-size="8">zone exit</text>
-
-  <!-- LEGEND -->
-  <text x="450" y="355" text-anchor="middle" fill="#334155" font-size="8">─ ─ ─  return to NORMAL_NAV</text>
-  <text x="450" y="368" text-anchor="middle" fill="#334155" font-size="8">——  forward transition</text>
+    <svg width="1344pt" height="427pt"
+ viewBox="0.00 0.00 1344.00 427.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 423)">
+<title>state_machine</title>
+<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-423 1340,-423 1340,4 -4,4"/>
+<!-- START -->
+<g id="node1" class="node">
+<title>START</title>
+<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M740,-419C740,-419 606,-419 606,-419 600,-419 594,-413 594,-407 594,-407 594,-366 594,-366 594,-360 600,-354 606,-354 606,-354 740,-354 740,-354 746,-354 752,-360 752,-366 752,-366 752,-407 752,-407 752,-413 746,-419 740,-419"/>
+<text text-anchor="middle" x="673" y="-389.5" font-family="Inter" font-size="10.00" fill="#94a3b8">START</text>
+<text text-anchor="middle" x="673" y="-378.5" font-family="Inter" font-size="10.00" fill="#94a3b8">Detect green light</text>
+</g>
+<!-- NORMAL -->
+<g id="node2" class="node">
+<title>NORMAL</title>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.5" d="M754.5,-242C754.5,-242 591.5,-242 591.5,-242 585.5,-242 579.5,-236 579.5,-230 579.5,-230 579.5,-189 579.5,-189 579.5,-183 585.5,-177 591.5,-177 591.5,-177 754.5,-177 754.5,-177 760.5,-177 766.5,-183 766.5,-189 766.5,-189 766.5,-230 766.5,-230 766.5,-236 760.5,-242 754.5,-242"/>
+<text text-anchor="middle" x="673" y="-218" font-family="Inter" font-size="10.00" fill="#86efac">NORMAL_NAV</text>
+<text text-anchor="middle" x="673" y="-207" font-family="Inter" font-size="10.00" fill="#86efac">Nav2 Smac+MPPI</text>
+<text text-anchor="middle" x="673" y="-196" font-family="Inter" font-size="10.00" fill="#86efac">Full speed</text>
+</g>
+<!-- START&#45;&gt;NORMAL -->
+<g id="edge1" class="edge">
+<title>START&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#22c55e" d="M674.12,-353.83C674.74,-330.54 674.59,-310.66 673.68,-252.23"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="677.18,-252.05 673.52,-242.11 670.18,-252.16 677.18,-252.05"/>
+<text text-anchor="middle" x="723" y="-295.8" font-family="Inter" font-size="9.00" fill="#86efac"> &#160;green light detected</text>
+</g>
+<!-- SLOW -->
+<g id="node3" class="node">
+<title>SLOW</title>
+<path fill="#164e63" stroke="#06b6d4" stroke-width="1.5" d="M146,-65C146,-65 12,-65 12,-65 6,-65 0,-59 0,-53 0,-53 0,-12 0,-12 0,-6 6,0 12,0 12,0 146,0 146,0 152,0 158,-6 158,-12 158,-12 158,-53 158,-53 158,-59 152,-65 146,-65"/>
+<text text-anchor="middle" x="79" y="-41" font-family="Inter" font-size="10.00" fill="#a5f3fc">SLOW_NAV</text>
+<text text-anchor="middle" x="79" y="-30" font-family="Inter" font-size="10.00" fill="#a5f3fc">Reduced speed</text>
+<text text-anchor="middle" x="79" y="-19" font-family="Inter" font-size="10.00" fill="#a5f3fc">0.2 m/s</text>
+</g>
+<!-- NORMAL&#45;&gt;SLOW -->
+<g id="edge2" class="edge">
+<title>NORMAL&#45;&gt;SLOW</title>
+<path fill="none" stroke="#06b6d4" d="M579.29,-181.44C325.48,-105.44 262.8,-86.72 168.18,-58.79"/>
+<polygon fill="#06b6d4" stroke="#06b6d4" points="168.9,-55.35 158.31,-55.88 166.91,-62.06 168.9,-55.35"/>
+<text text-anchor="middle" x="86.5" y="-118.8" font-family="Inter" font-size="9.00" fill="#a5f3fc">narrow/ramp/bank &#160;</text>
+</g>
+<!-- BLIND -->
+<g id="node4" class="node">
+<title>BLIND</title>
+<path fill="#450a0a" stroke="#ef4444" stroke-width="1.5" d="M462,-65C462,-65 328,-65 328,-65 322,-65 316,-59 316,-53 316,-53 316,-12 316,-12 316,-6 322,0 328,0 328,0 462,0 462,0 468,0 474,-6 474,-12 474,-12 474,-53 474,-53 474,-59 468,-65 462,-65"/>
+<text text-anchor="middle" x="395" y="-41" font-family="Inter" font-size="10.00" fill="#fca5a5">BLIND_DRIVE</text>
+<text text-anchor="middle" x="395" y="-30" font-family="Inter" font-size="10.00" fill="#fca5a5">Wheel+IMU only</text>
+<text text-anchor="middle" x="395" y="-19" font-family="Inter" font-size="10.00" fill="#fca5a5">Fixed heading</text>
+</g>
+<!-- NORMAL&#45;&gt;BLIND -->
+<g id="edge3" class="edge">
+<title>NORMAL&#45;&gt;BLIND</title>
+<path fill="none" stroke="#ef4444" d="M622.39,-176.94C526.46,-115.23 491.15,-92.58 455.88,-70.43"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="457.7,-67.44 447.36,-65.1 453.98,-73.37 457.7,-67.44"/>
+<text text-anchor="middle" x="392.5" y="-118.8" font-family="Inter" font-size="9.00" fill="#fca5a5"> &#160;tunnel entry</text>
+</g>
+<!-- NAVIGATE -->
+<g id="node5" class="node">
+<title>NAVIGATE</title>
+<path fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" d="M760,-65C760,-65 626,-65 626,-65 620,-65 614,-59 614,-53 614,-53 614,-12 614,-12 614,-6 620,0 626,0 626,0 760,0 760,0 766,0 772,-6 772,-12 772,-12 772,-53 772,-53 772,-59 766,-65 760,-65"/>
+<text text-anchor="middle" x="693" y="-41" font-family="Inter" font-size="10.00" fill="#c4b5fd">NAVIGATE_AROUND</text>
+<text text-anchor="middle" x="693" y="-30" font-family="Inter" font-size="10.00" fill="#c4b5fd">Live costmap</text>
+<text text-anchor="middle" x="693" y="-19" font-family="Inter" font-size="10.00" fill="#c4b5fd">Dynamic replan</text>
+</g>
+<!-- NORMAL&#45;&gt;NAVIGATE -->
+<g id="edge4" class="edge">
+<title>NORMAL&#45;&gt;NAVIGATE</title>
+<path fill="none" stroke="#a855f7" d="M677.2,-176.95C684.56,-119.82 687.46,-96.52 689.49,-75.36"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="692.98,-75.63 690.41,-65.35 686.01,-74.99 692.98,-75.63"/>
+<text text-anchor="middle" x="704" y="-118.8" font-family="Inter" font-size="9.00" fill="#c4b5fd">bucket zone &#160;</text>
+</g>
+<!-- PUSH -->
+<g id="node6" class="node">
+<title>PUSH</title>
+<path fill="#422006" stroke="#f97316" stroke-width="1.5" d="M1052,-65C1052,-65 918,-65 918,-65 912,-65 906,-59 906,-53 906,-53 906,-12 906,-12 906,-6 912,0 918,0 918,0 1052,0 1052,0 1058,0 1064,-6 1064,-12 1064,-12 1064,-53 1064,-53 1064,-59 1058,-65 1052,-65"/>
+<text text-anchor="middle" x="985" y="-41" font-family="Inter" font-size="10.00" fill="#fdba74">PUSH_THROUGH</text>
+<text text-anchor="middle" x="985" y="-30" font-family="Inter" font-size="10.00" fill="#fdba74">Straight drive</text>
+<text text-anchor="middle" x="985" y="-19" font-family="Inter" font-size="10.00" fill="#fdba74">Obstacle layer OFF</text>
+</g>
+<!-- NORMAL&#45;&gt;PUSH -->
+<g id="edge5" class="edge">
+<title>NORMAL&#45;&gt;PUSH</title>
+<path fill="none" stroke="#f97316" d="M730.89,-176.95C840.75,-115.18 879.8,-93.15 919.85,-70.14"/>
+<polygon fill="#f97316" stroke="#f97316" points="921.79,-73.07 928.71,-65.05 918.3,-67 921.79,-73.07"/>
+<text text-anchor="middle" x="992.5" y="-118.8" font-family="Inter" font-size="9.00" fill="#fdba74"> &#160;car wash zone</text>
+</g>
+<!-- DONE -->
+<g id="node7" class="node">
+<title>DONE</title>
+<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M1324,-65C1324,-65 1190,-65 1190,-65 1184,-65 1178,-59 1178,-53 1178,-53 1178,-12 1178,-12 1178,-6 1184,0 1190,0 1190,0 1324,0 1324,0 1330,0 1336,-6 1336,-12 1336,-12 1336,-53 1336,-53 1336,-59 1330,-65 1324,-65"/>
+<text text-anchor="middle" x="1257" y="-41" font-family="Inter" font-size="10.00" fill="#94a3b8">DONE</text>
+<text text-anchor="middle" x="1257" y="-30" font-family="Inter" font-size="10.00" fill="#94a3b8">Stop at finish</text>
+<text text-anchor="middle" x="1257" y="-19" font-family="Inter" font-size="10.00" fill="#94a3b8">(lap 2 complete)</text>
+</g>
+<!-- NORMAL&#45;&gt;DONE -->
+<g id="edge6" class="edge">
+<title>NORMAL&#45;&gt;DONE</title>
+<path fill="none" stroke="#475569" d="M766.72,-181.23C1014.1,-106.61 1076.24,-87.83 1168.26,-59.68"/>
+<polygon fill="#475569" stroke="#475569" points="1169.31,-63.02 1177.85,-56.75 1167.27,-56.33 1169.31,-63.02"/>
+<text text-anchor="middle" x="1291.5" y="-118.8" font-family="Inter" font-size="9.00" fill="#94a3b8">lap 2 at finish &#160;</text>
+</g>
+<!-- SLOW&#45;&gt;NORMAL -->
+<g id="edge7" class="edge">
+<title>SLOW&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#06b6d4" d="M579.15,-181.4C325.34,-105.4 262.73,-86.69 168.06,-58.75"/>
+<polygon fill="#06b6d4" stroke="#06b6d4" points="168.76,-55.31 158.18,-55.84 166.78,-62.02 168.76,-55.31"/>
+<text text-anchor="middle" x="246.5" y="-118.8" font-family="Inter" font-size="9.00" fill="#a5f3fc">zone exit &#160;</text>
+</g>
+<!-- BLIND&#45;&gt;NORMAL -->
+<g id="edge8" class="edge">
+<title>BLIND&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#ef4444" d="M622.16,-176.79C526.34,-115.15 491.07,-92.53 455.8,-70.39"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="457.62,-67.39 447.29,-65.05 453.9,-73.33 457.62,-67.39"/>
+<text text-anchor="middle" x="548.5" y="-118.8" font-family="Inter" font-size="9.00" fill="#fca5a5"> &#160;lidar restored</text>
+</g>
+<!-- NAVIGATE&#45;&gt;NORMAL -->
+<g id="edge9" class="edge">
+<title>NAVIGATE&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#a855f7" d="M677.2,-176.95C684.56,-119.78 687.46,-96.48 689.5,-75.31"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="692.99,-75.57 690.41,-65.29 686.02,-74.93 692.99,-75.57"/>
+<text text-anchor="middle" x="846" y="-118.8" font-family="Inter" font-size="9.00" fill="#c4b5fd">cleared &#160;</text>
+</g>
+<!-- PUSH&#45;&gt;NORMAL -->
+<g id="edge10" class="edge">
+<title>PUSH&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#f97316" d="M730.9,-176.95C840.58,-115.27 879.69,-93.21 919.67,-70.25"/>
+<polygon fill="#f97316" stroke="#f97316" points="921.59,-73.18 928.51,-65.16 918.1,-67.11 921.59,-73.18"/>
+<text text-anchor="middle" x="1142.5" y="-118.8" font-family="Inter" font-size="9.00" fill="#fdba74"> &#160;zone exit</text>
+</g>
+</g>
 </svg>
 
   </div>
