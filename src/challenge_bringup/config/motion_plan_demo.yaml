@@ -1,7 +1,12 @@
-# Aug 14 Demo — Path Following Demonstration
-# ─────────────────────────────────────────────
-# Sequence: forward motion → controlled 90° turn → return to forward motion
-# Meets requirement §0.2.4.1: forward + controlled 90° turn + forward
+# Aug 14 Demo — Autonomous Motion Demonstration
+# ───────────────────────────────────────────────
+# Demonstrates fully autonomous robot control — no human steering during execution.
+# Sequence: straight → controlled 90° turn → straight → stop
+# Meets requirement §0.2.4.1: forward motion + controlled 90° turn + return to forward motion
+#
+# The robot executes this sequence under its own control using odometry feedback.
+# Motion is initiated autonomously (ros2 param set /cmd_vel_mux mode AUTONOMOUS).
+# Manual stop is acceptable per competition rules after sequence completes.
 #
 # Speeds are conservative for first hardware demo.
 # Increase linear_velocity to 0.5 and angular_velocity to 0.4 once verified.

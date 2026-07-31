@@ -460,7 +460,7 @@ HTML = f"""<!DOCTYPE html>
     </div>
     <div class="cover-meta-item">
       <div class="label">Aug 14 Demo</div>
-      <div class="value">Path Following</div>
+      <div class="value">Autonomous Motion</div>
     </div>
     <div class="cover-meta-item">
       <div class="label">Platform</div>
@@ -995,8 +995,8 @@ global_costmap:
     <tbody>
       <tr>
         <td><strong style="color:var(--red)">1</strong></td>
-        <td><strong>Aug 14 Demo</strong> — straight → 90° turn → straight</td>
-        <td>Hard deadline. Uses existing motion_plan_executor. Just needs hardware running.</td>
+        <td><strong>Aug 14 Demo</strong> — autonomous straight → 90° turn → straight → stop</td>
+        <td>Hard deadline. Robot executes under its own control using odometry feedback. Uses existing motion_plan_executor. Needs hardware running.</td>
         <td>Aug 14</td>
       </tr>
       <tr>
