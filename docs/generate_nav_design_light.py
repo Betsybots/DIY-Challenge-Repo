@@ -78,11 +78,46 @@ CSS = CSS.replace(
     "td { padding: 7px 10px; color: var(--subtext); border-bottom: 1px solid rgba(0,0,0,0.06);"
 )
 
-# Rebuild HTML with patched CSS
+# ── Fix remaining hardcoded dark colors ──
+CSS = CSS.replace(
+    ".section h2 { font-size: 18px; font-weight: 700; color: #fff; }",
+    ".section h2 { font-size: 18px; font-weight: 700; color: #0f172a; }"
+).replace(
+    ".card-title { font-size: 12px; font-weight: 600; color: #fff;",
+    ".card-title { font-size: 12px; font-weight: 600; color: #0f172a;"
+).replace(
+    ".copy-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }",
+    ".copy-btn:hover { background: rgba(0,0,0,0.08); color: #0f172a; }"
+).replace(
+    "thead tr { background: rgba(255,255,255,0.06); }",
+    "thead tr { background: rgba(0,0,0,0.04); }"
+).replace(
+    "td code { font-family: 'JetBrains Mono', monospace; font-size: 9px; background: rgba(255,255,255,0.08); padding: 1px 4px; border-radius: 3px; color: var(--cyan); }",
+    "td code { font-family: 'JetBrains Mono', monospace; font-size: 9px; background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; color: #0369a1; }"
+).replace(
+    ".callout-warn  { background: rgba(234,179,8,0.08);  border-color: var(--yellow); color: #fde68a; }",
+    ".callout-warn  { background: rgba(234,179,8,0.12);  border-color: #b45309; color: #78350f; }"
+).replace(
+    ".callout-info  { background: rgba(14,165,233,0.08); border-color: var(--cyan);   color: #bae6fd; }",
+    ".callout-info  { background: rgba(14,165,233,0.10); border-color: #0369a1; color: #0c4a6e; }"
+).replace(
+    ".callout-crit  { background: rgba(239,68,68,0.08);  border-color: var(--red);    color: #fecaca; }",
+    ".callout-crit  { background: rgba(239,68,68,0.10);  border-color: #dc2626; color: #7f1d1d; }"
+).replace(
+    ".callout-good  { background: rgba(34,197,94,0.08);  border-color: var(--green);  color: #bbf7d0; }",
+    ".callout-good  { background: rgba(34,197,94,0.10);  border-color: #16a34a; color: #14532d; }"
+).replace(
+    ".zone-slow    { background: rgba(6,182,212,0.2);   color: #22d3ee;",
+    ".zone-slow    { background: rgba(6,182,212,0.15);  color: #0e7490;"
+)
+
+# Rebuild HTML with patched CSS and correct PDF link
 HTML = HTML.replace(
-    # find the <style> block and replace it
     HTML[HTML.find("<style>"):HTML.find("</style>")+8],
     f"<style>\n{CSS}\n</style>"
+).replace(
+    'href="Navigation_Design_Guide.pdf"',
+    'href="Navigation_Design_Guide_Light.pdf"'
 )
 
 # ── Write light HTML ──

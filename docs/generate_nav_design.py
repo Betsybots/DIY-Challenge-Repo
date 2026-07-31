@@ -442,17 +442,7 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
   .grid2 { grid-template-columns: 1fr; }
   .grid3 { grid-template-columns: 1fr; }
   .copy-btn { display: none; }
-  .pdf-btn { display: none; }
 }
-
-.pdf-btn {
-  position: fixed; bottom: 24px; right: 24px; z-index: 999;
-  background: var(--cyan); color: #0a0e1a; border: none; border-radius: 8px;
-  padding: 10px 20px; font-size: 12px; font-weight: 700; cursor: pointer;
-  box-shadow: 0 4px 20px rgba(14,165,233,0.4); letter-spacing: 0.5px;
-  transition: background 0.15s, transform 0.1s;
-}
-.pdf-btn:hover { background: #38bdf8; transform: translateY(-1px); }
 
 .diagram-container { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 14px 0; text-align: center; overflow: hidden; }
 .diagram-container svg { max-width: 100%; height: auto; }
@@ -712,8 +702,8 @@ HTML = f"""<!DOCTYPE html>
     <div class="card">
       <div class="card-title"><span class="dot dot-red"></span>static_layer — removed</div>
       <p>Not used. This was the only plugin that required a <code>.pgm</code> file. With it gone,
-      <code>map_server</code> still runs (for the map→odom TF chain) but loads nothing.
-      Three lines removed from <code>nav2_params.yaml</code>.</p>
+      With it gone, <code>map_server</code> is no longer needed — the map→odom TF is published
+      directly by NDT-OMP. Three lines removed from <code>nav2_params.yaml</code>.</p>
     </div>
   </div>
 
@@ -798,7 +788,7 @@ HTML = f"""<!DOCTYPE html>
       <tr>
         <td><strong>Narrow Section</strong></td>
         <td>20" wide, curved</td>
-        <td>&lt;2" clearance — needs &lt;4cm lateral accuracy</td>
+        <td>&lt;2" per side — needs &lt;4cm lateral accuracy</td>
         <td>✅ Full</td>
         <td><span class="zone-badge zone-slow">SLOW_NAV</span></td>
       </tr>
@@ -868,8 +858,8 @@ HTML = f"""<!DOCTYPE html>
     velocity limits lowered. The key concern in the narrow section is <strong>lateral accuracy</strong>
     — the robot max width is 16" (rule 2.2.1) and the minimum track width is 20" (rule 3.3),
     leaving just <strong>2" clearance per side</strong>. This is the tightest tolerance on the entire
-    course. We need NDT-OMP localization to be solid before entering and may need to reduce
-    <code>inflation_radius</code> to 0.2m so Nav2 doesn't mark the path as impassable.
+    course. We need NDT-OMP localization to be solid before entering. We need to consider
+    temporarily reducing <code>inflation_radius</code> to 0.2m so Nav2 doesn't mark the path as impassable.
     The state machine forces an NDT re-localization check at the zone entry waypoint before proceeding.
   </p>
   <p>
@@ -998,7 +988,7 @@ global_costmap:
       <tr>
         <td><code>inflation_radius: 0.45m</code></td>
         <td>global costmap</td>
-        <td>Robot max 16" wide in a 20" passage = 2" clearance per side (rules 2.2.1 + 3.3). Default 0.45m marks it impassable — must reduce to 0.2m for narrow zone.</td>
+        <td>Robot max 16" wide in a 20" passage = 2" clearance per side (rules 2.2.1 + 3.3). Default 0.45m marks it impassable — we need to consider reducing to 0.2m for the narrow zone.</td>
       </tr>
       <tr>
         <td><code>raytrace_max_range: 6.0m</code></td>
@@ -1125,7 +1115,7 @@ global_costmap:
   </p>
 </div>
 
-<button class="pdf-btn" onclick="window.print()">⬇ Download PDF</button>
+
 
 <script>
 document.querySelectorAll('.card-title').forEach(function(title) {{
