@@ -1266,8 +1266,8 @@ global_costmap:
     <div class="callout-title">Inflation Radius vs Narrow Section</div>
     The current <code>inflation_radius: 0.45m</code> on the global costmap may mark the 20" narrow
     section as completely impassable — the walls are only ~10" from the robot sides. When entering
-    the narrow zone, consider temporarily reducing inflation_radius to 0.2m via a dynamic reconfigure
-    call from the state machine.
+    the narrow zone, we need to consider temporarily reducing <code>inflation_radius</code> to 0.2m
+    via a dynamic reconfigure call from the state machine.
   </div>
 </div>
 
