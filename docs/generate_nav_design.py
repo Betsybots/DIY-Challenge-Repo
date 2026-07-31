@@ -70,33 +70,111 @@ digraph localization {
 # ─────────────────────────────────────────────────────────────────────────────
 # Diagram 2 — Zone state machine (Graphviz)
 # ─────────────────────────────────────────────────────────────────────────────
-DOT_STATE_MACHINE = """
-digraph state_machine {
-  graph [bgcolor="#0f172a" fontname="Inter" rankdir=LR splines=spline nodesep=0.9 ranksep=1.4]
-  node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.5 width=2.0 height=0.8]
-  edge  [fontname="Inter" fontsize=8]
+DOT_STATE_MACHINE = None  # replaced by hand-crafted SVG below
 
-  START    [label="START\\nWait for pose"              fillcolor="#1e293b" fontcolor="#94a3b8" color="#475569"]
-  NORMAL   [label="NORMAL_NAV\\nNav2 Smac+MPPI\\nFull speed" fillcolor="#14532d" fontcolor="#86efac" color="#22c55e"]
-  SLOW     [label="SLOW_NAV\\nReduced speed\\n0.2 m/s" fillcolor="#164e63" fontcolor="#a5f3fc" color="#06b6d4"]
-  BLIND    [label="BLIND_DRIVE\\nWheel+IMU only\\nFixed heading" fillcolor="#450a0a" fontcolor="#fca5a5" color="#ef4444"]
-  NAVIGATE [label="NAVIGATE_AROUND\\nLive costmap\\nDynamic replan" fillcolor="#1e1b4b" fontcolor="#c4b5fd" color="#a855f7"]
-  PUSH     [label="PUSH_THROUGH\\nStraight drive\\nObstacle layer OFF" fillcolor="#422006" fontcolor="#fdba74" color="#f97316"]
-  DONE     [label="DONE\\nStop + signal"               fillcolor="#1e293b" fontcolor="#94a3b8" color="#475569"]
+SVG_STATE_MACHINE = """
+<svg viewBox="0 0 900 460" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif">
+  <defs>
+    <marker id="sm-arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 z" fill="#475569"/>
+    </marker>
+    <marker id="sm-grn"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#22c55e"/></marker>
+    <marker id="sm-cyan" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#06b6d4"/></marker>
+    <marker id="sm-red"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#ef4444"/></marker>
+    <marker id="sm-pur"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#a855f7"/></marker>
+    <marker id="sm-org"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#f97316"/></marker>
+  </defs>
 
-  { rank=same; SLOW; BLIND; NAVIGATE; PUSH; DONE }
+  <rect width="900" height="460" fill="#0f172a" rx="8"/>
 
-  START    -> NORMAL   [label="pose valid"          color="#22c55e"  fontcolor="#86efac"]
-  NORMAL   -> SLOW     [label="narrow/ramp/bank"    color="#06b6d4"  fontcolor="#a5f3fc"]
-  NORMAL   -> BLIND    [label="tunnel entry"        color="#ef4444"  fontcolor="#fca5a5"]
-  NORMAL   -> NAVIGATE [label="bucket zone"         color="#a855f7"  fontcolor="#c4b5fd"]
-  NORMAL   -> PUSH     [label="car wash zone"       color="#f97316"  fontcolor="#fdba74"]
-  NORMAL   -> DONE     [label="finish waypoint"     color="#475569"  fontcolor="#94a3b8"]
-  SLOW     -> NORMAL   [label="zone exit"           color="#06b6d4"  fontcolor="#a5f3fc"]
-  BLIND    -> NORMAL   [label="lidar restored"      color="#ef4444"  fontcolor="#fca5a5"]
-  NAVIGATE -> NORMAL   [label="cleared"             color="#a855f7"  fontcolor="#c4b5fd"]
-  PUSH     -> NORMAL   [label="zone exit"           color="#f97316"  fontcolor="#fdba74"]
-}
+  <!-- ── START (top center) ── -->
+  <rect x="330" y="20" width="240" height="52" rx="26" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+  <text x="450" y="42" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="700">START</text>
+  <text x="450" y="58" text-anchor="middle" fill="#64748b" font-size="9">detect green light signal</text>
+
+  <!-- START → NORMAL_NAV -->
+  <line x1="450" y1="72" x2="450" y2="108" stroke="#22c55e" stroke-width="1.5" marker-end="url(#sm-grn)"/>
+  <text x="458" y="94" fill="#86efac" font-size="8">green light</text>
+
+  <!-- ── NORMAL_NAV (center) ── -->
+  <rect x="290" y="108" width="320" height="64" rx="8" fill="#14532d" stroke="#22c55e" stroke-width="2"/>
+  <text x="450" y="131" text-anchor="middle" fill="#86efac" font-size="12" font-weight="700">NORMAL_NAV</text>
+  <text x="450" y="147" text-anchor="middle" fill="#86efac" font-size="9">Nav2 Smac + MPPI  ·  Full speed</text>
+  <text x="450" y="161" text-anchor="middle" fill="#4ade80" font-size="8">← default mode — always returns here →</text>
+
+  <!-- NORMAL_NAV → DONE (right) -->
+  <line x1="610" y1="140" x2="780" y2="140" stroke="#475569" stroke-width="1.5" marker-end="url(#sm-arr)"/>
+  <text x="692" y="133" text-anchor="middle" fill="#94a3b8" font-size="8">lap 2 complete</text>
+
+  <!-- ── DONE (right) ── -->
+  <rect x="780" y="112" width="100" height="56" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+  <text x="830" y="134" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="700">DONE</text>
+  <text x="830" y="148" text-anchor="middle" fill="#64748b" font-size="8">stop at</text>
+  <text x="830" y="160" text-anchor="middle" fill="#64748b" font-size="8">finish line</text>
+
+  <!-- ── 4 sub-states (bottom row) ── -->
+  <!-- positions: SLOW=80, BLIND=270, NAVIGATE=490, PUSH=700 (cx) -->
+
+  <!-- NORMAL → SLOW -->
+  <line x1="370" y1="172" x2="155" y2="248" stroke="#06b6d4" stroke-width="1.5" marker-end="url(#sm-cyan)"/>
+  <text x="240" y="210" text-anchor="middle" fill="#a5f3fc" font-size="8">narrow / ramp / bank</text>
+
+  <!-- NORMAL → BLIND -->
+  <line x1="415" y1="172" x2="310" y2="248" stroke="#ef4444" stroke-width="1.5" marker-end="url(#sm-red)"/>
+  <text x="342" y="218" text-anchor="middle" fill="#fca5a5" font-size="8">tunnel entry</text>
+
+  <!-- NORMAL → NAVIGATE -->
+  <line x1="485" y1="172" x2="530" y2="248" stroke="#a855f7" stroke-width="1.5" marker-end="url(#sm-pur)"/>
+  <text x="530" y="218" text-anchor="middle" fill="#c4b5fd" font-size="8">bucket zone</text>
+
+  <!-- NORMAL → PUSH -->
+  <line x1="540" y1="172" x2="690" y2="248" stroke="#f97316" stroke-width="1.5" marker-end="url(#sm-org)"/>
+  <text x="650" y="218" text-anchor="middle" fill="#fdba74" font-size="8">car wash zone</text>
+
+  <!-- ── SLOW_NAV ── -->
+  <rect x="20" y="248" width="160" height="72" rx="8" fill="#164e63" stroke="#06b6d4" stroke-width="1.5"/>
+  <text x="100" y="270" text-anchor="middle" fill="#a5f3fc" font-size="10" font-weight="700">SLOW_NAV</text>
+  <text x="100" y="284" text-anchor="middle" fill="#7dd3fc" font-size="8">Nav2 reduced speed</text>
+  <text x="100" y="296" text-anchor="middle" fill="#7dd3fc" font-size="8">0.2 m/s</text>
+  <text x="100" y="310" text-anchor="middle" fill="#0ea5e9" font-size="8">narrow/ramp/bank</text>
+  <!-- SLOW → NORMAL -->
+  <path d="M100,248 C100,220 370,200 370,172" fill="none" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#sm-cyan)"/>
+  <text x="200" y="215" text-anchor="middle" fill="#a5f3fc" font-size="8">zone exit</text>
+
+  <!-- ── BLIND_DRIVE ── -->
+  <rect x="220" y="248" width="160" height="72" rx="8" fill="#450a0a" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="300" y="270" text-anchor="middle" fill="#fca5a5" font-size="10" font-weight="700">BLIND_DRIVE</text>
+  <text x="300" y="284" text-anchor="middle" fill="#fca5a5" font-size="8">Wheel + IMU only</text>
+  <text x="300" y="296" text-anchor="middle" fill="#fca5a5" font-size="8">fixed heading</text>
+  <text x="300" y="310" text-anchor="middle" fill="#ef4444" font-size="8">⚡ tunnel (lidar dead)</text>
+  <!-- BLIND → NORMAL -->
+  <path d="M300,248 C300,220 415,200 415,172" fill="none" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#sm-red)"/>
+  <text x="375" y="220" text-anchor="middle" fill="#fca5a5" font-size="8">lidar restored</text>
+
+  <!-- ── NAVIGATE_AROUND ── -->
+  <rect x="420" y="248" width="180" height="72" rx="8" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="510" y="268" text-anchor="middle" fill="#c4b5fd" font-size="10" font-weight="700">NAVIGATE_AROUND</text>
+  <text x="510" y="282" text-anchor="middle" fill="#c4b5fd" font-size="8">live costmap active</text>
+  <text x="510" y="295" text-anchor="middle" fill="#c4b5fd" font-size="8">dynamic replan</text>
+  <text x="510" y="309" text-anchor="middle" fill="#a855f7" font-size="8">bucket obstacle section</text>
+  <!-- NAVIGATE → NORMAL -->
+  <path d="M510,248 C510,220 485,200 485,172" fill="none" stroke="#a855f7" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#sm-pur)"/>
+  <text x="530" y="230" text-anchor="middle" fill="#c4b5fd" font-size="8">cleared</text>
+
+  <!-- ── PUSH_THROUGH ── -->
+  <rect x="640" y="248" width="175" height="72" rx="8" fill="#422006" stroke="#f97316" stroke-width="1.5"/>
+  <text x="727" y="268" text-anchor="middle" fill="#fdba74" font-size="10" font-weight="700">PUSH_THROUGH</text>
+  <text x="727" y="282" text-anchor="middle" fill="#fdba74" font-size="8">straight drive</text>
+  <text x="727" y="295" text-anchor="middle" fill="#fdba74" font-size="8">obstacle layer OFF</text>
+  <text x="727" y="309" text-anchor="middle" fill="#f97316" font-size="8">car wash ribbons</text>
+  <!-- PUSH → NORMAL -->
+  <path d="M727,248 C727,220 540,200 540,172" fill="none" stroke="#f97316" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#sm-org)"/>
+  <text x="668" y="222" text-anchor="middle" fill="#fdba74" font-size="8">zone exit</text>
+
+  <!-- LEGEND -->
+  <text x="450" y="355" text-anchor="middle" fill="#334155" font-size="8">─ ─ ─  return to NORMAL_NAV</text>
+  <text x="450" y="368" text-anchor="middle" fill="#334155" font-size="8">——  forward transition</text>
+</svg>
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -348,7 +426,7 @@ SVG_COURSE_MAP = """
 # Pre-render Graphviz diagrams
 # ─────────────────────────────────────────────────────────────────────────────
 svg_localization   = dot_to_svg(DOT_LOCALIZATION)
-svg_state_machine  = dot_to_svg(DOT_STATE_MACHINE)
+svg_state_machine  = SVG_STATE_MACHINE
 svg_costmap        = dot_to_svg(DOT_COSTMAP)
 
 
@@ -875,10 +953,10 @@ HTML = f"""<!DOCTYPE html>
   <p>
     The narrow section, ramps, bank, and helix all trigger SLOW_NAV. Same Nav2 stack, but with
     velocity limits lowered. The key concern in the narrow section is <strong>lateral accuracy</strong>
-    — our robot is 17–18" wide and the passage is only 20" wide, leaving just <strong>1–1.5" clearance
-    per side</strong>. This is the tightest tolerance on the entire course. We need NDT-OMP localization
-    to be solid before entering and may need to reduce <code>inflation_radius</code> to 0.2m so Nav2
-    doesn't mark the path as impassable.
+    — the robot max width is 16" (rule 2.2.1) and the minimum track width is 20" (rule 3.3),
+    leaving just <strong>2" clearance per side</strong>. This is the tightest tolerance on the entire
+    course. We need NDT-OMP localization to be solid before entering and may need to reduce
+    <code>inflation_radius</code> to 0.2m so Nav2 doesn't mark the path as impassable.
     The state machine forces an NDT re-localization check at the zone entry waypoint before proceeding.
   </p>
   <p>
@@ -1007,7 +1085,7 @@ global_costmap:
       <tr>
         <td><code>inflation_radius: 0.45m</code></td>
         <td>global costmap</td>
-        <td>With 20" narrow section and 17–18" robot width, only ~1.5" clearance per side — must reduce to 0.2m for narrow zone or Nav2 marks path impassable</td>
+        <td>Robot max 16" wide in a 20" passage = 2" clearance per side (rules 2.2.1 + 3.3). Default 0.45m marks it impassable — must reduce to 0.2m for narrow zone.</td>
       </tr>
       <tr>
         <td><code>raytrace_max_range: 6.0m</code></td>
