@@ -525,7 +525,7 @@ HTML = f"""<!DOCTYPE html>
         <li>Gravel returns are inconsistent — holes appear in the free space</li>
         <li>Bucket obstacles baked in at mapping time reappear at competition even after moving</li>
         <li>Tunnel ceiling returns appear as impassable walls in 2D</li>
-        <li>Getting the map origin and orientation right is fiddly and error-prone</li>
+        <li>The map origin and orientation must match exactly — easy to get wrong</li>
       </ul>
     </div>
     <div class="card">
