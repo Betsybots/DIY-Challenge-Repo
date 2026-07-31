@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Obstacle Course Navigation Design — DIY Robot Challenge 2026</title>
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --cyan:    #0ea5e9;
+  --green:   #22c55e;
+  --purple:  #a855f7;
+  --orange:  #f97316;
+  --yellow:  #eab308;
+  --red:     #ef4444;
+  --blue:    #6366f1;
+  --lime:    #84cc16;
+  --dark:    #f8fafc;
+  --card:    #ffffff;
+  --border:  #cbd5e1;
+  --muted:   #64748b;
+  --text:    #0f172a;
+  --subtext: #334155;
+}
+
+@page { size: A4; margin: 20mm 18mm 20mm 18mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', 'Segoe UI', sans-serif; background: var(--dark); color: var(--text); font-size: 11px; line-height: 1.6; }
+
+.cover { page-break-after: always; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 60px 40px; background: linear-gradient(160deg, #e0f2fe 0%, #f0fdf4 50%, #faf5ff 100%); }
+.cover-badge { background: rgba(14,165,233,0.12); border: 1px solid var(--cyan); color: var(--cyan); padding: 5px 18px; border-radius: 20px; font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 28px; }
+.cover h1 { font-size: 34px; font-weight: 700; color: #0f172a; letter-spacing: -1px; line-height: 1.2; margin-bottom: 14px; }
+.cover h1 span { color: var(--cyan); }
+.cover .subtitle { font-size: 13px; color: var(--subtext); max-width: 580px; margin-bottom: 36px; }
+.cover-meta { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; max-width: 680px; width: 100%; margin-bottom: 36px; }
+.cover-meta-item { background: rgba(0,0,0,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.cover-meta-item .label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+.cover-meta-item .value { font-size: 11px; font-weight: 600; color: var(--text); }
+.cover-stack { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+.tag { padding: 3px 10px; border-radius: 5px; font-size: 10px; font-weight: 500; }
+.tag-cyan   { background: rgba(14,165,233,0.15); color: var(--cyan);   border: 1px solid rgba(14,165,233,0.3); }
+.tag-green  { background: rgba(34,197,94,0.15);  color: var(--green);  border: 1px solid rgba(34,197,94,0.3); }
+.tag-purple { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+.tag-orange { background: rgba(249,115,22,0.15); color: var(--orange); border: 1px solid rgba(249,115,22,0.3); }
+.tag-yellow { background: rgba(234,179,8,0.15);  color: var(--yellow); border: 1px solid rgba(234,179,8,0.3); }
+.tag-red    { background: rgba(239,68,68,0.15);  color: var(--red);    border: 1px solid rgba(239,68,68,0.3); }
+.tag-blue   { background: rgba(99,102,241,0.15); color: var(--blue);   border: 1px solid rgba(99,102,241,0.3); }
+
+.page { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+.pagebreak { page-break-before: always; }
+.section { margin-bottom: 36px; }
+.section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.section-num { background: var(--cyan); color: var(--dark); font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 5px; min-width: 32px; text-align: center; }
+.section-num.green  { background: var(--green); }
+.section-num.purple { background: var(--purple); }
+.section-num.orange { background: var(--orange); }
+.section-num.yellow { background: var(--yellow); color: #0f172a; }
+.section-num.red    { background: var(--red); }
+.section h2 { font-size: 18px; font-weight: 700; color: #fff; }
+h3 { font-size: 14px; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
+h4 { font-size: 12px; font-weight: 600; color: var(--subtext); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+p { color: var(--subtext); margin-bottom: 10px; }
+p strong { color: var(--text); font-weight: 600; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; position: relative; }
+.card-title { font-size: 12px; font-weight: 600; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+.copy-btn { margin-left: auto; background: rgba(0,0,0,0.05); border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 9px; padding: 2px 7px; cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; }
+.copy-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot-cyan   { background: var(--cyan); }
+.dot-green  { background: var(--green); }
+.dot-purple { background: var(--purple); }
+.dot-orange { background: var(--orange); }
+.dot-red    { background: var(--red); }
+.dot-blue   { background: var(--blue); }
+.dot-yellow { background: var(--yellow); }
+
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10px; }
+thead tr { background: rgba(0,0,0,0.05); }
+th { padding: 8px 10px; text-align: left; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+td { padding: 7px 10px; color: var(--subtext); border-bottom: 1px solid rgba(0,0,0,0.06); vertical-align: top; }
+td strong { color: var(--text); }
+td code { font-family: 'JetBrains Mono', monospace; font-size: 9px; background: rgba(255,255,255,0.08); padding: 1px 4px; border-radius: 3px; color: var(--cyan); }
+
+pre { background: #f1f5f9; border: 1px solid var(--border); border-left: 3px solid var(--cyan); border-radius: 6px; padding: 12px 16px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #1e40af; overflow-x: auto; margin: 10px 0; line-height: 1.6; white-space: pre; }
+
+.callout { border-radius: 6px; padding: 12px 14px; margin: 12px 0; font-size: 10.5px; border-left: 3px solid; }
+.callout-warn  { background: rgba(234,179,8,0.08);  border-color: var(--yellow); color: #fde68a; }
+.callout-info  { background: rgba(14,165,233,0.08); border-color: var(--cyan);   color: #bae6fd; }
+.callout-crit  { background: rgba(239,68,68,0.08);  border-color: var(--red);    color: #fecaca; }
+.callout-good  { background: rgba(34,197,94,0.08);  border-color: var(--green);  color: #bbf7d0; }
+.callout .callout-title { font-weight: 700; margin-bottom: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 0; }
+
+@media print {
+  .grid2 { grid-template-columns: 1fr; }
+  .grid3 { grid-template-columns: 1fr; }
+  .copy-btn { display: none; }
+  .pdf-btn { display: none; }
+}
+
+.pdf-btn {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  background: var(--cyan); color: #0a0e1a; border: none; border-radius: 8px;
+  padding: 10px 20px; font-size: 12px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(14,165,233,0.4); letter-spacing: 0.5px;
+  transition: background 0.15s, transform 0.1s;
+}
+.pdf-btn:hover { background: #38bdf8; transform: translateY(-1px); }
+
+.diagram-container { background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 14px 0; text-align: center; overflow: hidden; }
+.diagram-container svg { max-width: 100%; height: auto; }
+.diagram-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+
+.divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+
+.toc { page-break-after: always; }
+.toc h2 { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.toc-section { margin-bottom: 6px; }
+.toc-section a { color: var(--subtext); text-decoration: none; display: flex; justify-content: space-between; padding: 4px 8px; border-radius: 4px; font-size: 11px; }
+.toc-section .num { color: var(--cyan); font-weight: 600; margin-right: 8px; font-size: 10px; }
+.toc-sub { padding-left: 24px; }
+.toc-sub a { font-size: 10px; }
+
+.zone-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+.zone-normal  { background: rgba(34,197,94,0.2);  color: var(--green);  border: 1px solid rgba(34,197,94,0.4); }
+.zone-slow    { background: rgba(6,182,212,0.2);   color: #22d3ee;       border: 1px solid rgba(6,182,212,0.4); }
+.zone-blind   { background: rgba(239,68,68,0.2);   color: var(--red);    border: 1px solid rgba(239,68,68,0.4); }
+.zone-around  { background: rgba(168,85,247,0.2);  color: var(--purple); border: 1px solid rgba(168,85,247,0.4); }
+.zone-push    { background: rgba(249,115,22,0.2);  color: var(--orange); border: 1px solid rgba(249,115,22,0.4); }
+
+</style>
+</head>
+<body>
+
+<!-- ═══ COVER ═══ -->
+<div class="cover">
+  <div class="cover-badge">Navigation Design Document v1.0</div>
+  <h1>Obstacle Course<br/><span>Navigation Design</span></h1>
+  <p class="subtitle">
+    How we navigate the 2026 DIY Robot Challenge obstacle course — zone-aware state machine,
+    map-free costmap strategy, dual EKF fusion, and sensor-loss recovery for the tunnel section.
+    No static .pgm map required.
+  </p>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <div class="label">Competition</div>
+      <div class="value">October 1, 2026</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Aug 14 Demo</div>
+      <div class="value">Autonomous Motion</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Platform</div>
+      <div class="value">Jetson Orin Nano</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Team</div>
+      <div class="value">Juggernauts</div>
+    </div>
+  </div>
+  <div class="cover-stack">
+    <span class="tag tag-cyan">ROS 2 Humble</span>
+    <span class="tag tag-green">FAST-LIO2</span>
+    <span class="tag tag-purple">NDT-OMP</span>
+    <span class="tag tag-orange">Nav2 MPPI</span>
+    <span class="tag tag-yellow">Dual EKF</span>
+    <span class="tag tag-red">No PGM Map</span>
+    <span class="tag tag-blue">Zone State Machine</span>
+  </div>
+</div>
+
+<!-- ═══ TOC ═══ -->
+<div class="page toc">
+  <h2>Table of Contents</h2>
+  <div class="toc-section"><a href="#s1"><span><span class="num">1</span> The Problem with a Static Map</span></a></div>
+  <div class="toc-section"><a href="#s2"><span><span class="num">2</span> Localization Stack — No .pgm Needed</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s2-1"><span>2.1 LIO-SAM Offline Map Generation</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s2-2"><span>2.2 NDT-OMP Runtime Localization</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s2-3"><span>2.3 Dual EKF Fusion Architecture</span></a></div>
+  <div class="toc-section"><a href="#s3"><span><span class="num">3</span> Costmap Strategy — Live Lidar Only</span></a></div>
+  <div class="toc-section"><a href="#s4"><span><span class="num">4</span> Obstacle Course — Zone Analysis</span></a></div>
+  <div class="toc-section"><a href="#s5"><span><span class="num">5</span> Zone-Aware Navigation State Machine</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s5-1"><span>5.1 NORMAL_NAV — Nav2 Smac + MPPI</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s5-2"><span>5.2 SLOW_NAV — Narrow, Ramp, Bank</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s5-3"><span>5.3 BLIND_DRIVE — Tunnel Dead Reckoning</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s5-4"><span>5.4 NAVIGATE_AROUND — Dynamic Obstacle Buckets</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s5-5"><span>5.5 PUSH_THROUGH — Car Wash</span></a></div>
+  <div class="toc-section"><a href="#s6"><span><span class="num">6</span> Nav2 Configuration for This Course</span></a></div>
+  <div class="toc-section"><a href="#s7"><span><span class="num">7</span> Implementation Priority</span></a></div>
+</div>
+
+<!-- ═══ SECTION 1 ═══ -->
+<div class="page section" id="s1">
+  <div class="section-header">
+    <span class="section-num red">1</span>
+    <h2>The Problem with a Static Map</h2>
+  </div>
+
+  <p>
+    The standard Nav2 setup uses a <strong>static occupancy grid</strong> — a .pgm image file — loaded by
+    <code>map_server</code> to give the global planner a pre-known picture of the environment. This works
+    well indoors on flat surfaces. For our outdoor obstacle course it breaks down in several ways.
+  </p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="dot dot-red"></span>Why PCD → PGM Fails Outdoors</div>
+      <p>LIO-SAM gives us a 3D point cloud (<code>GlobalMap.pcd</code>). Converting it to a 2D .pgm
+      requires projecting down to a single horizontal slice. On our course:</p>
+      <ul style="color:var(--subtext); padding-left:16px; margin-top:6px; font-size:10px; line-height:1.8;">
+        <li>Ramps make the floor non-flat — a 2D slice shows the ramp as a wall</li>
+        <li>Gravel gives noisy lidar returns — the free space ends up with gaps and holes in it</li>
+        <li>Bucket positions are baked into the map at recording time — if they move before competition, the map is wrong</li>
+        <li>Tunnel ceiling returns appear as impassable walls in 2D</li>
+        <li>The map origin and orientation must match exactly — easy to get wrong</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>What We Do Instead</div>
+      <p>We skip the static layer entirely. Here's the insight:</p>
+      <ul style="color:var(--subtext); padding-left:16px; margin-top:6px; font-size:10px; line-height:1.8;">
+        <li><strong>Localization</strong> (where am I?) is solved by NDT-OMP matching live scans against <code>GlobalMap.pcd</code> directly — no 2D projection</li>
+        <li><strong>Obstacle avoidance</strong> (what's around me?) is solved by the live lidar feeding the <code>obstacle_layer</code> in real time</li>
+        <li><strong>Path planning</strong> works fine without a static layer using <code>allow_unknown: true</code></li>
+        <li>Dynamic obstacles — like randomly placed buckets — are always current</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-good">
+    <div class="callout-title">Key Insight</div>
+    The .pgm file was only ever needed to tell the planner where the walls are. Our lidar sees those walls live at 10 Hz.
+    We already have better, fresher information — we just need to use it correctly.
+  </div>
+</div>
+
+<!-- ═══ SECTION 2 ═══ -->
+<div class="page section pagebreak" id="s2">
+  <div class="section-header">
+    <span class="section-num">2</span>
+    <h2>Localization Stack — No .pgm Needed</h2>
+  </div>
+
+  <p>
+    The full localization pipeline is shown below. It has three independent pieces that each answer a different question:
+    NDT-OMP answers <em>where am I globally</em>, FAST-LIO2 answers <em>how am I moving</em>,
+    and the dual EKF answers <em>what is my best smoothed estimate</em>.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Full Localization + Navigation Data Flow</div>
+    <svg width="1092pt" height="303pt"
+ viewBox="0.00 0.00 1092.00 303.12" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 299.12)">
+<title>localization</title>
+<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-299.12 1088,-299.12 1088,4 -4,4"/>
+<!-- hesai -->
+<g id="node1" class="node">
+<title>hesai</title>
+<path fill="#0c1a2e" stroke="#0ea5e9" stroke-width="1.5" d="M78,-207.5C78,-207.5 23,-207.5 23,-207.5 17,-207.5 11,-201.5 11,-195.5 11,-195.5 11,-183.5 11,-183.5 11,-177.5 17,-171.5 23,-171.5 23,-171.5 78,-171.5 78,-171.5 84,-171.5 90,-177.5 90,-183.5 90,-183.5 90,-195.5 90,-195.5 90,-201.5 84,-207.5 78,-207.5"/>
+<text text-anchor="middle" x="50.5" y="-192.5" font-family="Inter" font-size="10.00" fill="#0ea5e9">Hesai QT64</text>
+<text text-anchor="middle" x="50.5" y="-181.5" font-family="Inter" font-size="10.00" fill="#0ea5e9">/hesai/points</text>
+</g>
+<!-- fastlio -->
+<g id="node4" class="node">
+<title>fastlio</title>
+<path fill="#172554" stroke="#3b82f6" stroke-width="1.5" d="M285.5,-171C285.5,-171 229.5,-171 229.5,-171 223.5,-171 217.5,-165 217.5,-159 217.5,-159 217.5,-142 217.5,-142 217.5,-136 223.5,-130 229.5,-130 229.5,-130 285.5,-130 285.5,-130 291.5,-130 297.5,-136 297.5,-142 297.5,-142 297.5,-159 297.5,-159 297.5,-165 291.5,-171 285.5,-171"/>
+<text text-anchor="middle" x="257.5" y="-159" font-family="Inter" font-size="10.00" fill="#93c5fd">FAST&#45;LIO2</text>
+<text text-anchor="middle" x="257.5" y="-148" font-family="Inter" font-size="10.00" fill="#93c5fd">(lidar&#45;inertial</text>
+<text text-anchor="middle" x="257.5" y="-137" font-family="Inter" font-size="10.00" fill="#93c5fd">odometry)</text>
+</g>
+<!-- hesai&#45;&gt;fastlio -->
+<g id="edge1" class="edge">
+<title>hesai&#45;&gt;fastlio</title>
+<path fill="none" stroke="#475569" d="M90.33,-183.33C147.23,-183.33 245,-183.33 245,-183.33 245,-183.33 245,-181.11 245,-181.11"/>
+<polygon fill="#475569" stroke="#475569" points="248.5,-181.11 245,-171.11 241.5,-181.11 248.5,-181.11"/>
+</g>
+<!-- ndt -->
+<g id="node7" class="node">
+<title>ndt</title>
+<path fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" d="M296,-261C296,-261 219,-261 219,-261 213,-261 207,-255 207,-249 207,-249 207,-232 207,-232 207,-226 213,-220 219,-220 219,-220 296,-220 296,-220 302,-220 308,-226 308,-232 308,-232 308,-249 308,-249 308,-255 302,-261 296,-261"/>
+<text text-anchor="middle" x="257.5" y="-249" font-family="Inter" font-size="10.00" fill="#c4b5fd">NDT&#45;OMP</text>
+<text text-anchor="middle" x="257.5" y="-238" font-family="Inter" font-size="10.00" fill="#c4b5fd">(map matching)</text>
+<text text-anchor="middle" x="257.5" y="-227" font-family="Inter" font-size="10.00" fill="#c4b5fd">→ map→odom TF</text>
+</g>
+<!-- hesai&#45;&gt;ndt -->
+<g id="edge8" class="edge">
+<title>hesai&#45;&gt;ndt</title>
+<path fill="none" stroke="#475569" d="M51,-207.7C51,-221.08 51,-236.94 51,-236.94 51,-236.94 196.98,-236.94 196.98,-236.94"/>
+<polygon fill="#475569" stroke="#475569" points="196.98,-240.44 206.98,-236.94 196.98,-233.44 196.98,-240.44"/>
+<text text-anchor="middle" x="154" y="-240.3" font-family="Inter" font-size="9.00" fill="#94a3b8">live scan</text>
+</g>
+<!-- imu -->
+<g id="node2" class="node">
+<title>imu</title>
+<path fill="#0c1a2e" stroke="#a855f7" stroke-width="1.5" d="M80,-123.5C80,-123.5 21,-123.5 21,-123.5 15,-123.5 9,-117.5 9,-111.5 9,-111.5 9,-99.5 9,-99.5 9,-93.5 15,-87.5 21,-87.5 21,-87.5 80,-87.5 80,-87.5 86,-87.5 92,-93.5 92,-99.5 92,-99.5 92,-111.5 92,-111.5 92,-117.5 86,-123.5 80,-123.5"/>
+<text text-anchor="middle" x="50.5" y="-108.5" font-family="Inter" font-size="10.00" fill="#a855f7">ACEINNA IMU</text>
+<text text-anchor="middle" x="50.5" y="-97.5" font-family="Inter" font-size="10.00" fill="#a855f7">/imu/data</text>
+</g>
+<!-- imu&#45;&gt;fastlio -->
+<g id="edge2" class="edge">
+<title>imu&#45;&gt;fastlio</title>
+<path fill="none" stroke="#475569" d="M92.11,-120C147.35,-120 238,-120 238,-120 238,-120 238,-121 238,-121"/>
+<polygon fill="#475569" stroke="#475569" points="234.5,-119.99 238,-129.99 241.5,-119.99 234.5,-119.99"/>
+</g>
+<!-- ekf1 -->
+<g id="node5" class="node">
+<title>ekf1</title>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.5" d="M291,-87C291,-87 224,-87 224,-87 218,-87 212,-81 212,-75 212,-75 212,-58 212,-58 212,-52 218,-46 224,-46 224,-46 291,-46 291,-46 297,-46 303,-52 303,-58 303,-58 303,-75 303,-75 303,-81 297,-87 291,-87"/>
+<text text-anchor="middle" x="257.5" y="-75" font-family="Inter" font-size="10.00" fill="#86efac">EKF1</text>
+<text text-anchor="middle" x="257.5" y="-64" font-family="Inter" font-size="10.00" fill="#86efac">Wheel + IMU</text>
+<text text-anchor="middle" x="257.5" y="-53" font-family="Inter" font-size="10.00" fill="#86efac">→ /wimu_odom</text>
+</g>
+<!-- imu&#45;&gt;ekf1 -->
+<g id="edge3" class="edge">
+<title>imu&#45;&gt;ekf1</title>
+<path fill="none" stroke="#475569" d="M92.49,-100.25C153.12,-100.25 258,-100.25 258,-100.25 258,-100.25 258,-97.3 258,-97.3"/>
+<polygon fill="#475569" stroke="#475569" points="261.5,-97.3 258,-87.3 254.5,-97.3 261.5,-97.3"/>
+</g>
+<!-- wheel -->
+<g id="node3" class="node">
+<title>wheel</title>
+<path fill="#0c1a2e" stroke="#f97316" stroke-width="1.5" d="M86,-41C86,-41 15,-41 15,-41 9,-41 3,-35 3,-29 3,-29 3,-12 3,-12 3,-6 9,0 15,0 15,0 86,0 86,0 92,0 98,-6 98,-12 98,-12 98,-29 98,-29 98,-35 92,-41 86,-41"/>
+<text text-anchor="middle" x="50.5" y="-29" font-family="Inter" font-size="10.00" fill="#f97316">Dead&#45;Wheel</text>
+<text text-anchor="middle" x="50.5" y="-18" font-family="Inter" font-size="10.00" fill="#f97316">Encoders</text>
+<text text-anchor="middle" x="50.5" y="-7" font-family="Inter" font-size="10.00" fill="#f97316">/wheel_cmd_vel</text>
+</g>
+<!-- wheel&#45;&gt;ekf1 -->
+<g id="edge4" class="edge">
+<title>wheel&#45;&gt;ekf1</title>
+<path fill="none" stroke="#475569" d="M98.1,-20.5C159.37,-20.5 258,-20.5 258,-20.5 258,-20.5 258,-35.92 258,-35.92"/>
+<polygon fill="#475569" stroke="#475569" points="254.5,-35.92 258,-45.92 261.5,-35.92 254.5,-35.92"/>
+</g>
+<!-- ekf2 -->
+<g id="node6" class="node">
+<title>ekf2</title>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.5" d="M551,-154C551,-154 457,-154 457,-154 451,-154 445,-148 445,-142 445,-142 445,-125 445,-125 445,-119 451,-113 457,-113 457,-113 551,-113 551,-113 557,-113 563,-119 563,-125 563,-125 563,-142 563,-142 563,-148 557,-154 551,-154"/>
+<text text-anchor="middle" x="504" y="-142" font-family="Inter" font-size="10.00" fill="#86efac">EKF2</text>
+<text text-anchor="middle" x="504" y="-131" font-family="Inter" font-size="10.00" fill="#86efac">WImuOdom + LiDAR</text>
+<text text-anchor="middle" x="504" y="-120" font-family="Inter" font-size="10.00" fill="#86efac">→ /odometry/filtered</text>
+</g>
+<!-- fastlio&#45;&gt;ekf2 -->
+<g id="edge5" class="edge">
+<title>fastlio&#45;&gt;ekf2</title>
+<path fill="none" stroke="#475569" d="M297.65,-142C297.65,-142 434.98,-142 434.98,-142"/>
+<polygon fill="#475569" stroke="#475569" points="434.98,-145.5 444.98,-142 434.98,-138.5 434.98,-145.5"/>
+<text text-anchor="middle" x="376.5" y="-142.3" font-family="Inter" font-size="9.00" fill="#94a3b8">/lidar_odometry</text>
+</g>
+<!-- ekf1&#45;&gt;ekf2 -->
+<g id="edge6" class="edge">
+<title>ekf1&#45;&gt;ekf2</title>
+<path fill="none" stroke="#475569" d="M278,-87.13C278,-100.9 278,-116.5 278,-116.5 278,-116.5 434.92,-116.5 434.92,-116.5"/>
+<polygon fill="#475569" stroke="#475569" points="434.92,-120 444.92,-116.5 434.92,-113 434.92,-120"/>
+<text text-anchor="middle" x="376.5" y="-77.3" font-family="Inter" font-size="9.00" fill="#94a3b8">/wimu_odom</text>
+</g>
+<!-- nav2 -->
+<g id="node9" class="node">
+<title>nav2</title>
+<path fill="#431407" stroke="#f97316" stroke-width="1.5" d="M794,-207C794,-207 723,-207 723,-207 717,-207 711,-201 711,-195 711,-195 711,-178 711,-178 711,-172 717,-166 723,-166 723,-166 794,-166 794,-166 800,-166 806,-172 806,-178 806,-178 806,-195 806,-195 806,-201 800,-207 794,-207"/>
+<text text-anchor="middle" x="758.5" y="-195" font-family="Inter" font-size="10.00" fill="#fed7aa">Nav2</text>
+<text text-anchor="middle" x="758.5" y="-184" font-family="Inter" font-size="10.00" fill="#fed7aa">Smac + MPPI</text>
+<text text-anchor="middle" x="758.5" y="-173" font-family="Inter" font-size="10.00" fill="#fed7aa">→ /cmd_vel_nav</text>
+</g>
+<!-- ekf2&#45;&gt;nav2 -->
+<g id="edge10" class="edge">
+<title>ekf2&#45;&gt;nav2</title>
+<path fill="none" stroke="#22c55e" d="M563.14,-133.5C638.47,-133.5 759,-133.5 759,-133.5 759,-133.5 759,-155.86 759,-155.86"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="755.5,-155.86 759,-165.86 762.5,-155.86 755.5,-155.86"/>
+<text text-anchor="middle" x="637" y="-171.3" font-family="Inter" font-size="9.00" fill="#22c55e">/odometry/filtered</text>
+</g>
+<!-- ndt&#45;&gt;nav2 -->
+<g id="edge9" class="edge">
+<title>ndt&#45;&gt;nav2</title>
+<path fill="none" stroke="#a855f7" d="M271,-219.96C271,-207.96 271,-195.17 271,-195.17 271,-195.17 700.87,-195.17 700.87,-195.17"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="700.87,-198.67 710.87,-195.17 700.87,-191.67 700.87,-198.67"/>
+<text text-anchor="middle" x="504" y="-243.3" font-family="Inter" font-size="9.00" fill="#a855f7">map→odom TF</text>
+</g>
+<!-- pcd -->
+<g id="node8" class="node">
+<title>pcd</title>
+<path fill="#0c1a2e" stroke="#334155" stroke-width="1.5" d="M101,-291.48C101,-293.56 78.37,-295.25 50.5,-295.25 22.63,-295.25 0,-293.56 0,-291.48 0,-291.48 0,-257.52 0,-257.52 0,-255.44 22.63,-253.75 50.5,-253.75 78.37,-253.75 101,-255.44 101,-257.52 101,-257.52 101,-291.48 101,-291.48"/>
+<path fill="none" stroke="#334155" stroke-width="1.5" d="M101,-291.48C101,-289.4 78.37,-287.71 50.5,-287.71 22.63,-287.71 0,-289.4 0,-291.48"/>
+<text text-anchor="middle" x="50.5" y="-277.5" font-family="Inter" font-size="10.00" fill="#94a3b8">GlobalMap.pcd</text>
+<text text-anchor="middle" x="50.5" y="-266.5" font-family="Inter" font-size="10.00" fill="#94a3b8">(LIO&#45;SAM output)</text>
+</g>
+<!-- pcd&#45;&gt;ndt -->
+<g id="edge7" class="edge">
+<title>pcd&#45;&gt;ndt</title>
+<path fill="none" stroke="#475569" d="M101.14,-257.44C101.14,-257.44 196.67,-257.44 196.67,-257.44"/>
+<polygon fill="#475569" stroke="#475569" points="196.67,-260.94 206.67,-257.44 196.67,-253.94 196.67,-260.94"/>
+</g>
+<!-- mux -->
+<g id="node10" class="node">
+<title>mux</title>
+<path fill="#1c1917" stroke="#78716c" stroke-width="1.5" d="M951,-204.5C951,-204.5 885,-204.5 885,-204.5 879,-204.5 873,-198.5 873,-192.5 873,-192.5 873,-180.5 873,-180.5 873,-174.5 879,-168.5 885,-168.5 885,-168.5 951,-168.5 951,-168.5 957,-168.5 963,-174.5 963,-180.5 963,-180.5 963,-192.5 963,-192.5 963,-198.5 957,-204.5 951,-204.5"/>
+<text text-anchor="middle" x="918" y="-189.5" font-family="Inter" font-size="10.00" fill="#d6d3d1">cmd_vel_mux</text>
+<text text-anchor="middle" x="918" y="-178.5" font-family="Inter" font-size="10.00" fill="#d6d3d1">(joy/nav/estop)</text>
+</g>
+<!-- nav2&#45;&gt;mux -->
+<g id="edge11" class="edge">
+<title>nav2&#45;&gt;mux</title>
+<path fill="none" stroke="#475569" d="M806.36,-186.5C806.36,-186.5 862.91,-186.5 862.91,-186.5"/>
+<polygon fill="#475569" stroke="#475569" points="862.91,-190 872.91,-186.5 862.91,-183 862.91,-190"/>
+</g>
+<!-- motors -->
+<g id="node11" class="node">
+<title>motors</title>
+<path fill="#1c1917" stroke="#78716c" stroke-width="1.5" d="M1072,-204.5C1072,-204.5 1042,-204.5 1042,-204.5 1036,-204.5 1030,-198.5 1030,-192.5 1030,-192.5 1030,-180.5 1030,-180.5 1030,-174.5 1036,-168.5 1042,-168.5 1042,-168.5 1072,-168.5 1072,-168.5 1078,-168.5 1084,-174.5 1084,-180.5 1084,-180.5 1084,-192.5 1084,-192.5 1084,-198.5 1078,-204.5 1072,-204.5"/>
+<text text-anchor="middle" x="1057" y="-189.5" font-family="Inter" font-size="10.00" fill="#d6d3d1">STM32</text>
+<text text-anchor="middle" x="1057" y="-178.5" font-family="Inter" font-size="10.00" fill="#d6d3d1">Motors</text>
+</g>
+<!-- mux&#45;&gt;motors -->
+<g id="edge12" class="edge">
+<title>mux&#45;&gt;motors</title>
+<path fill="none" stroke="#475569" d="M963.13,-186.5C963.13,-186.5 1019.91,-186.5 1019.91,-186.5"/>
+<polygon fill="#475569" stroke="#475569" points="1019.91,-190 1029.91,-186.5 1019.91,-183 1019.91,-190"/>
+</g>
+</g>
+</svg>
+
+  </div>
+
+  <h3 id="s2-1">2.1 LIO-SAM — Offline Map Generation (done once before competition)</h3>
+  <p>
+    We drive the course once with LIO-SAM running. It builds a globally consistent 3D point cloud map
+    using a factor graph — a statistical graph that links sensor measurements together so errors can be
+    corrected globally. As the robot drives and revisits previously seen places, it performs
+    <em>loop closure</em>: it recognises that it is back at a known location, then pulls the entire trajectory
+    into alignment to remove accumulated drift. When we're happy with the map quality in RViz, we call the
+    <code>/lio_sam/save_map</code> service and get three files: <code>CornerMap.pcd</code>,
+    <code>SurfMap.pcd</code>, and most importantly <code>GlobalMap.pcd</code> — the combined map
+    that everything else works from.
+  </p>
+  <div class="callout callout-warn">
+    <div class="callout-title">Map Quality is Foundation</div>
+    The quality of this single mapping run determines how well NDT-OMP localises on competition day.
+    Drive slowly, complete full loop closure, verify in RViz before saving. We need to build this map early — it's
+    the single most important pre-competition task.
+  </div>
+
+  <h3 id="s2-2">2.2 NDT-OMP — Runtime Map Matching</h3>
+  <p>
+    NDT-OMP (Normal Distributions Transform with OpenMP parallelism) loads <code>GlobalMap.pcd</code>
+    at startup and continuously matches each incoming Hesai scan against it. The output is the
+    <strong>map→odom transform</strong> — this is what tells Nav2 where the robot is in the global frame.
+    It publishes directly into the <strong>TF tree</strong> — ROS 2's coordinate frame system that tracks
+    the spatial relationship between every frame (map, odom, base_link) at all times — so Nav2 doesn't
+    need to know anything about how it works.
+  </p>
+  <p>
+    AMCL (Adaptive Monte Carlo Localization) is the standard ROS 2 method for estimating robot position — it scatters random guesses across a 2D floor map and converges on the best match. It works fine indoors but falls apart outdoors where there is no clean flat map. NDT-OMP replaces it entirely: instead of a 2D grid, it matches each incoming lidar scan against our 3D point cloud map using fast voxel-based alignment.
+    It is already in our repo as the <code>ndt_omp_ros2</code> submodule.
+  </p>
+
+  <h3 id="s2-3">2.3 Dual EKF Fusion</h3>
+  <p>
+    FAST-LIO2 runs at 10 Hz — once per lidar scan. Between scans there's a 100ms gap where the
+    robot's pose estimate doesn't update. For the MPPI controller running at 20 Hz, this gap
+    causes jerky velocity commands. The <strong>dual EKF</strong> eliminates this.
+  </p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>EKF1 — Wheel + IMU Only, 100 Hz (ekf_wimu.yaml)</div>
+      <p>Fuses dead-wheel encoder odometry (<code>/wheel_cmd_vel</code>) with IMU angular velocity
+      (<code>/imu/data</code>) to produce <code>/wimu_odom</code> at 50–100 Hz. No lidar involved —
+      this runs fast, fills the gaps between lidar updates, and keeps pose estimates smooth.
+      It drifts slowly over time but is very accurate over short intervals.</p>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>EKF2 — Wheel + IMU + Lidar, 50 Hz (ekf_local.yaml)</div>
+      <p>Takes <code>/wimu_odom</code> (fast, smooth, drifts) and <code>/lidar_odometry</code>
+      (FAST-LIO2, accurate, lower rate) and fuses them into <code>/odometry/filtered</code>.
+      The result is both smooth and drift-corrected — MPPI gets 50 Hz smooth inputs, and every
+      lidar scan pulls the estimate back to ground truth.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SECTION 3 ═══ -->
+<div class="page section pagebreak" id="s3">
+  <div class="section-header">
+    <span class="section-num green">3</span>
+    <h2>Costmap Strategy — Live Lidar Only</h2>
+  </div>
+
+  <p>
+    Nav2's costmap system has a modular plugin architecture. Each plugin contributes information
+    to a shared 2D grid. We use <strong>only the live lidar</strong> — no static layer, no pre-built map.
+    This is a deliberate design choice, not a compromise.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Costmap Layer Architecture</div>
+    <svg width="479pt" height="347pt"
+ viewBox="0.00 0.00 479.00 346.50" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 342.5)">
+<title>costmap</title>
+<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-342.5 475,-342.5 475,4 -4,4"/>
+<g id="clust1" class="cluster">
+<title>cluster_global</title>
+<path fill="#111827" stroke="#334155" d="M20,-73C20,-73 207,-73 207,-73 213,-73 219,-79 219,-85 219,-85 219,-218 219,-218 219,-224 213,-230 207,-230 207,-230 20,-230 20,-230 14,-230 8,-224 8,-218 8,-218 8,-85 8,-85 8,-79 14,-73 20,-73"/>
+<text text-anchor="middle" x="113.5" y="-218" font-family="Inter" font-size="10.00" fill="#94a3b8">Global Costmap &#160;(rolling_window: false)</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_local</title>
+<path fill="#111827" stroke="#334155" d="M239,-156.5C239,-156.5 451,-156.5 451,-156.5 457,-156.5 463,-162.5 463,-168.5 463,-168.5 463,-318.5 463,-318.5 463,-324.5 457,-330.5 451,-330.5 451,-330.5 239,-330.5 239,-330.5 233,-330.5 227,-324.5 227,-318.5 227,-318.5 227,-168.5 227,-168.5 227,-162.5 233,-156.5 239,-156.5"/>
+<text text-anchor="middle" x="345" y="-318.5" font-family="Inter" font-size="10.00" fill="#94a3b8">Local Costmap &#160;(rolling_window: true, 4×4m)</text>
+</g>
+<!-- obs_g -->
+<g id="node1" class="node">
+<title>obs_g</title>
+<path fill="#172554" stroke="#3b82f6" stroke-width="1.2" d="M183.5,-203C183.5,-203 42.5,-203 42.5,-203 36.5,-203 30.5,-197 30.5,-191 30.5,-191 30.5,-174 30.5,-174 30.5,-168 36.5,-162 42.5,-162 42.5,-162 183.5,-162 183.5,-162 189.5,-162 195.5,-168 195.5,-174 195.5,-174 195.5,-191 195.5,-191 195.5,-197 189.5,-203 183.5,-203"/>
+<text text-anchor="middle" x="113" y="-191" font-family="Inter" font-size="10.00" fill="#93c5fd">obstacle_layer</text>
+<text text-anchor="middle" x="113" y="-180" font-family="Inter" font-size="10.00" fill="#93c5fd">/hesai/points</text>
+<text text-anchor="middle" x="113" y="-169" font-family="Inter" font-size="10.00" fill="#93c5fd">(marks hits, clears free space)</text>
+</g>
+<!-- inf_g -->
+<g id="node2" class="node">
+<title>inf_g</title>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.2" d="M144,-117C144,-117 82,-117 82,-117 76,-117 70,-111 70,-105 70,-105 70,-93 70,-93 70,-87 76,-81 82,-81 82,-81 144,-81 144,-81 150,-81 156,-87 156,-93 156,-93 156,-105 156,-105 156,-111 150,-117 144,-117"/>
+<text text-anchor="middle" x="113" y="-102" font-family="Inter" font-size="10.00" fill="#86efac">inflation_layer</text>
+<text text-anchor="middle" x="113" y="-91" font-family="Inter" font-size="10.00" fill="#86efac">radius: 0.45m</text>
+</g>
+<!-- obs_g&#45;&gt;inf_g -->
+<g id="edge1" class="edge">
+<title>obs_g&#45;&gt;inf_g</title>
+<path fill="none" stroke="#475569" d="M113,-161.86C113,-161.86 113,-127.13 113,-127.13"/>
+<polygon fill="#475569" stroke="#475569" points="116.5,-127.13 113,-117.13 109.5,-127.13 116.5,-127.13"/>
+<text text-anchor="middle" x="125" y="-137.6" font-family="Inter" font-size="8.00" fill="#94a3b8">feeds</text>
+</g>
+<!-- smac -->
+<g id="node5" class="node">
+<title>smac</title>
+<path fill="#1e1b4b" stroke="#a855f7" stroke-width="1.2" d="M148.5,-36C148.5,-36 77.5,-36 77.5,-36 71.5,-36 65.5,-30 65.5,-24 65.5,-24 65.5,-12 65.5,-12 65.5,-6 71.5,0 77.5,0 77.5,0 148.5,0 148.5,0 154.5,0 160.5,-6 160.5,-12 160.5,-12 160.5,-24 160.5,-24 160.5,-30 154.5,-36 148.5,-36"/>
+<text text-anchor="middle" x="113" y="-21" font-family="Inter" font-size="10.00" fill="#c4b5fd">Smac Hybrid&#45;A*</text>
+<text text-anchor="middle" x="113" y="-10" font-family="Inter" font-size="10.00" fill="#c4b5fd">Global planner</text>
+</g>
+<!-- inf_g&#45;&gt;smac -->
+<g id="edge3" class="edge">
+<title>inf_g&#45;&gt;smac</title>
+<path fill="none" stroke="#475569" d="M113,-80.62C113,-80.62 113,-46.03 113,-46.03"/>
+<polygon fill="#475569" stroke="#475569" points="116.5,-46.03 113,-36.03 109.5,-46.03 116.5,-46.03"/>
+<text text-anchor="middle" x="131" y="-56.6" font-family="Inter" font-size="8.00" fill="#94a3b8">costmap</text>
+</g>
+<!-- vox_l -->
+<g id="node3" class="node">
+<title>vox_l</title>
+<path fill="#172554" stroke="#3b82f6" stroke-width="1.2" d="M403.5,-303.5C403.5,-303.5 286.5,-303.5 286.5,-303.5 280.5,-303.5 274.5,-297.5 274.5,-291.5 274.5,-291.5 274.5,-279.5 274.5,-279.5 274.5,-273.5 280.5,-267.5 286.5,-267.5 286.5,-267.5 403.5,-267.5 403.5,-267.5 409.5,-267.5 415.5,-273.5 415.5,-279.5 415.5,-279.5 415.5,-291.5 415.5,-291.5 415.5,-297.5 409.5,-303.5 403.5,-303.5"/>
+<text text-anchor="middle" x="345" y="-288.5" font-family="Inter" font-size="10.00" fill="#93c5fd">voxel_layer</text>
+<text text-anchor="middle" x="345" y="-277.5" font-family="Inter" font-size="10.00" fill="#93c5fd">/hesai/points → 3D voxels</text>
+</g>
+<!-- inf_l -->
+<g id="node4" class="node">
+<title>inf_l</title>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.2" d="M376,-200.5C376,-200.5 314,-200.5 314,-200.5 308,-200.5 302,-194.5 302,-188.5 302,-188.5 302,-176.5 302,-176.5 302,-170.5 308,-164.5 314,-164.5 314,-164.5 376,-164.5 376,-164.5 382,-164.5 388,-170.5 388,-176.5 388,-176.5 388,-188.5 388,-188.5 388,-194.5 382,-200.5 376,-200.5"/>
+<text text-anchor="middle" x="345" y="-185.5" font-family="Inter" font-size="10.00" fill="#86efac">inflation_layer</text>
+<text text-anchor="middle" x="345" y="-174.5" font-family="Inter" font-size="10.00" fill="#86efac">radius: 0.40m</text>
+</g>
+<!-- vox_l&#45;&gt;inf_l -->
+<g id="edge2" class="edge">
+<title>vox_l&#45;&gt;inf_l</title>
+<path fill="none" stroke="#475569" d="M345,-267.09C345,-267.09 345,-210.75 345,-210.75"/>
+<polygon fill="#475569" stroke="#475569" points="348.5,-210.75 345,-200.75 341.5,-210.75 348.5,-210.75"/>
+<text text-anchor="middle" x="357" y="-240.6" font-family="Inter" font-size="8.00" fill="#94a3b8">feeds</text>
+</g>
+<!-- mppi -->
+<g id="node6" class="node">
+<title>mppi</title>
+<path fill="#431407" stroke="#f97316" stroke-width="1.2" d="M379,-117C379,-117 311,-117 311,-117 305,-117 299,-111 299,-105 299,-105 299,-93 299,-93 299,-87 305,-81 311,-81 311,-81 379,-81 379,-81 385,-81 391,-87 391,-93 391,-93 391,-105 391,-105 391,-111 385,-117 379,-117"/>
+<text text-anchor="middle" x="345" y="-102" font-family="Inter" font-size="10.00" fill="#fed7aa">MPPI Controller</text>
+<text text-anchor="middle" x="345" y="-91" font-family="Inter" font-size="10.00" fill="#fed7aa">Local controller</text>
+</g>
+<!-- inf_l&#45;&gt;mppi -->
+<g id="edge4" class="edge">
+<title>inf_l&#45;&gt;mppi</title>
+<path fill="none" stroke="#475569" d="M345,-164.38C345,-164.38 345,-127.08 345,-127.08"/>
+<polygon fill="#475569" stroke="#475569" points="348.5,-127.08 345,-117.08 341.5,-127.08 348.5,-127.08"/>
+<text text-anchor="middle" x="363" y="-137.6" font-family="Inter" font-size="8.00" fill="#94a3b8">costmap</text>
+</g>
+<!-- note -->
+<g id="node7" class="node">
+<title>note</title>
+<polygon fill="#0f172a" stroke="#22c55e" stroke-width="1.2" points="166,-306 54,-306 54,-265 172,-265 172,-300 166,-306"/>
+<polyline fill="none" stroke="#22c55e" stroke-width="1.2" points="166,-306 166,-300 "/>
+<polyline fill="none" stroke="#22c55e" stroke-width="1.2" points="172,-300 166,-300 "/>
+<text text-anchor="middle" x="113" y="-294" font-family="Inter" font-size="10.00" fill="#22c55e">No static_layer.</text>
+<text text-anchor="middle" x="113" y="-283" font-family="Inter" font-size="10.00" fill="#22c55e">No .pgm file needed.</text>
+<text text-anchor="middle" x="113" y="-272" font-family="Inter" font-size="10.00" fill="#22c55e">All from live lidar.</text>
+</g>
+<!-- note&#45;&gt;obs_g -->
+<g id="edge5" class="edge">
+<title>note&#45;&gt;obs_g</title>
+<path fill="none" stroke="#22c55e" stroke-dasharray="5,2" d="M113,-264.66C113,-264.66 113,-213.31 113,-213.31"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="116.5,-213.31 113,-203.31 109.5,-213.31 116.5,-213.31"/>
+</g>
+</g>
+</svg>
+
+  </div>
+
+  <h3>How the Global Costmap Builds Up Without a Static Layer</h3>
+  <p>
+    The global costmap has <code>rolling_window: false</code> — it doesn't clear itself as the robot moves.
+    Every obstacle the Hesai lidar sees gets marked in the grid and <strong>stays there</strong>.
+    As the robot drives around the course, the costmap accumulates a complete picture of what's been observed.
+    By the time the robot needs to plan a long path, it has already seen most of the environment.
+  </p>
+  <p>
+    The planner is configured with <code>allow_unknown: true</code> — it will plan through unseen
+    space if needed. On a fixed known course, this is safe because the course boundaries are
+    quickly observed and marked.
+  </p>
+
+  <div class="grid3">
+    <div class="card">
+      <div class="card-title"><span class="dot dot-cyan"></span>obstacle_layer</div>
+      <p>Subscribes to <code>/hesai/points</code>. When a lidar point lands on a surface,
+      it <strong>marks</strong> that cell occupied. It then raytraces the beam path back to
+      the robot and <strong>clears</strong> every cell along the way as free space.
+      Within <code>max_obstacle_height: 2.0m</code> and <code>obstacle_max_range: 5.0m</code>.
+      Updates at 10 Hz.</p>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>inflation_layer</div>
+      <p>Inflates every occupied cell by <code>inflation_radius: 0.45m</code> with a cost gradient.
+      The planner naturally routes paths away from walls. MPPI uses the cost gradient for
+      smooth avoidance.</p>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-red"></span>static_layer — removed</div>
+      <p>Not used. This was the only plugin that required a <code>.pgm</code> file. With it gone,
+      <code>map_server</code> still runs (for the map→odom TF chain) but loads nothing.
+      Three lines removed from <code>nav2_params.yaml</code>.</p>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Dynamic Obstacles are Better Than Static</div>
+    The bucket obstacles in the obstacle section are <em>randomly placed</em> — they cannot be pre-mapped.
+    The live obstacle_layer handles them perfectly. Buckets that moved between laps are automatically
+    updated. This is actually better than a static map for this course.
+  </div>
+</div>
+
+<!-- ═══ SECTION 4 ═══ -->
+<div class="page section pagebreak" id="s4">
+  <div class="section-header">
+    <span class="section-num yellow">4</span>
+    <h2>Obstacle Course — Zone Analysis</h2>
+  </div>
+
+  <p>
+    The 2026 course is 65' × 48' and contains ten distinct sections, each posing a different challenge
+    to the navigation stack. The map below shows each section colour-coded by the navigation mode it requires.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Course Zone Map — Navigation Modes</div>
+
+<svg viewBox="0 0 820 390" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif" font-size="9">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="820" height="390" fill="#0f172a" rx="8"/>
+  <text x="410" y="18" text-anchor="middle" fill="#475569" font-size="8.5" letter-spacing="0.8">COURSE ZONE SEQUENCE  ·  counterclockwise  ·  approximate order, not to scale</text>
+
+  <!-- ══ ROW 1 → left to right ══ -->
+
+  <!-- ① START -->
+  <rect x="20" y="30" width="175" height="65" fill="#1e293b" stroke="#22c55e" stroke-width="1.5" rx="4"/>
+  <text x="107" y="51" text-anchor="middle" fill="#22c55e" font-weight="700" font-size="10">① START</text>
+  <text x="107" y="66" text-anchor="middle" fill="#94a3b8">32" wide straight</text>
+  <text x="107" y="80" text-anchor="middle" fill="#22c55e" font-size="8">NORMAL_NAV</text>
+  <line x1="195" y1="62" x2="210" y2="62" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ② RAMP + 270° HELIX LOOP -->
+  <rect x="210" y="30" width="185" height="65" fill="#1c1917" stroke="#eab308" stroke-width="1.5" rx="4"/>
+  <text x="302" y="51" text-anchor="middle" fill="#fde68a" font-weight="700" font-size="10">② RAMP + 270° HELIX</text>
+  <text x="302" y="65" text-anchor="middle" fill="#94a3b8">ramp up · 270° loop · 4' radius · 11% grade</text>
+  <text x="302" y="79" text-anchor="middle" fill="#eab308" font-size="8">SLOW_NAV · IMU pitch + roll</text>
+  <line x1="395" y1="62" x2="410" y2="62" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ③ FLAT BRIDGE + TUNNEL -->
+  <rect x="410" y="30" width="185" height="65" fill="#450a0a" stroke="#ef4444" stroke-width="1.5" rx="4"/>
+  <text x="502" y="51" text-anchor="middle" fill="#fca5a5" font-weight="700" font-size="10">③ FLAT BRIDGE + TUNNEL</text>
+  <text x="502" y="65" text-anchor="middle" fill="#94a3b8">bridge approach · 32" wide · 6' tunnel</text>
+  <text x="502" y="79" text-anchor="middle" fill="#ef4444" font-size="8">BLIND_DRIVE ⚡  lidar + RF dead</text>
+  <line x1="595" y1="62" x2="610" y2="62" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ④ WIDE → NARROW STRAIGHT -->
+  <rect x="610" y="30" width="185" height="65" fill="#1a1a1a" stroke="#84cc16" stroke-width="1.5" rx="4"/>
+  <text x="702" y="49" text-anchor="middle" fill="#bef264" font-weight="700" font-size="10">④ WIDE → NARROW</text>
+  <text x="702" y="63" text-anchor="middle" fill="#94a3b8">wide straight narrows to 20"</text>
+  <text x="702" y="77" text-anchor="middle" fill="#84cc16" font-size="8">SLOW_NAV · &lt;4cm lateral accuracy</text>
+
+  <!-- right connector ↓ -->
+  <line x1="795" y1="95" x2="795" y2="148" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ══ ROW 2 ← right to left ══ -->
+
+  <!-- ⑤ GRAVEL SECTION -->
+  <rect x="610" y="148" width="185" height="65" fill="#1c1917" stroke="#eab308" stroke-width="1.5" rx="4"/>
+  <text x="702" y="168" text-anchor="middle" fill="#fde68a" font-weight="700" font-size="10">⑤ GRAVEL SECTION</text>
+  <text x="702" y="182" text-anchor="middle" fill="#94a3b8">4×8 gravel box · 1.5" deep · 48" wide</text>
+  <text x="702" y="196" text-anchor="middle" fill="#eab308" font-size="8">SLOW_NAV · 0.3 m/s</text>
+  <line x1="610" y1="180" x2="595" y2="180" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ⑥ FLAT SECTIONS + 180° TURN -->
+  <rect x="410" y="148" width="185" height="65" fill="#1e293b" stroke="#475569" stroke-width="1.2" rx="4"/>
+  <text x="502" y="168" text-anchor="middle" fill="#94a3b8" font-weight="700" font-size="10">⑥ FLAT + 180° TURN</text>
+  <text x="502" y="182" text-anchor="middle" fill="#64748b">flat run · 180° turn · flat run</text>
+  <text x="502" y="196" text-anchor="middle" fill="#94a3b8" font-size="8">NORMAL_NAV</text>
+  <line x1="410" y1="180" x2="395" y2="180" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ⑦ POTHOLE SECTION -->
+  <rect x="210" y="148" width="185" height="65" fill="#1a1a1a" stroke="#94a3b8" stroke-width="1" rx="4" stroke-dasharray="4,2"/>
+  <text x="302" y="168" text-anchor="middle" fill="#94a3b8" font-weight="700" font-size="10">⑦ POTHOLE SECTION</text>
+  <text x="302" y="182" text-anchor="middle" fill="#64748b">0.75" bumps · 11'×26' open area</text>
+  <text x="302" y="196" text-anchor="middle" fill="#94a3b8" font-size="8">NORMAL_NAV</text>
+  <line x1="210" y1="180" x2="195" y2="180" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ⑧ WIDE SECTION — haybales at edges -->
+  <rect x="20" y="148" width="175" height="65" fill="#1c1917" stroke="#f97316" stroke-width="1.2" rx="4"/>
+  <text x="107" y="167" text-anchor="middle" fill="#fdba74" font-weight="700" font-size="10">⑧ WIDE SECTION</text>
+  <text x="107" y="181" text-anchor="middle" fill="#94a3b8">haybales along edges (changeable)</text>
+  <text x="107" y="195" text-anchor="middle" fill="#f97316" font-size="8">NORMAL_NAV · live costmap critical</text>
+
+  <!-- left connector ↓ -->
+  <line x1="35" y1="213" x2="35" y2="268" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ══ ROW 3 → left to right ══ -->
+
+  <!-- ⑨ BUCKET OBSTACLES -->
+  <rect x="20" y="268" width="175" height="65" fill="#1c1917" stroke="#f97316" stroke-width="1.5" rx="4"/>
+  <text x="107" y="288" text-anchor="middle" fill="#fdba74" font-weight="700" font-size="10">⑨ BUCKET OBSTACLES</text>
+  <text x="107" y="302" text-anchor="middle" fill="#94a3b8">2–9 × 5-gal buckets (random)</text>
+  <text x="107" y="316" text-anchor="middle" fill="#f97316" font-size="8">NAVIGATE_AROUND</text>
+  <line x1="195" y1="300" x2="210" y2="300" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ⑩ HOOP SECTION -->
+  <rect x="210" y="268" width="185" height="65" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" rx="4"/>
+  <text x="302" y="288" text-anchor="middle" fill="#c4b5fd" font-weight="700" font-size="10">⑩ HOOP SECTION</text>
+  <text x="302" y="302" text-anchor="middle" fill="#94a3b8">random hoop positions · 36" wide</text>
+  <text x="302" y="316" text-anchor="middle" fill="#a855f7" font-size="8">NORMAL_NAV</text>
+  <line x1="395" y1="300" x2="410" y2="300" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ⑪ BANK — 180° SLANTED TURN -->
+  <rect x="410" y="268" width="185" height="65" fill="#1a1a2e" stroke="#6366f1" stroke-width="1.5" rx="4"/>
+  <text x="502" y="288" text-anchor="middle" fill="#a5b4fc" font-weight="700" font-size="10">⑪ BANK — 180° SLANTED</text>
+  <text x="502" y="302" text-anchor="middle" fill="#94a3b8">inclined plane · 8.5° lateral tilt</text>
+  <text x="502" y="316" text-anchor="middle" fill="#6366f1" font-size="8">SLOW_NAV · lateral roll correction</text>
+  <line x1="595" y1="300" x2="610" y2="300" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ⑫ CAR WASH + FINISH -->
+  <rect x="610" y="268" width="185" height="65" fill="#172554" stroke="#3b82f6" stroke-width="1.5" rx="4"/>
+  <text x="702" y="287" text-anchor="middle" fill="#93c5fd" font-weight="700" font-size="10">⑫ CAR WASH + FINISH</text>
+  <text x="702" y="301" text-anchor="middle" fill="#64748b">hanging ribbons · 48" wide</text>
+  <text x="702" y="315" text-anchor="middle" fill="#ef4444" font-size="8">PUSH_THROUGH ⚠ costmap OFF</text>
+  <text x="702" y="327" text-anchor="middle" fill="#22c55e" font-size="8">✓ FINISH LINE</text>
+
+  <!-- LEGEND -->
+  <rect x="20" y="362" width="8" height="8" fill="#450a0a" stroke="#ef4444" stroke-width="1" rx="1"/>
+  <text x="32" y="370" fill="#94a3b8">BLIND_DRIVE</text>
+  <rect x="120" y="362" width="8" height="8" fill="#1c1917" stroke="#eab308" stroke-width="1" rx="1"/>
+  <text x="132" y="370" fill="#94a3b8">SLOW_NAV</text>
+  <rect x="210" y="362" width="8" height="8" fill="#1c1917" stroke="#f97316" stroke-width="1" rx="1"/>
+  <text x="222" y="370" fill="#94a3b8">NAVIGATE_AROUND</text>
+  <rect x="340" y="362" width="8" height="8" fill="#172554" stroke="#3b82f6" stroke-width="1" rx="1"/>
+  <text x="352" y="370" fill="#94a3b8">PUSH_THROUGH</text>
+  <rect x="450" y="362" width="8" height="8" fill="#1e293b" stroke="#22c55e" stroke-width="1" rx="1"/>
+  <text x="462" y="370" fill="#94a3b8">NORMAL_NAV</text>
+</svg>
+
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Section</th>
+        <th>Key Dimensions</th>
+        <th>Primary Challenge</th>
+        <th>FAST-LIO2 Status</th>
+        <th>Navigation Mode</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Start / Finish</strong></td>
+        <td>32" wide, flat</td>
+        <td>Clean start, consistent positioning</td>
+        <td>✅ Full</td>
+        <td><span class="zone-badge zone-normal">NORMAL_NAV</span></td>
+      </tr>
+      <tr>
+        <td><strong>Car Wash</strong></td>
+        <td>48" wide</td>
+        <td>Hanging ribbons register as lidar wall</td>
+        <td>⚠️ Corrupted</td>
+        <td><span class="zone-badge zone-push">PUSH_THROUGH</span></td>
+      </tr>
+      <tr>
+        <td><strong>Hoop Section</strong></td>
+        <td>36" wide</td>
+        <td>Random hoop positions on path</td>
+        <td>✅ Full</td>
+        <td><span class="zone-badge zone-normal">NORMAL_NAV</span></td>
+      </tr>
+      <tr>
+        <td><strong>Obstacle (buckets)</strong></td>
+        <td>~11' × 26' open</td>
+        <td>2–9 randomly placed 5-gallon buckets</td>
+        <td>✅ Full</td>
+        <td><span class="zone-badge zone-around">NAVIGATE_AROUND</span></td>
+      </tr>
+      <tr>
+        <td><strong>Gravel + Ramps</strong></td>
+        <td>48" wide, 2" ramp</td>
+        <td>Surface noise, pitch change, wheel slip</td>
+        <td>⚠️ Degraded</td>
+        <td><span class="zone-badge zone-slow">SLOW_NAV</span></td>
+      </tr>
+      <tr>
+        <td><strong>Bank Section</strong></td>
+        <td>48" wide, 8.5° tilt</td>
+        <td>Lateral roll corrupts 2D odometry</td>
+        <td>⚠️ Minor</td>
+        <td><span class="zone-badge zone-slow">SLOW_NAV</span></td>
+      </tr>
+      <tr>
+        <td><strong>Narrow Section</strong></td>
+        <td>20" wide, curved</td>
+        <td>&lt;2" clearance — needs &lt;4cm lateral accuracy</td>
+        <td>✅ Full</td>
+        <td><span class="zone-badge zone-slow">SLOW_NAV</span></td>
+      </tr>
+      <tr>
+        <td><strong>Tunnel</strong></td>
+        <td>32" wide, 6' long</td>
+        <td>Foil-lined foam — lidar and RF completely blocked</td>
+        <td>❌ Dead</td>
+        <td><span class="zone-badge zone-blind">BLIND_DRIVE</span></td>
+      </tr>
+      <tr>
+        <td><strong>Ramp / Helix</strong></td>
+        <td>32" wide, 4' radius, 11% grade</td>
+        <td>Tight turn on grade, IMU pitch + roll</td>
+        <td>⚠️ Degraded</td>
+        <td><span class="zone-badge zone-slow">SLOW_NAV</span></td>
+      </tr>
+      <tr>
+        <td><strong>Pothole / Wide</strong></td>
+        <td>11' × 26'</td>
+        <td>0.75" bumps, changeable boundaries</td>
+        <td>✅ Full</td>
+        <td><span class="zone-badge zone-normal">NORMAL_NAV</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══ SECTION 5 ═══ -->
+<div class="page section pagebreak" id="s5">
+  <div class="section-header">
+    <span class="section-num orange">5</span>
+    <h2>Zone-Aware Navigation State Machine</h2>
+  </div>
+
+  <p>
+    The robot doesn't use a single navigation strategy for the whole course — that would mean
+    compromising everywhere. Instead, a <strong>zone-aware state machine</strong> monitors the
+    robot's position against pre-defined waypoint zones and switches navigation mode appropriately.
+    Zones are defined as simple radius checks against known waypoints — no computer vision needed.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Navigation State Machine — Mode Transitions</div>
+    <svg width="832pt" height="637pt"
+ viewBox="0.00 0.00 832.00 637.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 633)">
+<title>state_machine</title>
+<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-633 828,-633 828,4 -4,4"/>
+<!-- START -->
+<g id="node1" class="node">
+<title>START</title>
+<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M132,-374C132,-374 12,-374 12,-374 6,-374 0,-368 0,-362 0,-362 0,-328 0,-328 0,-322 6,-316 12,-316 12,-316 132,-316 132,-316 138,-316 144,-322 144,-328 144,-328 144,-362 144,-362 144,-368 138,-374 132,-374"/>
+<text text-anchor="middle" x="72" y="-348" font-family="Inter" font-size="10.00" fill="#94a3b8">START</text>
+<text text-anchor="middle" x="72" y="-337" font-family="Inter" font-size="10.00" fill="#94a3b8">Detect green light</text>
+</g>
+<!-- NORMAL -->
+<g id="node2" class="node">
+<title>NORMAL</title>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.5" d="M476,-374C476,-374 356,-374 356,-374 350,-374 344,-368 344,-362 344,-362 344,-328 344,-328 344,-322 350,-316 356,-316 356,-316 476,-316 476,-316 482,-316 488,-322 488,-328 488,-328 488,-362 488,-362 488,-368 482,-374 476,-374"/>
+<text text-anchor="middle" x="416" y="-353.5" font-family="Inter" font-size="10.00" fill="#86efac">NORMAL_NAV</text>
+<text text-anchor="middle" x="416" y="-342.5" font-family="Inter" font-size="10.00" fill="#86efac">Nav2 Smac+MPPI</text>
+<text text-anchor="middle" x="416" y="-331.5" font-family="Inter" font-size="10.00" fill="#86efac">Full speed</text>
+</g>
+<!-- START&#45;&gt;NORMAL -->
+<g id="edge1" class="edge">
+<title>START&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#22c55e" d="M144.28,-345C199.5,-345 276.04,-345 333.65,-345"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="333.81,-348.5 343.81,-345 333.81,-341.5 333.81,-348.5"/>
+<text text-anchor="middle" x="244" y="-347.6" font-family="Inter" font-size="8.00" fill="#86efac">green light detected</text>
+</g>
+<!-- SLOW -->
+<g id="node3" class="node">
+<title>SLOW</title>
+<path fill="#164e63" stroke="#06b6d4" stroke-width="1.5" d="M812,-629C812,-629 692,-629 692,-629 686,-629 680,-623 680,-617 680,-617 680,-583 680,-583 680,-577 686,-571 692,-571 692,-571 812,-571 812,-571 818,-571 824,-577 824,-583 824,-583 824,-617 824,-617 824,-623 818,-629 812,-629"/>
+<text text-anchor="middle" x="752" y="-608.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">SLOW_NAV</text>
+<text text-anchor="middle" x="752" y="-597.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">Reduced speed</text>
+<text text-anchor="middle" x="752" y="-586.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">0.2 m/s</text>
+</g>
+<!-- NORMAL&#45;&gt;SLOW -->
+<g id="edge2" class="edge">
+<title>NORMAL&#45;&gt;SLOW</title>
+<path fill="none" stroke="#06b6d4" d="M422.44,-374.28C434.19,-428.23 467.51,-542.33 546,-592 582.21,-614.92 629.66,-618.06 669.79,-614.95"/>
+<polygon fill="#06b6d4" stroke="#06b6d4" points="670.18,-618.43 679.82,-614.04 669.54,-611.46 670.18,-618.43"/>
+<text text-anchor="middle" x="584" y="-616.6" font-family="Inter" font-size="8.00" fill="#a5f3fc">narrow/ramp/bank</text>
+</g>
+<!-- BLIND -->
+<g id="node4" class="node">
+<title>BLIND</title>
+<path fill="#450a0a" stroke="#ef4444" stroke-width="1.5" d="M812,-491C812,-491 692,-491 692,-491 686,-491 680,-485 680,-479 680,-479 680,-445 680,-445 680,-439 686,-433 692,-433 692,-433 812,-433 812,-433 818,-433 824,-439 824,-445 824,-445 824,-479 824,-479 824,-485 818,-491 812,-491"/>
+<text text-anchor="middle" x="752" y="-470.5" font-family="Inter" font-size="10.00" fill="#fca5a5">BLIND_DRIVE</text>
+<text text-anchor="middle" x="752" y="-459.5" font-family="Inter" font-size="10.00" fill="#fca5a5">Wheel+IMU only</text>
+<text text-anchor="middle" x="752" y="-448.5" font-family="Inter" font-size="10.00" fill="#fca5a5">Fixed heading</text>
+</g>
+<!-- NORMAL&#45;&gt;BLIND -->
+<g id="edge3" class="edge">
+<title>NORMAL&#45;&gt;BLIND</title>
+<path fill="none" stroke="#ef4444" d="M449.79,-374.13C474.48,-394.36 510.1,-420.08 546,-434 585.05,-449.14 631.04,-456.29 669.56,-459.6"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="669.46,-463.1 679.7,-460.4 670.01,-456.12 669.46,-463.1"/>
+<text text-anchor="middle" x="584" y="-454.6" font-family="Inter" font-size="8.00" fill="#fca5a5">tunnel entry</text>
+</g>
+<!-- NAVIGATE -->
+<g id="node5" class="node">
+<title>NAVIGATE</title>
+<path fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" d="M812,-355C812,-355 692,-355 692,-355 686,-355 680,-349 680,-343 680,-343 680,-309 680,-309 680,-303 686,-297 692,-297 692,-297 812,-297 812,-297 818,-297 824,-303 824,-309 824,-309 824,-343 824,-343 824,-349 818,-355 812,-355"/>
+<text text-anchor="middle" x="752" y="-334.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">NAVIGATE_AROUND</text>
+<text text-anchor="middle" x="752" y="-323.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">Live costmap</text>
+<text text-anchor="middle" x="752" y="-312.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">Dynamic replan</text>
+</g>
+<!-- NORMAL&#45;&gt;NAVIGATE -->
+<g id="edge4" class="edge">
+<title>NORMAL&#45;&gt;NAVIGATE</title>
+<path fill="none" stroke="#a855f7" d="M488.24,-340.95C541.45,-337.92 614.24,-333.78 669.72,-330.62"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="670.08,-334.11 679.87,-330.05 669.69,-327.12 670.08,-334.11"/>
+<text text-anchor="middle" x="584" y="-339.6" font-family="Inter" font-size="8.00" fill="#c4b5fd">bucket zone</text>
+</g>
+<!-- PUSH -->
+<g id="node6" class="node">
+<title>PUSH</title>
+<path fill="#422006" stroke="#f97316" stroke-width="1.5" d="M812,-199C812,-199 692,-199 692,-199 686,-199 680,-193 680,-187 680,-187 680,-153 680,-153 680,-147 686,-141 692,-141 692,-141 812,-141 812,-141 818,-141 824,-147 824,-153 824,-153 824,-187 824,-187 824,-193 818,-199 812,-199"/>
+<text text-anchor="middle" x="752" y="-178.5" font-family="Inter" font-size="10.00" fill="#fdba74">PUSH_THROUGH</text>
+<text text-anchor="middle" x="752" y="-167.5" font-family="Inter" font-size="10.00" fill="#fdba74">Straight drive</text>
+<text text-anchor="middle" x="752" y="-156.5" font-family="Inter" font-size="10.00" fill="#fdba74">Obstacle layer OFF</text>
+</g>
+<!-- NORMAL&#45;&gt;PUSH -->
+<g id="edge5" class="edge">
+<title>NORMAL&#45;&gt;PUSH</title>
+<path fill="none" stroke="#f97316" d="M472.53,-315.91C531.49,-285.01 624.57,-236.24 686.69,-203.7"/>
+<polygon fill="#f97316" stroke="#f97316" points="688.38,-206.76 695.62,-199.02 685.14,-200.56 688.38,-206.76"/>
+<text text-anchor="middle" x="584" y="-275.6" font-family="Inter" font-size="8.00" fill="#fdba74">car wash zone</text>
+</g>
+<!-- DONE -->
+<g id="node7" class="node">
+<title>DONE</title>
+<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M812,-58C812,-58 692,-58 692,-58 686,-58 680,-52 680,-46 680,-46 680,-12 680,-12 680,-6 686,0 692,0 692,0 812,0 812,0 818,0 824,-6 824,-12 824,-12 824,-46 824,-46 824,-52 818,-58 812,-58"/>
+<text text-anchor="middle" x="752" y="-37.5" font-family="Inter" font-size="10.00" fill="#94a3b8">DONE</text>
+<text text-anchor="middle" x="752" y="-26.5" font-family="Inter" font-size="10.00" fill="#94a3b8">Stop at finish</text>
+<text text-anchor="middle" x="752" y="-15.5" font-family="Inter" font-size="10.00" fill="#94a3b8">(lap 2 complete)</text>
+</g>
+<!-- NORMAL&#45;&gt;DONE -->
+<g id="edge6" class="edge">
+<title>NORMAL&#45;&gt;DONE</title>
+<path fill="none" stroke="#475569" d="M432.85,-315.8C454.7,-277.36 496.98,-209.17 546,-162 587.53,-122.04 642.7,-87.04 685.35,-62.99"/>
+<polygon fill="#475569" stroke="#475569" points="687.22,-65.95 694.25,-58.02 683.81,-59.84 687.22,-65.95"/>
+<text text-anchor="middle" x="584" y="-164.6" font-family="Inter" font-size="8.00" fill="#94a3b8">lap 2 at finish</text>
+</g>
+<!-- SLOW&#45;&gt;NORMAL -->
+<g id="edge7" class="edge">
+<title>SLOW&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#06b6d4" d="M693.66,-570.77C651.08,-547.86 592.57,-513.79 546,-477 509.57,-448.22 473.06,-409.74 448.23,-381.75"/>
+<polygon fill="#06b6d4" stroke="#06b6d4" points="450.77,-379.35 441.54,-374.16 445.52,-383.98 450.77,-379.35"/>
+<text text-anchor="middle" x="584" y="-531.6" font-family="Inter" font-size="8.00" fill="#a5f3fc">zone exit</text>
+</g>
+<!-- BLIND&#45;&gt;NORMAL -->
+<g id="edge8" class="edge">
+<title>BLIND&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#ef4444" d="M679.87,-437.08C626.47,-418.38 553.29,-392.74 497.71,-373.27"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="498.84,-369.96 488.24,-369.96 496.52,-376.57 498.84,-369.96"/>
+<text text-anchor="middle" x="584" y="-415.6" font-family="Inter" font-size="8.00" fill="#fca5a5">lidar restored</text>
+</g>
+<!-- NAVIGATE&#45;&gt;NORMAL -->
+<g id="edge9" class="edge">
+<title>NAVIGATE&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#a855f7" d="M679.64,-311.8C640.14,-305.93 590.22,-301.78 546,-308 530.24,-310.22 513.7,-313.88 497.92,-318.07"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="496.93,-314.72 488.21,-320.74 498.78,-321.47 496.93,-314.72"/>
+<text text-anchor="middle" x="584" y="-310.6" font-family="Inter" font-size="8.00" fill="#c4b5fd">cleared</text>
+</g>
+<!-- PUSH&#45;&gt;NORMAL -->
+<g id="edge10" class="edge">
+<title>PUSH&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#f97316" d="M679.66,-176.05C638.55,-181.9 587.06,-193.4 546,-216 504.78,-238.68 467.97,-278.47 444.32,-307.88"/>
+<polygon fill="#f97316" stroke="#f97316" points="441.46,-305.86 438.01,-315.88 446.95,-310.2 441.46,-305.86"/>
+<text text-anchor="middle" x="584" y="-218.6" font-family="Inter" font-size="8.00" fill="#fdba74">zone exit</text>
+</g>
+</g>
+</svg>
+
+  </div>
+
+  <h3 id="s5-1">5.1 NORMAL_NAV — Full Nav2 Smac + MPPI</h3>
+  <p>
+    This is the default mode for open sections — pothole area, hoop section, wide open areas.
+    Nav2's Smac Hybrid-A* planner generates a global path respecting the robot's turn radius.
+    Hybrid-A* is a path-finding algorithm that searches a grid while also accounting for the
+    robot's heading and minimum turning radius — so paths are physically drivable, not just
+    geometrically shortest.
+    The MPPI (Model Predictive Path Integral) controller samples thousands of random trajectory
+    rollouts forward in time and picks the one that best follows the path while avoiding obstacles.
+    The full live costmap is active.
+  </p>
+  <p>
+    Typical speed: <strong>0.5–0.6 m/s</strong>. The costmap accumulates obstacle data as the robot
+    drives, so each subsequent run benefits from prior observations in the same session.
+  </p>
+
+  <h3 id="s5-2">5.2 SLOW_NAV — Reduced Speed for Sensitive Sections</h3>
+  <p>
+    The narrow section, ramps, bank, and helix all trigger SLOW_NAV. Same Nav2 stack, but with
+    velocity limits lowered. The key concern in the narrow section is <strong>lateral accuracy</strong>
+    — the robot max width is 16" (rule 2.2.1) and the minimum track width is 20" (rule 3.3),
+    leaving just <strong>2" clearance per side</strong>. This is the tightest tolerance on the entire
+    course. We need NDT-OMP localization to be solid before entering and may need to reduce
+    <code>inflation_radius</code> to 0.2m so Nav2 doesn't mark the path as impassable.
+    The state machine forces an NDT re-localization check at the zone entry waypoint before proceeding.
+  </p>
+  <p>
+    Typical speed: <strong>0.2–0.3 m/s</strong>. IMU pitch threshold triggers the ramp detection automatically.
+  </p>
+
+  <h3 id="s5-3">5.3 BLIND_DRIVE — Tunnel Dead Reckoning</h3>
+  <p>
+    The tunnel is the hardest section. The foil-lined foam walls block both lidar returns and RF signals.
+    FAST-LIO2 loses its input the moment the robot enters and can't recover until it exits.
+    This is a known, fixed-length obstacle — we handle it with deliberate <em>dead reckoning</em>:
+    estimating position purely from known starting point, wheel speed, and heading — no external
+    sensor reference.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Tunnel Entry / Drive / Exit Sequence</div>
+
+<svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif">
+  <defs>
+    <marker id="arr"       markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/></marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/></marker>
+    <marker id="arr-red"   markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/></marker>
+  </defs>
+
+  <rect width="760" height="260" fill="#0f172a" rx="8"/>
+
+  <!-- ── ROW 1: Section header labels (y ≈ 28) ── -->
+  <text x="103"  y="28" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">Open section</text>
+  <text x="370"  y="28" text-anchor="middle" fill="#ef4444" font-size="10" font-weight="700">TUNNEL — foil-lined, lidar blocked</text>
+  <text x="637"  y="28" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">Open section</text>
+
+  <!-- ── ROW 2: Zone backgrounds ── -->
+  <!-- Open pre-tunnel -->
+  <rect x="15"  y="38" width="175" height="70" fill="none" stroke="#334155" stroke-dasharray="4,3" rx="5"/>
+  <!-- Tunnel walls + fill -->
+  <rect x="198" y="38" width="324" height="8"  fill="#475569" rx="2"/>
+  <rect x="198" y="100" width="324" height="8" fill="#475569" rx="2"/>
+  <rect x="198" y="46"  width="324" height="54" fill="#1a1a2e"/>
+  <!-- Open post-tunnel -->
+  <rect x="530" y="38" width="215" height="70" fill="none" stroke="#334155" stroke-dasharray="4,3" rx="5"/>
+
+  <!-- ── ROW 2: Robot icons centred in each zone ── -->
+  <!-- Blue robot — pre-tunnel -->
+  <rect x="72"  y="52" width="62" height="44" fill="#0c4a6e" stroke="#0ea5e9" stroke-width="1.5" rx="6"/>
+  <text x="103" y="83" text-anchor="middle" font-size="26">🤖</text>
+
+  <!-- Red robot — mid-tunnel -->
+  <rect x="339" y="52" width="62" height="44" fill="#450a0a" stroke="#ef4444" stroke-width="1.5" rx="6"/>
+  <text x="370" y="83" text-anchor="middle" font-size="26">🤖</text>
+
+  <!-- Green robot — post-tunnel -->
+  <rect x="606" y="52" width="62" height="44" fill="#052e16" stroke="#22c55e" stroke-width="1.5" rx="6"/>
+  <text x="637" y="83" text-anchor="middle" font-size="26">🤖</text>
+
+  <!-- ── ROW 2: Arrows between robots (same y=74 as robot centre) ── -->
+  <line x1="136" y1="74" x2="194" y2="74" stroke="#94a3b8" stroke-width="2"   marker-end="url(#arr)"/>
+  <line x1="403" y1="74" x2="525" y2="74" stroke="#ef4444" stroke-width="2"   stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <line x1="528" y1="74" x2="602" y2="74" stroke="#22c55e" stroke-width="2"   marker-end="url(#arr-green)"/>
+
+  <!-- ── ROW 3: Status text (y = 128–160) ── -->
+  <text x="103" y="132" text-anchor="middle" fill="#22c55e" font-size="9" font-weight="600">FAST-LIO2 active</text>
+  <text x="103" y="147" text-anchor="middle" fill="#94a3b8" font-size="9">EKF fusing lidar+wheel+IMU</text>
+
+  <text x="370" y="132" text-anchor="middle" fill="#fca5a5" font-size="9" font-weight="600">BLIND_DRIVE — wheel + IMU EKF only</text>
+  <text x="370" y="147" text-anchor="middle" fill="#ef4444" font-size="9">⚡ lidar signal lost · dead reckoning</text>
+
+  <text x="637" y="132" text-anchor="middle" fill="#22c55e" font-size="9" font-weight="600">FAST-LIO2 resumes</text>
+  <text x="637" y="147" text-anchor="middle" fill="#94a3b8" font-size="9">TF drift corrected · re-localised</text>
+
+  <!-- ── Entry / Exit vertical dividers ── -->
+  <line x1="198" y1="15" x2="198" y2="155" stroke="#f97316" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="198" y="168" text-anchor="middle" fill="#f97316" font-size="8" font-weight="700">Entry — freeze TF</text>
+
+  <line x1="522" y1="15" x2="522" y2="155" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="522" y="168" text-anchor="middle" fill="#22c55e" font-size="8" font-weight="700">Exit — restore TF</text>
+
+  <!-- ── Legend ── -->
+  <rect x="15"  y="192" width="10" height="10" fill="#0ea5e9" rx="2"/>
+  <text x="30"  y="201" fill="#94a3b8" font-size="8">Normal nav (FAST-LIO2 active)</text>
+  <rect x="240" y="192" width="10" height="10" fill="#ef4444" rx="2"/>
+  <text x="255" y="201" fill="#94a3b8" font-size="8">Blind drive (dead reckoning only)</text>
+  <rect x="480" y="192" width="10" height="10" fill="#22c55e" rx="2"/>
+  <text x="495" y="201" fill="#94a3b8" font-size="8">Resumed nav (re-localised)</text>
+</svg>
+
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="dot dot-red"></span>Entry Sequence</div>
+      <ul style="color:var(--subtext); padding-left:16px; font-size:10px; line-height:1.9;">
+        <li>Zone waypoint triggers BLIND_DRIVE mode</li>
+        <li>Current map→odom TF is <strong>frozen</strong> (cached)</li>
+        <li>FAST-LIO2 output is ignored</li>
+        <li>EKF2 switches to wheel+IMU only (<code>/wimu_odom</code>)</li>
+        <li>Robot drives straight at fixed heading and low speed</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>Exit Sequence</div>
+      <ul style="color:var(--subtext); padding-left:16px; font-size:10px; line-height:1.9;">
+        <li>Tunnel exit zone waypoint detected (distance-based)</li>
+        <li>Wait for FAST-LIO2 to produce a valid scan match</li>
+        <li>NDT-OMP re-localises against <code>GlobalMap.pcd</code></li>
+        <li>Map→odom TF updated with corrected pose</li>
+        <li>Return to NORMAL_NAV or SLOW_NAV</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-crit">
+    <div class="callout-title">Critical — Implement First</div>
+    Without BLIND_DRIVE, the robot will stop at the tunnel entrance when FAST-LIO2 drops out.
+    This is the highest-priority navigation feature to implement before Aug 31.
+  </div>
+
+  <h3 id="s5-4">5.4 NAVIGATE_AROUND — Dynamic Bucket Obstacles</h3>
+  <p>
+    The obstacle section has 2–9 five-gallon buckets placed arbitrarily. These cannot be pre-mapped —
+    they change position between runs. This is actually the section where our live-costmap approach
+    shines brightest.
+  </p>
+  <p>
+    In NAVIGATE_AROUND mode, the full obstacle_layer is active. Each Hesai scan marks the buckets
+    as occupied cells. The Smac planner finds a path through the gaps — buckets placed so that a
+    path always exists. MPPI follows the path while continuously reacting to the costmap.
+    If a bucket is nudged by the robot, the costmap updates within one scan cycle (100ms).
+  </p>
+  <p>
+    No special code is needed for this mode — it is exactly what stock Nav2 Smac + MPPI does.
+    The key is making sure the robot enters the obstacle section with a good global pose so the
+    initial Smac plan is in the right coordinate frame.
+  </p>
+
+  <h3 id="s5-5">5.5 PUSH_THROUGH — Car Wash</h3>
+  <p>
+    The car wash has densely hanging rubber ribbons. From the lidar's perspective, these look like
+    a solid wall across the path. If the obstacle_layer is active, Nav2 will classify the entry as
+    blocked and refuse to proceed.
+  </p>
+  <p>
+    PUSH_THROUGH disables the obstacle_layer (or raises the <code>max_obstacle_height</code> threshold
+    below the ribbon height) for the car wash zone. The robot drives straight through on a fixed
+    heading using the pre-computed centerline waypoint. There's nothing to avoid — the ribbons are
+    flexible and just brush past. This is the same approach as the tunnel but without the lidar blackout.
+  </p>
+</div>
+
+<!-- ═══ SECTION 6 ═══ -->
+<div class="page section pagebreak" id="s6">
+  <div class="section-header">
+    <span class="section-num purple">6</span>
+    <h2>Nav2 Configuration for This Course</h2>
+  </div>
+
+  <p>
+    The changes needed to <code>nav2_params.yaml</code> are minimal — three lines removed to drop
+    the static layer, and one parameter confirmed. Everything else in the existing config is already
+    well-suited to this course.
+  </p>
+
+  <h3>Global Costmap — Remove static_layer</h3>
+  <pre>
+# BEFORE (requires .pgm):
+global_costmap:
+  plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+  static_layer:
+    plugin: "nav2_costmap_2d::StaticLayer"
+    map_topic: /map
+    map_subscribe_transient_local: true
+
+# AFTER (no .pgm needed):
+global_costmap:
+  plugins: ["obstacle_layer", "inflation_layer"]
+  # static_layer block removed entirely</pre>
+
+  <h3>Key Parameters Already Correct</h3>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Value</th><th>Why It Matters for This Course</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>rolling_window: false</code></td>
+        <td>global costmap</td>
+        <td>Costmap accumulates the whole course as robot drives — critical for long-range planning</td>
+      </tr>
+      <tr>
+        <td><code>allow_unknown: true</code></td>
+        <td>Smac planner</td>
+        <td>Robot can plan through unseen space at start — doesn't need full map before first goal</td>
+      </tr>
+      <tr>
+        <td><code>inflation_radius: 0.45m</code></td>
+        <td>global costmap</td>
+        <td>Robot max 16" wide in a 20" passage = 2" clearance per side (rules 2.2.1 + 3.3). Default 0.45m marks it impassable — must reduce to 0.2m for narrow zone.</td>
+      </tr>
+      <tr>
+        <td><code>raytrace_max_range: 6.0m</code></td>
+        <td>obstacle_layer</td>
+        <td>Clears free space up to 6m ahead — keeps costmap from filling with stale marks</td>
+      </tr>
+      <tr>
+        <td><code>motion_model: "DiffDrive"</code></td>
+        <td>MPPI</td>
+        <td>Correct for our differential drive robot — constrains rollouts to physically valid motions</td>
+      </tr>
+      <tr>
+        <td><code>vx_max: 0.6</code></td>
+        <td>MPPI</td>
+        <td>Reasonable for obstacle course — increase for open sections, override per zone</td>
+      </tr>
+      <tr>
+        <td><code>footprint: [[0.35,0.20],...]</code></td>
+        <td>both costmaps</td>
+        <td>Used for collision checking. Verify this matches actual robot dimensions before competition</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">Inflation Radius vs Narrow Section</div>
+    The current <code>inflation_radius: 0.45m</code> on the global costmap may mark the 20" narrow
+    section as completely impassable — the walls are only ~10" from the robot sides. When entering
+    the narrow zone, we need to consider temporarily reducing <code>inflation_radius</code> to 0.2m
+    via a dynamic reconfigure call from the state machine.
+  </div>
+</div>
+
+<!-- ═══ SECTION 7 ═══ -->
+<div class="page section pagebreak" id="s7">
+  <div class="section-header">
+    <span class="section-num green">7</span>
+    <h2>Implementation Priority</h2>
+  </div>
+
+  <p>
+    Nothing described in this document is implemented yet — this is the design. Here is the
+    recommended build order based on dependency and competition risk.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>Feature</th><th>Why This Order</th><th>Target</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong style="color:var(--red)">1</strong></td>
+        <td><strong>Aug 14 Demo</strong> — autonomous straight → 90° turn → straight → stop</td>
+        <td>Hard deadline. Robot executes under its own control using odometry feedback. Uses existing motion_plan_executor. Needs hardware running. <strong>Team internal target: Jul 31.</strong></td>
+        <td>Aug 14</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--red)">2</strong></td>
+        <td><strong>LIO-SAM map generation</strong> — drive course, save GlobalMap.pcd</td>
+        <td>Everything else depends on having a good map. Do this as early as possible.</td>
+        <td>Aug</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--red)">3</strong></td>
+        <td><strong>NDT-OMP integration</strong> — wire into localization.launch.py</td>
+        <td>Replaces static map for localization. Required before any Nav2 competition run.</td>
+        <td>Aug</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--orange)">4</strong></td>
+        <td><strong>Remove static_layer</strong> from nav2_params.yaml</td>
+        <td>One-line change. Unblocks Nav2 from requiring .pgm.</td>
+        <td>Aug</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--orange)">5</strong></td>
+        <td><strong>Dual EKF</strong> — add ekf_wimu.yaml, update ekf_local.yaml</td>
+        <td>Smooth MPPI inputs. Needed before tuning MPPI on hardware.</td>
+        <td>Aug</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--orange)">6</strong></td>
+        <td><strong>BLIND_DRIVE mode</strong> — tunnel dead reckoning</td>
+        <td>Without this, robot stops at tunnel. Critical for full-course run.</td>
+        <td>Aug</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--yellow)">7</strong></td>
+        <td><strong>Zone waypoint system</strong> — define all zone boundaries</td>
+        <td>Required to trigger mode switches. Simple radius-check against known waypoints.</td>
+        <td>Aug</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--yellow)">8</strong></td>
+        <td><strong>Car wash costmap filter</strong> — height threshold override</td>
+        <td>Without this, Nav2 refuses to enter car wash.</td>
+        <td>Aug</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--yellow)">9</strong></td>
+        <td><strong>Inflation radius override</strong> for narrow section</td>
+        <td>Required — robot is 16" wide in a 20" passage. Default 0.45m marks it impassable.</td>
+        <td>Aug</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--green)">10</strong></td>
+        <td><strong>E-stop safety review</strong></td>
+        <td>Required by Sep 25 — heartbeat, assertion, clearing demonstration.</td>
+        <td>Sep 25</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Milestone Check</div>
+    By Aug 14: hardware running, FAST-LIO2 publishing, motion_plan_demo passing (team internal target: Jul 31). That's the foundation.
+    All development complete by Aug 31 — full September is reserved for testing and tuning on the actual course.
+    Get the robot moving first; everything in this document builds on top of that.
+  </div>
+
+  <hr class="divider"/>
+  <p style="text-align:center; color: var(--muted); font-size:9px;">
+    DIY Robot Challenge 2026 — Obstacle Course Navigation Design v1.0 — Team Juggernauts — July 2026
+  </p>
+</div>
+
+<button class="pdf-btn" onclick="window.print()">⬇ Download PDF</button>
+
+<script>
+document.querySelectorAll('.card-title').forEach(function(title) {
+  var btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = 'copy';
+  btn.addEventListener('click', function() {
+    var card = title.closest('.card');
+    var text = card.innerText.replace(/^copy$/m, '').trim();
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = 'copied!';
+      setTimeout(function() { btn.textContent = 'copy'; }, 1500);
+    });
+  });
+  title.appendChild(btn);
+});
+</script>
+
+</body>
+</html>
