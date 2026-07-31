@@ -26,7 +26,7 @@ from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Bool, String, Float64
+from std_msgs.msg import Bool, String, Float32
 from geometry_msgs.msg import Twist
 from nav2_msgs.msg import SpeedLimit
 from nav_msgs.msg import Odometry
@@ -97,7 +97,7 @@ class ZoneNavLogger(Node):
         self.create_subscription(String,    "/mux_mode",        self._cb_mux_mode,        10)
         self.create_subscription(Bool,      "/estop_active",    self._cb_estop,           10)
         self.create_subscription(Bool,      "/green_light",     self._cb_green_light,     10)
-        self.create_subscription(Float64,   "/ndt_fitness_score", self._cb_ndt,           10)
+        self.create_subscription(Float32,   "/ndt_fitness_score", self._cb_ndt,           10)
         self.create_subscription(Odometry,  "/odometry/filtered", self._cb_odom,          10)
         self.create_subscription(SpeedLimit, "/speed_limit",    self._cb_speed_limit,     10)
         self.create_subscription(Twist,     "/cmd_vel_zone_nav", self._cb_cmd_vel,        10)
@@ -114,22 +114,22 @@ class ZoneNavLogger(Node):
         if not self._nav_mode_seen:
             self._nav_mode_seen = True
             print("[zone_nav_logger] /nav_mode received — logging active.")
-        event = f"nav_mode→{new_val}" if changed else ""
-        self._write_row(event=event, force=changed)
+        if changed:
+            self._write_row(event=f"nav_mode→{new_val}", force=True)
 
     def _cb_mux_mode(self, msg: String):
         new_val = msg.data
         changed = new_val != self._mux_mode
         self._mux_mode = new_val
-        event = f"mux_mode→{new_val}" if changed else ""
-        self._write_row(event=event, force=changed)
+        if changed:
+            self._write_row(event=f"mux_mode→{new_val}", force=True)
 
     def _cb_estop(self, msg: Bool):
         new_val = msg.data
         changed = new_val != self._estop_active
         self._estop_active = new_val
-        event = f"estop_active={new_val}" if changed else ""
-        self._write_row(event=event, force=changed)
+        if changed:
+            self._write_row(event=f"estop_active={new_val}", force=True)
 
     def _cb_green_light(self, msg: Bool):
         if msg.data:
@@ -137,7 +137,7 @@ class ZoneNavLogger(Node):
 
     # ── Callbacks: throttled topics ───────────────────────────────────────────
 
-    def _cb_ndt(self, msg: Float64):
+    def _cb_ndt(self, msg: Float32):
         self._ndt_fitness = msg.data
         self._write_row(throttled=True)
 
@@ -220,10 +220,8 @@ def main():
 
     def _shutdown(sig, frame):
         print("\n[zone_nav_logger] Caught signal — shutting down...")
-        node.flush_and_close()
-        node.destroy_node()
-        rclpy.shutdown()
-        sys.exit(0)
+        if rclpy.ok():
+            rclpy.shutdown()  # causes rclpy.spin() to exit; finally block handles cleanup
 
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
@@ -235,7 +233,8 @@ def main():
     finally:
         node.flush_and_close()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
