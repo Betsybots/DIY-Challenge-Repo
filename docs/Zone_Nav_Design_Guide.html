@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Zone-Aware Navigation — Software Design Guide — DIY Robot Challenge 2026</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --cyan:    #0ea5e9;
+  --green:   #22c55e;
+  --purple:  #a855f7;
+  --orange:  #f97316;
+  --yellow:  #eab308;
+  --red:     #ef4444;
+  --blue:    #6366f1;
+  --lime:    #84cc16;
+  --dark:    #0f172a;
+  --card:    #1e293b;
+  --border:  #334155;
+  --muted:   #64748b;
+  --text:    #e2e8f0;
+  --subtext: #94a3b8;
+}
+
+@page { size: A4; margin: 20mm 18mm 20mm 18mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', 'Segoe UI', sans-serif; background: var(--dark); color: var(--text); font-size: 11px; line-height: 1.6; }
+
+.cover { page-break-after: always; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 60px 40px; background: linear-gradient(160deg, #0f172a 0%, #0c1a2e 50%, #130f1a 100%); }
+.cover-badge { background: rgba(14,165,233,0.12); border: 1px solid var(--cyan); color: var(--cyan); padding: 5px 18px; border-radius: 20px; font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 28px; }
+.cover h1 { font-size: 34px; font-weight: 700; color: #fff; letter-spacing: -1px; line-height: 1.2; margin-bottom: 14px; }
+.cover h1 span { color: var(--cyan); }
+.cover .subtitle { font-size: 13px; color: var(--subtext); max-width: 580px; margin-bottom: 36px; }
+.cover-meta { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; max-width: 680px; width: 100%; margin-bottom: 36px; }
+.cover-meta-item { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.cover-meta-item .label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+.cover-meta-item .value { font-size: 11px; font-weight: 600; color: var(--text); }
+.cover-stack { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+.tag { padding: 3px 10px; border-radius: 5px; font-size: 10px; font-weight: 500; }
+.tag-cyan   { background: rgba(14,165,233,0.15); color: var(--cyan);   border: 1px solid rgba(14,165,233,0.3); }
+.tag-green  { background: rgba(34,197,94,0.15);  color: var(--green);  border: 1px solid rgba(34,197,94,0.3); }
+.tag-purple { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+.tag-orange { background: rgba(249,115,22,0.15); color: var(--orange); border: 1px solid rgba(249,115,22,0.3); }
+.tag-yellow { background: rgba(234,179,8,0.15);  color: var(--yellow); border: 1px solid rgba(234,179,8,0.3); }
+.tag-red    { background: rgba(239,68,68,0.15);  color: var(--red);    border: 1px solid rgba(239,68,68,0.3); }
+.tag-blue   { background: rgba(99,102,241,0.15); color: var(--blue);   border: 1px solid rgba(99,102,241,0.3); }
+
+.page { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+.pagebreak { page-break-before: always; }
+.section { margin-bottom: 36px; }
+.section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.section-num { background: var(--cyan); color: var(--dark); font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 5px; min-width: 32px; text-align: center; }
+.section-num.green  { background: var(--green); }
+.section-num.purple { background: var(--purple); }
+.section-num.orange { background: var(--orange); }
+.section-num.yellow { background: var(--yellow); color: #0f172a; }
+.section-num.red    { background: var(--red); }
+.section h2 { font-size: 18px; font-weight: 700; color: #fff; }
+h3 { font-size: 14px; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
+h4 { font-size: 12px; font-weight: 600; color: var(--subtext); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+p { color: var(--subtext); margin-bottom: 10px; }
+p strong { color: var(--text); font-weight: 600; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; position: relative; }
+.card-title { font-size: 12px; font-weight: 600; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+.copy-btn { margin-left: auto; background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 9px; padding: 2px 7px; cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; }
+.copy-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot-cyan   { background: var(--cyan); }
+.dot-green  { background: var(--green); }
+.dot-purple { background: var(--purple); }
+.dot-orange { background: var(--orange); }
+.dot-red    { background: var(--red); }
+.dot-blue   { background: var(--blue); }
+.dot-yellow { background: var(--yellow); }
+
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10px; }
+thead tr { background: rgba(255,255,255,0.06); }
+th { padding: 8px 10px; text-align: left; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+td { padding: 7px 10px; color: var(--subtext); border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+td strong { color: var(--text); }
+td code { font-family: 'JetBrains Mono', monospace; font-size: 9px; background: rgba(255,255,255,0.08); padding: 1px 4px; border-radius: 3px; color: var(--cyan); }
+
+pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px solid var(--cyan); border-radius: 6px; padding: 12px 16px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #a0c4ff; overflow-x: auto; margin: 10px 0; line-height: 1.6; white-space: pre; }
+
+.callout { border-radius: 6px; padding: 12px 14px; margin: 12px 0; font-size: 10.5px; border-left: 3px solid; }
+.callout-warn  { background: rgba(234,179,8,0.08);  border-color: var(--yellow); color: #fde68a; }
+.callout-info  { background: rgba(14,165,233,0.08); border-color: var(--cyan);   color: #bae6fd; }
+.callout-crit  { background: rgba(239,68,68,0.08);  border-color: var(--red);    color: #fecaca; }
+.callout-good  { background: rgba(34,197,94,0.08);  border-color: var(--green);  color: #bbf7d0; }
+.callout .callout-title { font-weight: 700; margin-bottom: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 0; }
+
+@media print {
+  .grid2 { grid-template-columns: 1fr; }
+  .grid3 { grid-template-columns: 1fr; }
+  .copy-btn { display: none; }
+}
+
+.diagram-container { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 14px 0; text-align: center; overflow: hidden; }
+.diagram-container svg { max-width: 100%; height: auto; }
+.diagram-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+
+.divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+
+.toc { page-break-after: always; }
+.toc h2 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.toc-section { margin-bottom: 6px; }
+.toc-section a { color: var(--subtext); text-decoration: none; display: flex; justify-content: space-between; padding: 4px 8px; border-radius: 4px; font-size: 11px; }
+.toc-section .num { color: var(--cyan); font-weight: 600; margin-right: 8px; font-size: 10px; }
+.toc-sub { padding-left: 24px; }
+.toc-sub a { font-size: 10px; }
+
+.zone-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+.zone-normal  { background: rgba(34,197,94,0.2);  color: var(--green);  border: 1px solid rgba(34,197,94,0.4); }
+.zone-slow    { background: rgba(6,182,212,0.2);   color: #22d3ee;       border: 1px solid rgba(6,182,212,0.4); }
+.zone-blind   { background: rgba(239,68,68,0.2);   color: var(--red);    border: 1px solid rgba(239,68,68,0.4); }
+.zone-around  { background: rgba(168,85,247,0.2);  color: var(--purple); border: 1px solid rgba(168,85,247,0.4); }
+.zone-push    { background: rgba(249,115,22,0.2);  color: var(--orange); border: 1px solid rgba(249,115,22,0.4); }
+</style>
+</head>
+<body>
+
+<!-- ═══ COVER ═══ -->
+<div class="cover">
+  <div class="cover-badge">Zone Nav Software Design Guide v1.0</div>
+  <h1>Zone-Aware Navigation<br/><span>Software Design Guide</span></h1>
+  <p class="subtitle">
+    diy_zone_nav &bull; cmd_vel_mux &bull; lidar_odom_gate<br/>
+    Distilled from 46 bugs — hard-won implementation knowledge for the 2026 DIY Robot Challenge.
+  </p>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <div class="label">Competition</div>
+      <div class="value">October 1, 2026</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Packages</div>
+      <div class="value">diy_zone_nav</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Platform</div>
+      <div class="value">Jetson Orin Nano</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Team</div>
+      <div class="value">Juggernauts 2026</div>
+    </div>
+  </div>
+  <div class="cover-stack">
+    <span class="tag tag-cyan">ROS 2 Humble</span>
+    <span class="tag tag-green">zone_nav_manager</span>
+    <span class="tag tag-purple">cmd_vel_mux</span>
+    <span class="tag tag-orange">lidar_odom_gate</span>
+    <span class="tag tag-yellow">7-State Machine</span>
+    <span class="tag tag-red">46 Bugs Documented</span>
+    <span class="tag tag-blue">zone_waypoints.yaml</span>
+  </div>
+</div>
+
+<!-- ═══ TOC ═══ -->
+<div class="page toc">
+  <h2>Table of Contents</h2>
+  <div class="toc-section"><a href="#s1"><span><span class="num">1</span> System Architecture</span></a></div>
+  <div class="toc-section"><a href="#s2"><span><span class="num">2</span> State Machine Reference</span></a></div>
+  <div class="toc-section"><a href="#s3"><span><span class="num">3</span> Topic &amp; Service Contracts</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s3-1"><span>3.1 zone_nav_manager Publishers</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s3-2"><span>3.2 zone_nav_manager Subscribers</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s3-3"><span>3.3 cmd_vel_mux Publishers / Subscribers</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s3-4"><span>3.4 SetParameters Services</span></a></div>
+  <div class="toc-section"><a href="#s4"><span><span class="num">4</span> Parameter Reference</span></a></div>
+  <div class="toc-section"><a href="#s5"><span><span class="num">5</span> zone_waypoints.yaml Format</span></a></div>
+  <div class="toc-section"><a href="#s6"><span><span class="num">6</span> Key Implementation Gotchas</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s6-1"><span>6.1 Speed Control API</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s6-2"><span>6.2 Costmap Service Paths — The Doubled Namespace</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s6-3"><span>6.3 VoxelLayer Limitations</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s6-4"><span>6.4 ESTOP_LOCK is Hardware-Only</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s6-5"><span>6.5 BLIND_DRIVE Must-Knows</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s6-6"><span>6.6 zone_waypoints.yaml Pitfalls</span></a></div>
+  <div class="toc-section toc-sub"><a href="#s6-7"><span>6.7 lidar_odom_gate Must Always Run with use_localization</span></a></div>
+  <div class="toc-section"><a href="#s7"><span><span class="num">7</span> Debugging Checklist</span></a></div>
+  <div class="toc-section"><a href="#s8"><span><span class="num">8</span> Scripts Reference</span></a></div>
+</div>
+
+<!-- ═══ SECTION 1 ═══ -->
+<div class="page section" id="s1">
+  <div class="section-header">
+    <span class="section-num">1</span>
+    <h2>System Architecture</h2>
+  </div>
+
+  <p>
+    The zone navigation stack centres on three cooperating nodes. <strong>zone_nav_manager</strong> monitors
+    robot position and NDT fitness, drives the 7-state machine, and publishes control signals.
+    <strong>cmd_vel_mux</strong> arbitrates between joystick, Nav2, and blind-drive velocity sources.
+    <strong>lidar_odom_gate</strong> gates the FAST-LIO2 odometry stream to EKF2, suppressing lidar
+    during BLIND_DRIVE to prevent drift injection.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Full Node &amp; Topic Data Flow — Zone Navigation Stack</div>
+    <svg width="1178pt" height="558pt"
+ viewBox="0.00 0.00 1177.50 558.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 554)">
+<title>zone_nav_arch</title>
+<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-554 1173.5,-554 1173.5,4 -4,4"/>
+<!-- green_light_pub -->
+<g id="node1" class="node">
+<title>green_light_pub</title>
+<path fill="#0c1a2e" stroke="#22c55e" stroke-width="1.5" d="M89.58,-550C89.58,-550 23.58,-550 23.58,-550 17.58,-550 11.58,-544 11.58,-538 11.58,-538 11.58,-526 11.58,-526 11.58,-520 17.58,-514 23.58,-514 23.58,-514 89.58,-514 89.58,-514 95.58,-514 101.58,-520 101.58,-526 101.58,-526 101.58,-538 101.58,-538 101.58,-544 95.58,-550 89.58,-550"/>
+<text text-anchor="middle" x="56.58" y="-529.8" font-family="Inter" font-size="9.00" fill="#22c55e">green_light_pub</text>
+</g>
+<!-- zone_nav_manager -->
+<g id="node2" class="node">
+<title>zone_nav_manager</title>
+<path fill="#172554" stroke="#3b82f6" stroke-width="1.5" d="M324.16,-431C324.16,-431 244.16,-431 244.16,-431 238.16,-431 232.16,-425 232.16,-419 232.16,-419 232.16,-407 232.16,-407 232.16,-401 238.16,-395 244.16,-395 244.16,-395 324.16,-395 324.16,-395 330.16,-395 336.16,-401 336.16,-407 336.16,-407 336.16,-419 336.16,-419 336.16,-425 330.16,-431 324.16,-431"/>
+<text text-anchor="middle" x="284.16" y="-410.8" font-family="Inter" font-size="9.00" fill="#93c5fd">zone_nav_manager</text>
+</g>
+<!-- green_light_pub&#45;&gt;zone_nav_manager -->
+<g id="edge1" class="edge">
+<title>green_light_pub&#45;&gt;zone_nav_manager</title>
+<path fill="none" stroke="#475569" d="M101.83,-532C163.81,-532 267.5,-532 267.5,-532 267.5,-532 267.5,-441.07 267.5,-441.07"/>
+<polygon fill="#475569" stroke="#475569" points="271,-441.07 267.5,-431.07 264,-441.07 271,-441.07"/>
+</g>
+<!-- nav_mode -->
+<g id="node9" class="node">
+<title>nav_mode</title>
+<ellipse fill="#0c1a2e" stroke="#0ea5e9" stroke-width="1.5" cx="477.21" cy="-413" rx="38.21" ry="18"/>
+<text text-anchor="middle" x="477.21" y="-410.8" font-family="Inter" font-size="9.00" fill="#0ea5e9">/nav_mode</text>
+</g>
+<!-- zone_nav_manager&#45;&gt;nav_mode -->
+<g id="edge2" class="edge">
+<title>zone_nav_manager&#45;&gt;nav_mode</title>
+<path fill="none" stroke="#475569" d="M336.4,-419C336.4,-419 431.12,-419 431.12,-419"/>
+<polygon fill="#475569" stroke="#475569" points="431.12,-422.5 441.12,-419 431.12,-415.5 431.12,-422.5"/>
+</g>
+<!-- speed_limit -->
+<g id="node10" class="node">
+<title>speed_limit</title>
+<ellipse fill="#0c1a2e" stroke="#f97316" stroke-width="1.5" cx="477.21" cy="-492" rx="40.98" ry="18"/>
+<text text-anchor="middle" x="477.21" y="-489.8" font-family="Inter" font-size="9.00" fill="#f97316">/speed_limit</text>
+</g>
+<!-- zone_nav_manager&#45;&gt;speed_limit -->
+<g id="edge7" class="edge">
+<title>zone_nav_manager&#45;&gt;speed_limit</title>
+<path fill="none" stroke="#f97316" d="M301.5,-431.32C301.5,-454.66 301.5,-492 301.5,-492 301.5,-492 426.01,-492 426.01,-492"/>
+<polygon fill="#f97316" stroke="#f97316" points="426.01,-495.5 436.01,-492 426.01,-488.5 426.01,-495.5"/>
+</g>
+<!-- cmd_vel_zone_nav -->
+<g id="node11" class="node">
+<title>cmd_vel_zone_nav</title>
+<ellipse fill="#0c1a2e" stroke="#334155" stroke-width="1.5" cx="477.21" cy="-97" rx="60.09" ry="18"/>
+<text text-anchor="middle" x="477.21" y="-94.8" font-family="Inter" font-size="9.00" fill="#94a3b8">/cmd_vel_zone_nav</text>
+</g>
+<!-- zone_nav_manager&#45;&gt;cmd_vel_zone_nav -->
+<g id="edge9" class="edge">
+<title>zone_nav_manager&#45;&gt;cmd_vel_zone_nav</title>
+<path fill="none" stroke="#475569" d="M336.39,-407C376.65,-407 425.5,-407 425.5,-407 425.5,-407 425.5,-116.28 425.5,-116.28"/>
+<polygon fill="#475569" stroke="#475569" points="429,-116.28 425.5,-106.28 422,-116.28 429,-116.28"/>
+</g>
+<!-- lidar_odom_gate -->
+<g id="node3" class="node">
+<title>lidar_odom_gate</title>
+<path fill="#172554" stroke="#3b82f6" stroke-width="1.5" d="M760.75,-391C760.75,-391 693.75,-391 693.75,-391 687.75,-391 681.75,-385 681.75,-379 681.75,-379 681.75,-367 681.75,-367 681.75,-361 687.75,-355 693.75,-355 693.75,-355 760.75,-355 760.75,-355 766.75,-355 772.75,-361 772.75,-367 772.75,-367 772.75,-379 772.75,-379 772.75,-385 766.75,-391 760.75,-391"/>
+<text text-anchor="middle" x="727.25" y="-370.8" font-family="Inter" font-size="9.00" fill="#93c5fd">lidar_odom_gate</text>
+</g>
+<!-- lidar_gated -->
+<g id="node13" class="node">
+<title>lidar_gated</title>
+<ellipse fill="#0c1a2e" stroke="#a855f7" stroke-width="1.5" cx="922.38" cy="-373" rx="68.25" ry="18"/>
+<text text-anchor="middle" x="922.38" y="-370.8" font-family="Inter" font-size="9.00" fill="#a855f7">/lidar_odometry_gated</text>
+</g>
+<!-- lidar_odom_gate&#45;&gt;lidar_gated -->
+<g id="edge4" class="edge">
+<title>lidar_odom_gate&#45;&gt;lidar_gated</title>
+<path fill="none" stroke="#475569" d="M773,-373C773,-373 843.97,-373 843.97,-373"/>
+<polygon fill="#475569" stroke="#475569" points="843.97,-376.5 853.97,-373 843.97,-369.5 843.97,-376.5"/>
+</g>
+<!-- cmd_vel_mux -->
+<g id="node4" class="node">
+<title>cmd_vel_mux</title>
+<path fill="#1c1917" stroke="#78716c" stroke-width="1.5" d="M754.75,-170C754.75,-170 699.75,-170 699.75,-170 693.75,-170 687.75,-164 687.75,-158 687.75,-158 687.75,-146 687.75,-146 687.75,-140 693.75,-134 699.75,-134 699.75,-134 754.75,-134 754.75,-134 760.75,-134 766.75,-140 766.75,-146 766.75,-146 766.75,-158 766.75,-158 766.75,-164 760.75,-170 754.75,-170"/>
+<text text-anchor="middle" x="727.25" y="-149.8" font-family="Inter" font-size="9.00" fill="#d6d3d1">cmd_vel_mux</text>
+</g>
+<!-- cmd_vel_safe -->
+<g id="node12" class="node">
+<title>cmd_vel_safe</title>
+<ellipse fill="#0c1a2e" stroke="#22c55e" stroke-width="1.5" cx="922.38" cy="-152" rx="46.38" ry="18"/>
+<text text-anchor="middle" x="922.38" y="-149.8" font-family="Inter" font-size="9.00" fill="#22c55e">/cmd_vel_safe</text>
+</g>
+<!-- cmd_vel_mux&#45;&gt;cmd_vel_safe -->
+<g id="edge11" class="edge">
+<title>cmd_vel_mux&#45;&gt;cmd_vel_safe</title>
+<path fill="none" stroke="#475569" d="M767.21,-152C767.21,-152 865.96,-152 865.96,-152"/>
+<polygon fill="#475569" stroke="#475569" points="865.96,-155.5 875.96,-152 865.96,-148.5 865.96,-155.5"/>
+</g>
+<!-- controller_server -->
+<g id="node5" class="node">
+<title>controller_server</title>
+<path fill="#431407" stroke="#f97316" stroke-width="1.5" d="M761.25,-510C761.25,-510 693.25,-510 693.25,-510 687.25,-510 681.25,-504 681.25,-498 681.25,-498 681.25,-486 681.25,-486 681.25,-480 687.25,-474 693.25,-474 693.25,-474 761.25,-474 761.25,-474 767.25,-474 773.25,-480 773.25,-486 773.25,-486 773.25,-498 773.25,-498 773.25,-504 767.25,-510 761.25,-510"/>
+<text text-anchor="middle" x="727.25" y="-494.8" font-family="Inter" font-size="9.00" fill="#fed7aa">controller_server</text>
+<text text-anchor="middle" x="727.25" y="-484.8" font-family="Inter" font-size="9.00" fill="#fed7aa">(MPPI)</text>
+</g>
+<!-- ekf2 -->
+<g id="node6" class="node">
+<title>ekf2</title>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.5" d="M1157.5,-391C1157.5,-391 1083.5,-391 1083.5,-391 1077.5,-391 1071.5,-385 1071.5,-379 1071.5,-379 1071.5,-367 1071.5,-367 1071.5,-361 1077.5,-355 1083.5,-355 1083.5,-355 1157.5,-355 1157.5,-355 1163.5,-355 1169.5,-361 1169.5,-367 1169.5,-367 1169.5,-379 1169.5,-379 1169.5,-385 1163.5,-391 1157.5,-391"/>
+<text text-anchor="middle" x="1120.5" y="-375.8" font-family="Inter" font-size="9.00" fill="#86efac">EKF2</text>
+<text text-anchor="middle" x="1120.5" y="-365.8" font-family="Inter" font-size="9.00" fill="#86efac">/odometry/filtered</text>
+</g>
+<!-- motors -->
+<g id="node7" class="node">
+<title>motors</title>
+<path fill="#1c1917" stroke="#78716c" stroke-width="1.5" d="M1148.5,-170C1148.5,-170 1092.5,-170 1092.5,-170 1086.5,-170 1080.5,-164 1080.5,-158 1080.5,-158 1080.5,-146 1080.5,-146 1080.5,-140 1086.5,-134 1092.5,-134 1092.5,-134 1148.5,-134 1148.5,-134 1154.5,-134 1160.5,-140 1160.5,-146 1160.5,-146 1160.5,-158 1160.5,-158 1160.5,-164 1154.5,-170 1148.5,-170"/>
+<text text-anchor="middle" x="1120.5" y="-149.8" font-family="Inter" font-size="9.00" fill="#d6d3d1">STM32 Motors</text>
+</g>
+<!-- fastlio2 -->
+<g id="node8" class="node">
+<title>fastlio2</title>
+<path fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" d="M508.71,-352C508.71,-352 445.71,-352 445.71,-352 439.71,-352 433.71,-346 433.71,-340 433.71,-340 433.71,-328 433.71,-328 433.71,-322 439.71,-316 445.71,-316 445.71,-316 508.71,-316 508.71,-316 514.71,-316 520.71,-322 520.71,-328 520.71,-328 520.71,-340 520.71,-340 520.71,-346 514.71,-352 508.71,-352"/>
+<text text-anchor="middle" x="477.21" y="-336.8" font-family="Inter" font-size="9.00" fill="#c4b5fd">FAST&#45;LIO2</text>
+<text text-anchor="middle" x="477.21" y="-326.8" font-family="Inter" font-size="9.00" fill="#c4b5fd">/lidar_odometry</text>
+</g>
+<!-- fastlio2&#45;&gt;lidar_odom_gate -->
+<g id="edge6" class="edge">
+<title>fastlio2&#45;&gt;lidar_odom_gate</title>
+<path fill="none" stroke="#475569" d="M490.5,-352.02C490.5,-360.02 490.5,-367.67 490.5,-367.67 490.5,-367.67 671.6,-367.67 671.6,-367.67"/>
+<polygon fill="#475569" stroke="#475569" points="671.6,-371.17 681.6,-367.67 671.6,-364.17 671.6,-371.17"/>
+<text text-anchor="middle" x="609.25" y="-336.6" font-family="Inter" font-size="8.00" fill="#94a3b8">/lidar_odometry</text>
+</g>
+<!-- nav_mode&#45;&gt;lidar_odom_gate -->
+<g id="edge3" class="edge">
+<title>nav_mode&#45;&gt;lidar_odom_gate</title>
+<path fill="none" stroke="#475569" d="M464.5,-395.77C464.5,-387.49 464.5,-379.33 464.5,-379.33 464.5,-379.33 671.48,-379.33 671.48,-379.33"/>
+<polygon fill="#475569" stroke="#475569" points="671.48,-382.83 681.48,-379.33 671.48,-375.83 671.48,-382.83"/>
+</g>
+<!-- speed_limit&#45;&gt;controller_server -->
+<g id="edge8" class="edge">
+<title>speed_limit&#45;&gt;controller_server</title>
+<path fill="none" stroke="#475569" d="M518.21,-492C518.21,-492 671.12,-492 671.12,-492"/>
+<polygon fill="#475569" stroke="#475569" points="671.12,-495.5 681.12,-492 671.12,-488.5 671.12,-495.5"/>
+</g>
+<!-- cmd_vel_zone_nav&#45;&gt;cmd_vel_mux -->
+<g id="edge10" class="edge">
+<title>cmd_vel_zone_nav&#45;&gt;cmd_vel_mux</title>
+<path fill="none" stroke="#475569" d="M529.5,-105.99C529.5,-120.13 529.5,-146 529.5,-146 529.5,-146 677.71,-146 677.71,-146"/>
+<polygon fill="#475569" stroke="#475569" points="677.71,-149.5 687.71,-146 677.71,-142.5 677.71,-149.5"/>
+</g>
+<!-- cmd_vel_safe&#45;&gt;motors -->
+<g id="edge12" class="edge">
+<title>cmd_vel_safe&#45;&gt;motors</title>
+<path fill="none" stroke="#475569" d="M968.58,-152C968.58,-152 1070.27,-152 1070.27,-152"/>
+<polygon fill="#475569" stroke="#475569" points="1070.27,-155.5 1080.27,-152 1070.27,-148.5 1070.27,-155.5"/>
+</g>
+<!-- lidar_gated&#45;&gt;ekf2 -->
+<g id="edge5" class="edge">
+<title>lidar_gated&#45;&gt;ekf2</title>
+<path fill="none" stroke="#475569" d="M990.56,-373C990.56,-373 1061.27,-373 1061.27,-373"/>
+<polygon fill="#475569" stroke="#475569" points="1061.27,-376.5 1071.27,-373 1061.27,-369.5 1061.27,-376.5"/>
+</g>
+<!-- mux_mode -->
+<g id="node14" class="node">
+<title>mux_mode</title>
+<ellipse fill="#0c1a2e" stroke="#eab308" stroke-width="1.5" cx="56.58" cy="-453" rx="40.33" ry="18"/>
+<text text-anchor="middle" x="56.58" y="-450.8" font-family="Inter" font-size="9.00" fill="#eab308">/mux_mode</text>
+</g>
+<!-- mux_mode&#45;&gt;zone_nav_manager -->
+<g id="edge15" class="edge">
+<title>mux_mode&#45;&gt;zone_nav_manager</title>
+<path fill="none" stroke="#eab308" d="M57.5,-434.81C57.5,-426.72 57.5,-419 57.5,-419 57.5,-419 221.88,-419 221.88,-419"/>
+<polygon fill="#eab308" stroke="#eab308" points="221.88,-422.5 231.88,-419 221.88,-415.5 221.88,-422.5"/>
+<text text-anchor="middle" x="172.66" y="-455.6" font-family="Inter" font-size="8.00" fill="#eab308">feedback</text>
+</g>
+<!-- odom_filtered -->
+<g id="node15" class="node">
+<title>odom_filtered</title>
+<ellipse fill="#0c1a2e" stroke="#22c55e" stroke-width="1.5" cx="56.58" cy="-374" rx="56.66" ry="18"/>
+<text text-anchor="middle" x="56.58" y="-371.8" font-family="Inter" font-size="9.00" fill="#22c55e">/odometry/filtered</text>
+</g>
+<!-- odom_filtered&#45;&gt;zone_nav_manager -->
+<g id="edge13" class="edge">
+<title>odom_filtered&#45;&gt;zone_nav_manager</title>
+<path fill="none" stroke="#22c55e" d="M107.5,-381.99C107.5,-391.75 107.5,-407 107.5,-407 107.5,-407 222.11,-407 222.11,-407"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="222.11,-410.5 232.11,-407 222.11,-403.5 222.11,-410.5"/>
+</g>
+<!-- ndt_fitness -->
+<g id="node16" class="node">
+<title>ndt_fitness</title>
+<ellipse fill="#0c1a2e" stroke="#334155" stroke-width="1.5" cx="56.58" cy="-295" rx="56.66" ry="18"/>
+<text text-anchor="middle" x="56.58" y="-292.8" font-family="Inter" font-size="9.00" fill="#94a3b8">/ndt_fitness_score</text>
+</g>
+<!-- ndt_fitness&#45;&gt;zone_nav_manager -->
+<g id="edge14" class="edge">
+<title>ndt_fitness&#45;&gt;zone_nav_manager</title>
+<path fill="none" stroke="#475569" d="M113.21,-295C180.72,-295 284.5,-295 284.5,-295 284.5,-295 284.5,-384.82 284.5,-384.82"/>
+<polygon fill="#475569" stroke="#475569" points="281,-384.82 284.5,-394.82 288,-384.82 281,-384.82"/>
+</g>
+<!-- estop_active -->
+<g id="node17" class="node">
+<title>estop_active</title>
+<ellipse fill="#0c1a2e" stroke="#ef4444" stroke-width="1.5" cx="477.21" cy="-255" rx="43.76" ry="18"/>
+<text text-anchor="middle" x="477.21" y="-252.8" font-family="Inter" font-size="9.00" fill="#ef4444">/estop_active</text>
+</g>
+<!-- estop_active&#45;&gt;cmd_vel_mux -->
+<g id="edge16" class="edge">
+<title>estop_active&#45;&gt;cmd_vel_mux</title>
+<path fill="none" stroke="#ef4444" d="M521.09,-255C592.87,-255 727.5,-255 727.5,-255 727.5,-255 727.5,-180.41 727.5,-180.41"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="731,-180.41 727.5,-170.41 724,-180.41 731,-180.41"/>
+</g>
+<!-- cmd_vel_joy -->
+<g id="node18" class="node">
+<title>cmd_vel_joy</title>
+<ellipse fill="#0c1a2e" stroke="#334155" stroke-width="1.5" cx="477.21" cy="-176" rx="42.95" ry="18"/>
+<text text-anchor="middle" x="477.21" y="-173.8" font-family="Inter" font-size="9.00" fill="#94a3b8">/cmd_vel_joy</text>
+</g>
+<!-- cmd_vel_joy&#45;&gt;cmd_vel_mux -->
+<g id="edge17" class="edge">
+<title>cmd_vel_joy&#45;&gt;cmd_vel_mux</title>
+<path fill="none" stroke="#475569" d="M509.13,-164C509.13,-164 677.7,-164 677.7,-164"/>
+<polygon fill="#475569" stroke="#475569" points="677.7,-167.5 687.7,-164 677.7,-160.5 677.7,-167.5"/>
+</g>
+<!-- cmd_vel_nav -->
+<g id="node19" class="node">
+<title>cmd_vel_nav</title>
+<ellipse fill="#0c1a2e" stroke="#334155" stroke-width="1.5" cx="477.21" cy="-18" rx="45.07" ry="18"/>
+<text text-anchor="middle" x="477.21" y="-15.8" font-family="Inter" font-size="9.00" fill="#94a3b8">/cmd_vel_nav</text>
+</g>
+<!-- cmd_vel_nav&#45;&gt;cmd_vel_mux -->
+<g id="edge18" class="edge">
+<title>cmd_vel_nav&#45;&gt;cmd_vel_mux</title>
+<path fill="none" stroke="#475569" d="M522.24,-18C594.31,-18 727.5,-18 727.5,-18 727.5,-18 727.5,-123.93 727.5,-123.93"/>
+<polygon fill="#475569" stroke="#475569" points="724,-123.93 727.5,-133.93 731,-123.93 724,-123.93"/>
+</g>
+</g>
+</svg>
+
+  </div>
+
+  <div class="grid3">
+    <div class="card">
+      <div class="card-title"><span class="dot dot-cyan"></span>zone_nav_manager</div>
+      <p>The brain. Subscribes to position (<code>/odometry/filtered</code>) and NDT fitness score.
+      Checks each registered waypoint zone on every timer tick. Publishes <code>/nav_mode</code>,
+      <code>/speed_limit</code>, and sets costmap + mux parameters via service calls.</p>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>cmd_vel_mux</div>
+      <p>Velocity arbitrator. Accepts <code>/cmd_vel_joy</code>, <code>/cmd_vel_nav</code>,
+      and <code>/cmd_vel_zone_nav</code>. Selects which source reaches <code>/cmd_vel_safe</code>
+      based on mode and <code>/estop_active</code>. ESTOP_LOCK overrides all sources.</p>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-purple"></span>lidar_odom_gate</div>
+      <p>Inline gate on <code>/lidar_odometry</code> (FAST-LIO2). Passes through when
+      <code>/nav_mode</code> ≠ BLIND_DRIVE; blocks when BLIND_DRIVE is active. Prevents corrupt
+      lidar odometry from poisoning EKF2 inside the tunnel. 5s watchdog re-opens on manager crash.</p>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Key Dependency Chain</div>
+    green_light_pub → zone_nav_manager → /nav_mode → lidar_odom_gate → EKF2 → /odometry/filtered → zone_nav_manager (position feedback).
+    Any break in this chain stalls the whole stack. The debugging checklist in Section 7 walks each link.
+  </div>
+</div>
+
+<!-- ═══ SECTION 2 ═══ -->
+<div class="page section pagebreak" id="s2">
+  <div class="section-header">
+    <span class="section-num green">2</span>
+    <h2>State Machine Reference</h2>
+  </div>
+
+  <p>
+    The zone_nav_manager implements a 7-state machine. Transitions are triggered by zone entry
+    (distance from waypoint &lt; <code>radius</code>) and exit (distance &gt; <code>exit_radius</code>).
+    DONE is triggered only after lap 2 is complete.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Zone Navigation State Machine — Mode Transitions</div>
+    <svg width="832pt" height="637pt"
+ viewBox="0.00 0.00 832.00 637.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 633)">
+<title>state_machine</title>
+<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-633 828,-633 828,4 -4,4"/>
+<!-- START -->
+<g id="node1" class="node">
+<title>START</title>
+<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M132,-374C132,-374 12,-374 12,-374 6,-374 0,-368 0,-362 0,-362 0,-328 0,-328 0,-322 6,-316 12,-316 12,-316 132,-316 132,-316 138,-316 144,-322 144,-328 144,-328 144,-362 144,-362 144,-368 138,-374 132,-374"/>
+<text text-anchor="middle" x="72" y="-348" font-family="Inter" font-size="10.00" fill="#94a3b8">START</text>
+<text text-anchor="middle" x="72" y="-337" font-family="Inter" font-size="10.00" fill="#94a3b8">Detect green light</text>
+</g>
+<!-- NORMAL -->
+<g id="node2" class="node">
+<title>NORMAL</title>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.5" d="M476,-374C476,-374 356,-374 356,-374 350,-374 344,-368 344,-362 344,-362 344,-328 344,-328 344,-322 350,-316 356,-316 356,-316 476,-316 476,-316 482,-316 488,-322 488,-328 488,-328 488,-362 488,-362 488,-368 482,-374 476,-374"/>
+<text text-anchor="middle" x="416" y="-353.5" font-family="Inter" font-size="10.00" fill="#86efac">NORMAL_NAV</text>
+<text text-anchor="middle" x="416" y="-342.5" font-family="Inter" font-size="10.00" fill="#86efac">Nav2 Smac+MPPI</text>
+<text text-anchor="middle" x="416" y="-331.5" font-family="Inter" font-size="10.00" fill="#86efac">Full speed</text>
+</g>
+<!-- START&#45;&gt;NORMAL -->
+<g id="edge1" class="edge">
+<title>START&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#22c55e" d="M144.28,-345C199.5,-345 276.04,-345 333.65,-345"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="333.81,-348.5 343.81,-345 333.81,-341.5 333.81,-348.5"/>
+<text text-anchor="middle" x="244" y="-347.6" font-family="Inter" font-size="8.00" fill="#86efac">green light detected</text>
+</g>
+<!-- SLOW -->
+<g id="node3" class="node">
+<title>SLOW</title>
+<path fill="#164e63" stroke="#06b6d4" stroke-width="1.5" d="M812,-629C812,-629 692,-629 692,-629 686,-629 680,-623 680,-617 680,-617 680,-583 680,-583 680,-577 686,-571 692,-571 692,-571 812,-571 812,-571 818,-571 824,-577 824,-583 824,-583 824,-617 824,-617 824,-623 818,-629 812,-629"/>
+<text text-anchor="middle" x="752" y="-608.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">SLOW_NAV</text>
+<text text-anchor="middle" x="752" y="-597.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">Reduced speed</text>
+<text text-anchor="middle" x="752" y="-586.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">0.2 m/s</text>
+</g>
+<!-- NORMAL&#45;&gt;SLOW -->
+<g id="edge2" class="edge">
+<title>NORMAL&#45;&gt;SLOW</title>
+<path fill="none" stroke="#06b6d4" d="M422.44,-374.28C434.19,-428.23 467.51,-542.33 546,-592 582.21,-614.92 629.66,-618.06 669.79,-614.95"/>
+<polygon fill="#06b6d4" stroke="#06b6d4" points="670.18,-618.43 679.82,-614.04 669.54,-611.46 670.18,-618.43"/>
+<text text-anchor="middle" x="584" y="-616.6" font-family="Inter" font-size="8.00" fill="#a5f3fc">narrow/ramp/bank</text>
+</g>
+<!-- BLIND -->
+<g id="node4" class="node">
+<title>BLIND</title>
+<path fill="#450a0a" stroke="#ef4444" stroke-width="1.5" d="M812,-491C812,-491 692,-491 692,-491 686,-491 680,-485 680,-479 680,-479 680,-445 680,-445 680,-439 686,-433 692,-433 692,-433 812,-433 812,-433 818,-433 824,-439 824,-445 824,-445 824,-479 824,-479 824,-485 818,-491 812,-491"/>
+<text text-anchor="middle" x="752" y="-470.5" font-family="Inter" font-size="10.00" fill="#fca5a5">BLIND_DRIVE</text>
+<text text-anchor="middle" x="752" y="-459.5" font-family="Inter" font-size="10.00" fill="#fca5a5">Wheel+IMU only</text>
+<text text-anchor="middle" x="752" y="-448.5" font-family="Inter" font-size="10.00" fill="#fca5a5">Fixed heading</text>
+</g>
+<!-- NORMAL&#45;&gt;BLIND -->
+<g id="edge3" class="edge">
+<title>NORMAL&#45;&gt;BLIND</title>
+<path fill="none" stroke="#ef4444" d="M449.79,-374.13C474.48,-394.36 510.1,-420.08 546,-434 585.05,-449.14 631.04,-456.29 669.56,-459.6"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="669.46,-463.1 679.7,-460.4 670.01,-456.12 669.46,-463.1"/>
+<text text-anchor="middle" x="584" y="-454.6" font-family="Inter" font-size="8.00" fill="#fca5a5">tunnel entry</text>
+</g>
+<!-- NAVIGATE -->
+<g id="node5" class="node">
+<title>NAVIGATE</title>
+<path fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" d="M812,-355C812,-355 692,-355 692,-355 686,-355 680,-349 680,-343 680,-343 680,-309 680,-309 680,-303 686,-297 692,-297 692,-297 812,-297 812,-297 818,-297 824,-303 824,-309 824,-309 824,-343 824,-343 824,-349 818,-355 812,-355"/>
+<text text-anchor="middle" x="752" y="-334.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">NAVIGATE_AROUND</text>
+<text text-anchor="middle" x="752" y="-323.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">Live costmap</text>
+<text text-anchor="middle" x="752" y="-312.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">Dynamic replan</text>
+</g>
+<!-- NORMAL&#45;&gt;NAVIGATE -->
+<g id="edge4" class="edge">
+<title>NORMAL&#45;&gt;NAVIGATE</title>
+<path fill="none" stroke="#a855f7" d="M488.24,-340.95C541.45,-337.92 614.24,-333.78 669.72,-330.62"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="670.08,-334.11 679.87,-330.05 669.69,-327.12 670.08,-334.11"/>
+<text text-anchor="middle" x="584" y="-339.6" font-family="Inter" font-size="8.00" fill="#c4b5fd">bucket zone</text>
+</g>
+<!-- PUSH -->
+<g id="node6" class="node">
+<title>PUSH</title>
+<path fill="#422006" stroke="#f97316" stroke-width="1.5" d="M812,-199C812,-199 692,-199 692,-199 686,-199 680,-193 680,-187 680,-187 680,-153 680,-153 680,-147 686,-141 692,-141 692,-141 812,-141 812,-141 818,-141 824,-147 824,-153 824,-153 824,-187 824,-187 824,-193 818,-199 812,-199"/>
+<text text-anchor="middle" x="752" y="-178.5" font-family="Inter" font-size="10.00" fill="#fdba74">PUSH_THROUGH</text>
+<text text-anchor="middle" x="752" y="-167.5" font-family="Inter" font-size="10.00" fill="#fdba74">Straight drive</text>
+<text text-anchor="middle" x="752" y="-156.5" font-family="Inter" font-size="10.00" fill="#fdba74">Obstacle layer OFF</text>
+</g>
+<!-- NORMAL&#45;&gt;PUSH -->
+<g id="edge5" class="edge">
+<title>NORMAL&#45;&gt;PUSH</title>
+<path fill="none" stroke="#f97316" d="M472.53,-315.91C531.49,-285.01 624.57,-236.24 686.69,-203.7"/>
+<polygon fill="#f97316" stroke="#f97316" points="688.38,-206.76 695.62,-199.02 685.14,-200.56 688.38,-206.76"/>
+<text text-anchor="middle" x="584" y="-275.6" font-family="Inter" font-size="8.00" fill="#fdba74">car wash zone</text>
+</g>
+<!-- DONE -->
+<g id="node7" class="node">
+<title>DONE</title>
+<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M812,-58C812,-58 692,-58 692,-58 686,-58 680,-52 680,-46 680,-46 680,-12 680,-12 680,-6 686,0 692,0 692,0 812,0 812,0 818,0 824,-6 824,-12 824,-12 824,-46 824,-46 824,-52 818,-58 812,-58"/>
+<text text-anchor="middle" x="752" y="-37.5" font-family="Inter" font-size="10.00" fill="#94a3b8">DONE</text>
+<text text-anchor="middle" x="752" y="-26.5" font-family="Inter" font-size="10.00" fill="#94a3b8">Stop at finish</text>
+<text text-anchor="middle" x="752" y="-15.5" font-family="Inter" font-size="10.00" fill="#94a3b8">(lap 2 complete)</text>
+</g>
+<!-- NORMAL&#45;&gt;DONE -->
+<g id="edge6" class="edge">
+<title>NORMAL&#45;&gt;DONE</title>
+<path fill="none" stroke="#475569" d="M432.85,-315.8C454.7,-277.36 496.98,-209.17 546,-162 587.53,-122.04 642.7,-87.04 685.35,-62.99"/>
+<polygon fill="#475569" stroke="#475569" points="687.22,-65.95 694.25,-58.02 683.81,-59.84 687.22,-65.95"/>
+<text text-anchor="middle" x="584" y="-164.6" font-family="Inter" font-size="8.00" fill="#94a3b8">lap 2 at finish</text>
+</g>
+<!-- SLOW&#45;&gt;NORMAL -->
+<g id="edge7" class="edge">
+<title>SLOW&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#06b6d4" d="M693.66,-570.77C651.08,-547.86 592.57,-513.79 546,-477 509.57,-448.22 473.06,-409.74 448.23,-381.75"/>
+<polygon fill="#06b6d4" stroke="#06b6d4" points="450.77,-379.35 441.54,-374.16 445.52,-383.98 450.77,-379.35"/>
+<text text-anchor="middle" x="584" y="-531.6" font-family="Inter" font-size="8.00" fill="#a5f3fc">zone exit</text>
+</g>
+<!-- BLIND&#45;&gt;NORMAL -->
+<g id="edge8" class="edge">
+<title>BLIND&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#ef4444" d="M679.87,-437.08C626.47,-418.38 553.29,-392.74 497.71,-373.27"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="498.84,-369.96 488.24,-369.96 496.52,-376.57 498.84,-369.96"/>
+<text text-anchor="middle" x="584" y="-415.6" font-family="Inter" font-size="8.00" fill="#fca5a5">lidar restored</text>
+</g>
+<!-- NAVIGATE&#45;&gt;NORMAL -->
+<g id="edge9" class="edge">
+<title>NAVIGATE&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#a855f7" d="M679.64,-311.8C640.14,-305.93 590.22,-301.78 546,-308 530.24,-310.22 513.7,-313.88 497.92,-318.07"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="496.93,-314.72 488.21,-320.74 498.78,-321.47 496.93,-314.72"/>
+<text text-anchor="middle" x="584" y="-310.6" font-family="Inter" font-size="8.00" fill="#c4b5fd">cleared</text>
+</g>
+<!-- PUSH&#45;&gt;NORMAL -->
+<g id="edge10" class="edge">
+<title>PUSH&#45;&gt;NORMAL</title>
+<path fill="none" stroke="#f97316" d="M679.66,-176.05C638.55,-181.9 587.06,-193.4 546,-216 504.78,-238.68 467.97,-278.47 444.32,-307.88"/>
+<polygon fill="#f97316" stroke="#f97316" points="441.46,-305.86 438.01,-315.88 446.95,-310.2 441.46,-305.86"/>
+<text text-anchor="middle" x="584" y="-218.6" font-family="Inter" font-size="8.00" fill="#fdba74">zone exit</text>
+</g>
+</g>
+</svg>
+
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Mode</th>
+        <th>Trigger Condition</th>
+        <th>Entry Actions</th>
+        <th>Exit Trigger</th>
+        <th>Exit Actions</th>
+        <th>Speed Limit</th>
+        <th>Mux Mode</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>INIT</strong></td>
+        <td>Node startup, before green light</td>
+        <td>Gate open (pass-through). All params at defaults.</td>
+        <td>Green light detected on <code>/green_light</code></td>
+        <td>Transition to NORMAL_NAV</td>
+        <td>No limit</td>
+        <td>JOYSTICK</td>
+      </tr>
+      <tr>
+        <td><strong><span class="zone-badge zone-normal">NORMAL_NAV</span></strong></td>
+        <td>Zone exit from any mode, or green light</td>
+        <td>Restore full speed. Enable obstacle layers. Set mux AUTONOMOUS.</td>
+        <td>Entry into a registered zone</td>
+        <td>Apply zone-specific mode</td>
+        <td>Configured max</td>
+        <td>AUTONOMOUS</td>
+      </tr>
+      <tr>
+        <td><strong><span class="zone-badge zone-slow">SLOW_NAV</span></strong></td>
+        <td>Narrow / ramp / bank zone entry</td>
+        <td>Publish <code>speed_limit=0.2</code>. Costmap unchanged.</td>
+        <td>Distance &gt; exit_radius</td>
+        <td>Restore speed limit to 0.0 (=no limit)</td>
+        <td>0.2 m/s</td>
+        <td>AUTONOMOUS</td>
+      </tr>
+      <tr>
+        <td><strong><span class="zone-badge zone-blind">BLIND_DRIVE</span></strong></td>
+        <td>Tunnel entry zone</td>
+        <td>Set mux BLIND_DRIVE. Gate closes (blocks lidar to EKF2). Reset fitness to 999. 15s hard timeout armed.</td>
+        <td>NDT fitness &lt; 0.8 after gate re-open, OR 15s timeout</td>
+        <td>Re-open gate. Restore mux AUTONOMOUS.</td>
+        <td>0.15 m/s fixed</td>
+        <td>BLIND_DRIVE</td>
+      </tr>
+      <tr>
+        <td><strong><span class="zone-badge zone-around">NAVIGATE_AROUND</span></strong></td>
+        <td>Bucket zone entry</td>
+        <td>Enable obstacle_layer + voxel_layer. Full costmap active.</td>
+        <td>Distance &gt; exit_radius</td>
+        <td>Restore NORMAL_NAV</td>
+        <td>0.3 m/s</td>
+        <td>AUTONOMOUS</td>
+      </tr>
+      <tr>
+        <td><strong><span class="zone-badge zone-push">PUSH_THROUGH</span></strong></td>
+        <td>Car wash zone entry</td>
+        <td>Disable obstacle_layer.enabled AND voxel_layer.enabled. Straight heading cmd_vel.</td>
+        <td>Distance &gt; exit_radius</td>
+        <td>Re-enable both layers. Restore NORMAL_NAV.</td>
+        <td>0.25 m/s</td>
+        <td>BLIND_DRIVE</td>
+      </tr>
+      <tr>
+        <td><strong>DONE</strong></td>
+        <td>Finish line zone, lap count == total_laps</td>
+        <td>Publish zero cmd_vel. Set mux JOYSTICK. Log completion time.</td>
+        <td>N/A — terminal state</td>
+        <td>N/A</td>
+        <td>0.0 (stop)</td>
+        <td>JOYSTICK</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">INIT keeps the gate open</div>
+    When zone_nav_manager is disabled or not yet started, the gate defaults to INIT (open).
+    EKF2 receives full lidar odometry. This is intentional — safe pass-through for non-competition runs.
+  </div>
+</div>
+
+<!-- ═══ SECTION 3 ═══ -->
+<div class="page section pagebreak" id="s3">
+  <div class="section-header">
+    <span class="section-num purple">3</span>
+    <h2>Topic &amp; Service Contracts</h2>
+  </div>
+
+  <h3 id="s3-1">3.1 zone_nav_manager — Publishers</h3>
+  <table>
+    <thead>
+      <tr><th>Topic</th><th>Type</th><th>QoS</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/nav_mode</code></td>
+        <td><code>std_msgs/String</code></td>
+        <td>Volatile, depth 10</td>
+        <td>Current state machine mode. Read by lidar_odom_gate and all debug tools.</td>
+      </tr>
+      <tr>
+        <td><code>/speed_limit</code></td>
+        <td><code>std_msgs/Float32</code></td>
+        <td>Volatile, depth 1</td>
+        <td>Speed limit to controller_server. Re-sent every 1s (reassertSpeedLimit). 0.0 = NO_LIMIT.</td>
+      </tr>
+      <tr>
+        <td><code>/cmd_vel_zone_nav</code></td>
+        <td><code>geometry_msgs/Twist</code></td>
+        <td>Volatile, depth 1</td>
+        <td>Direct velocity output during BLIND_DRIVE and PUSH_THROUGH modes.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 id="s3-2">3.2 zone_nav_manager — Subscribers</h3>
+  <table>
+    <thead>
+      <tr><th>Topic</th><th>Type</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/odometry/filtered</code></td>
+        <td><code>nav_msgs/Odometry</code></td>
+        <td>Robot pose used for zone entry/exit distance checks.</td>
+      </tr>
+      <tr>
+        <td><code>/ndt_fitness_score</code></td>
+        <td><code>std_msgs/Float32</code></td>
+        <td>NDT scan-match quality. &gt;0.8 = poor (tunnel). &lt;0.8 = localized. Triggers BLIND_DRIVE exit.</td>
+      </tr>
+      <tr>
+        <td><code>/green_light</code></td>
+        <td><code>std_msgs/Bool</code></td>
+        <td>Race start trigger. True transitions INIT → NORMAL_NAV.</td>
+      </tr>
+      <tr>
+        <td><code>/mux_mode</code></td>
+        <td><code>std_msgs/String</code></td>
+        <td>Feedback from cmd_vel_mux. Used to verify mode changes landed correctly.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 id="s3-3">3.3 cmd_vel_mux — Publishers / Subscribers</h3>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>Subscribers (velocity sources)</div>
+      <table>
+        <thead><tr><th>Topic</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr><td><code>/cmd_vel_joy</code></td><td>Highest (joystick override)</td></tr>
+          <tr><td><code>/cmd_vel_nav</code></td><td>Nav2 MPPI output</td></tr>
+          <tr><td><code>/cmd_vel_zone_nav</code></td><td>zone_nav_manager direct cmds</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>Publishers</div>
+      <table>
+        <thead><tr><th>Topic</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>/cmd_vel_safe</code></td><td>Selected velocity → motors</td></tr>
+          <tr><td><code>/mux_mode</code></td><td>Current active mode string</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3 id="s3-4">3.4 SetParameters Services Called by zone_nav_manager</h3>
+  <table>
+    <thead>
+      <tr><th>Service Path</th><th>When Called</th><th>Parameter Set</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/global_costmap/global_costmap/set_parameters</code></td>
+        <td>PUSH_THROUGH entry/exit</td>
+        <td><code>obstacle_layer.enabled</code>, <code>inflation_layer.inflation_radius</code></td>
+      </tr>
+      <tr>
+        <td><code>/local_costmap/local_costmap/set_parameters</code></td>
+        <td>PUSH_THROUGH entry/exit</td>
+        <td><code>voxel_layer.enabled</code>, <code>obstacle_layer.enabled</code></td>
+      </tr>
+      <tr>
+        <td><code>/cmd_vel_mux_node/set_parameters</code></td>
+        <td>Mode transitions</td>
+        <td><code>mode</code> (JOYSTICK / AUTONOMOUS / BLIND_DRIVE)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-crit">
+    <div class="callout-title">Doubled Namespace — See Section 6.2</div>
+    The costmap service paths contain the node name twice. Using the wrong path is a silent no-op.
+    Always use <code>/global_costmap/global_costmap/set_parameters</code>, not <code>/global_costmap/set_parameters</code>.
+  </div>
+</div>
+
+<!-- ═══ SECTION 4 ═══ -->
+<div class="page section pagebreak" id="s4">
+  <div class="section-header">
+    <span class="section-num yellow">4</span>
+    <h2>Parameter Reference</h2>
+  </div>
+
+  <h3>zone_nav_manager Parameters</h3>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Default</th><th>Unit</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>waypoints_file</code></td>
+        <td><code>zone_waypoints.yaml</code></td>
+        <td>path</td>
+        <td>Path to zone definition file. Absolute or relative to share directory.</td>
+      </tr>
+      <tr>
+        <td><code>total_laps</code></td>
+        <td><code>2</code></td>
+        <td>integer</td>
+        <td>Number of laps before DONE is triggered at finish line. Must be ≥ 1.</td>
+      </tr>
+      <tr>
+        <td><code>slow_speed_limit</code></td>
+        <td><code>0.2</code></td>
+        <td>m/s</td>
+        <td>Speed limit published during SLOW_NAV zones.</td>
+      </tr>
+      <tr>
+        <td><code>blind_speed</code></td>
+        <td><code>0.15</code></td>
+        <td>m/s</td>
+        <td>Fixed forward speed during BLIND_DRIVE.</td>
+      </tr>
+      <tr>
+        <td><code>blind_timeout_s</code></td>
+        <td><code>15.0</code></td>
+        <td>s</td>
+        <td>Hard timeout in BLIND_DRIVE. Forces exit even if NDT never recovers.</td>
+      </tr>
+      <tr>
+        <td><code>ndt_recovery_threshold</code></td>
+        <td><code>0.8</code></td>
+        <td>dimensionless</td>
+        <td>NDT fitness score below which localization is considered restored. Exit BLIND_DRIVE when fitness &lt; threshold.</td>
+      </tr>
+      <tr>
+        <td><code>speed_reassert_hz</code></td>
+        <td><code>1.0</code></td>
+        <td>Hz</td>
+        <td>Rate at which speed limit is re-published (volatile QoS). Prevents controller_server from reverting to configured max.</td>
+      </tr>
+      <tr>
+        <td><code>push_through_speed</code></td>
+        <td><code>0.25</code></td>
+        <td>m/s</td>
+        <td>Fixed forward speed during PUSH_THROUGH (car wash).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>cmd_vel_mux Parameters</h3>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>mode</code></td>
+        <td><code>JOYSTICK</code></td>
+        <td>Active mux mode. Set via <code>/cmd_vel_mux_node/set_parameters</code>. Valid: JOYSTICK, AUTONOMOUS, BLIND_DRIVE. ESTOP_LOCK set by hardware only.</td>
+      </tr>
+      <tr>
+        <td><code>joy_topic</code></td>
+        <td><code>/cmd_vel_joy</code></td>
+        <td>Joystick velocity input topic name.</td>
+      </tr>
+      <tr>
+        <td><code>nav_topic</code></td>
+        <td><code>/cmd_vel_nav</code></td>
+        <td>Nav2 velocity input topic name.</td>
+      </tr>
+      <tr>
+        <td><code>zone_nav_topic</code></td>
+        <td><code>/cmd_vel_zone_nav</code></td>
+        <td>zone_nav_manager direct velocity input topic name.</td>
+      </tr>
+      <tr>
+        <td><code>output_topic</code></td>
+        <td><code>/cmd_vel_safe</code></td>
+        <td>Arbitrated output to motors.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══ SECTION 5 ═══ -->
+<div class="page section pagebreak" id="s5">
+  <div class="section-header">
+    <span class="section-num orange">5</span>
+    <h2>zone_waypoints.yaml Format</h2>
+  </div>
+
+  <p>
+    Zone waypoints are loaded at startup. The file defines a list of named zones. Each zone specifies
+    the centre position, entry/exit radii, and the navigation mode to activate. The parser validates
+    required fields and rejects invalid entries with an error at startup — it does not silently skip them.
+  </p>
+
+  <pre>
+zones:
+  - label: "tunnel_entry"        # string; optional — silently uses "" if omitted
+    x: 12.45                     # float; map frame X coordinate (metres); REQUIRED
+    y:  4.32                     # float; map frame Y coordinate (metres); REQUIRED
+    radius: 0.5                  # float (metres); entry trigger distance; REQUIRED
+    exit_radius: 0.9             # float (metres); exit trigger distance; REQUIRED
+    mode: BLIND_DRIVE            # string; one of the 7 modes; REQUIRED
+
+  - label: "narrow_section"
+    x: 7.10
+    y: 2.80
+    radius: 0.4
+    exit_radius: 0.8
+    mode: SLOW_NAV
+
+  - label: "finish_line"
+    x: 0.50
+    y: 0.20
+    radius: 0.6
+    exit_radius: 1.0
+    mode: DONE                   # only triggers DONE when lap count == total_laps
+</pre>
+
+  <h3>Field Validation Rules</h3>
+  <table>
+    <thead>
+      <tr><th>Rule</th><th>Enforcement</th><th>Effect of Violation</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>mode</code> must be one of the 7 valid modes</td>
+        <td>Startup validation</td>
+        <td><strong>Rejected</strong> — error logged, zone skipped entirely</td>
+      </tr>
+      <tr>
+        <td><code>x</code> and <code>y</code> are required numeric fields</td>
+        <td>Startup validation</td>
+        <td><strong>Rejected</strong> — error logged, zone skipped entirely</td>
+      </tr>
+      <tr>
+        <td><code>radius</code> and <code>exit_radius</code> are required</td>
+        <td>Startup validation</td>
+        <td><strong>Rejected</strong> — error logged, zone skipped entirely</td>
+      </tr>
+      <tr>
+        <td><code>radius</code> must be strictly less than <code>exit_radius</code></td>
+        <td>Startup validation</td>
+        <td><strong>Rejected</strong> — equal values cause mode flip-flop; startup error</td>
+      </tr>
+      <tr>
+        <td><code>label</code> field is optional</td>
+        <td>Silent default</td>
+        <td>Zone loads with <code>label=""</code> — works but harder to debug</td>
+      </tr>
+      <tr>
+        <td><code>total_laps</code> in manager params must be integer ≥ 1</td>
+        <td>Startup param check</td>
+        <td>Defaults to 2 if invalid; warning logged</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">Zone Entry Loop Skips Same-Mode Zones</div>
+    The zone entry detection loop skips any zone whose <code>mode == current_mode_</code>. This prevents
+    NORMAL_NAV marker zones from re-triggering NORMAL_NAV and locking <code>active_zone_idx_</code>.
+    Design implication: do <strong>not</strong> create a <code>tunnel_exit</code> zone with
+    <code>mode=NORMAL_NAV</code> — it will block other zone triggers within its <code>exit_radius</code>.
+  </div>
+</div>
+
+<!-- ═══ SECTION 6 ═══ -->
+<div class="page section pagebreak" id="s6">
+  <div class="section-header">
+    <span class="section-num red">6</span>
+    <h2>Key Implementation Gotchas</h2>
+  </div>
+
+  <p>
+    This section is the most important in the document. It documents the hard-won knowledge distilled
+    from 46 bugs encountered during implementation. Read this before writing any zone_nav code.
+  </p>
+
+  <h3 id="s6-1">6.1 Speed Control API</h3>
+  <div class="card">
+    <div class="card-title"><span class="dot dot-orange"></span>Use /speed_limit — Not SetParameters on FollowPath</div>
+    <ul style="color:var(--subtext); padding-left:16px; font-size:10px; line-height:2.0;">
+      <li><strong>/speed_limit topic is the ONLY working API</strong> for MPPI speed control at runtime</li>
+      <li><code>FollowPath.vx_max</code> via <code>SetParameters</code> is <strong>silently ignored</strong> during active runs — the controller does not reload params mid-trajectory</li>
+      <li><strong><code>speed_limit=0.0</code> means NO_SPEED_LIMIT</strong> (restores the configured max), NOT "stop the robot". To stop, publish zero Twist on <code>/cmd_vel_zone_nav</code> with mux in BLIND_DRIVE mode.</li>
+      <li>controller_server uses <strong>volatile QoS</strong> on <code>/speed_limit</code> — the subscription does not use transient-local. Solution: <code>reassertSpeedLimit()</code> re-sends the limit at 1 Hz so the controller never reverts on a restart or reconnect.</li>
+    </ul>
+  </div>
+
+  <div class="callout callout-crit">
+    <div class="callout-title">Critical — speed_limit=0.0 Is Not Stop</div>
+    Publishing <code>0.0</code> on <code>/speed_limit</code> removes the speed cap entirely. The robot will
+    accelerate to its configured maximum. To hold position, switch mux to JOYSTICK and publish zero Twist.
+  </div>
+
+  <h3 id="s6-2">6.2 Costmap Service Paths — The Doubled Namespace</h3>
+  <div class="card">
+    <div class="card-title"><span class="dot dot-red"></span>The Namespace Doubling Trap</div>
+    <p>Nav2 costmap nodes are launched with a namespace <em>and</em> a node name that matches the namespace.
+    This creates a doubled path in the service name. Getting it wrong results in a service call that
+    returns success but does nothing — a completely silent failure.</p>
+    <pre style="margin-top:8px;">
+# CORRECT — doubled namespace:
+/global_costmap/global_costmap/set_parameters
+/local_costmap/local_costmap/set_parameters
+
+# WRONG — single namespace (silent no-op):
+/global_costmap/set_parameters
+/local_costmap/set_parameters</pre>
+    <p>Verify the actual running service names with: <code>ros2 service list | grep costmap</code></p>
+  </div>
+
+  <h3 id="s6-3">6.3 VoxelLayer Limitations</h3>
+  <div class="card">
+    <div class="card-title"><span class="dot dot-yellow"></span>VoxelLayer Has No min_obstacle_height</div>
+    <ul style="color:var(--subtext); padding-left:16px; font-size:10px; line-height:2.0;">
+      <li>VoxelLayer does <strong>not</strong> support <code>min_obstacle_height</code> as a dynamic parameter — only <code>enabled</code> bool works dynamically at runtime</li>
+      <li>PUSH_THROUGH disables <strong>both</strong> <code>obstacle_layer.enabled</code> and <code>voxel_layer.enabled</code> via the costmap SetParameters services to prevent car-wash ribbons from appearing as a wall</li>
+      <li>After PUSH_THROUGH exit, both layers are re-enabled. The costmap will rebuild from fresh lidar scans within one scan cycle (~100ms).</li>
+    </ul>
+  </div>
+
+  <h3 id="s6-4">6.4 ESTOP_LOCK is Hardware-Only</h3>
+  <div class="card">
+    <div class="card-title"><span class="dot dot-red"></span>Cannot Set ESTOP_LOCK via ros2 param set</div>
+    <ul style="color:var(--subtext); padding-left:16px; font-size:10px; line-height:2.0;">
+      <li>ESTOP_LOCK mode on cmd_vel_mux can <strong>only</strong> be triggered by the <code>/estop_active</code> signal going True — it is not settable via <code>ros2 param set</code></li>
+      <li>Attempting <code>ros2 param set /cmd_vel_mux_node mode ESTOP_LOCK</code> returns an error</li>
+      <li>After estop is released (<code>/estop_active</code> goes False), the mux reverts to <strong>JOYSTICK</strong> (the safest mode) — the operator must explicitly switch to AUTONOMOUS for autonomous navigation to resume</li>
+    </ul>
+  </div>
+
+  <h3 id="s6-5">6.5 BLIND_DRIVE Must-Knows</h3>
+  <div class="card">
+    <div class="card-title"><span class="dot dot-red"></span>BLIND_DRIVE Timing and State Details</div>
+    <ul style="color:var(--subtext); padding-left:16px; font-size:10px; line-height:2.0;">
+      <li>The mux is set to BLIND_DRIVE <strong>before</strong> the first <code>/cmd_vel_zone_nav</code> is published — there is a 50–100ms gap where the mux switches before the zone_nav_manager starts publishing. This is intentional; the mux needs to be ready before the velocity arrives.</li>
+      <li><code>latest_fitness_</code> is <strong>reset to 999</strong> on BLIND_DRIVE entry — this prevents the exit condition from triggering immediately on stale pre-entry fitness data that happens to be below the threshold</li>
+      <li><code>checkFinishLine()</code> is called <strong>inside the BLIND_DRIVE loop</strong> — if the tunnel is near the finish line, the robot can still detect and respond to the finish line during blind drive</li>
+      <li>The <strong>15s hard timeout</strong> triggers if NDT never recovers (e.g., FAST-LIO2 crash). After timeout, the robot returns to NORMAL_NAV without lidar-verified position — proceed with caution.</li>
+    </ul>
+  </div>
+
+  <h3 id="s6-6">6.6 zone_waypoints.yaml Pitfalls</h3>
+  <div class="card">
+    <div class="card-title"><span class="dot dot-yellow"></span>Common YAML Configuration Mistakes</div>
+    <ul style="color:var(--subtext); padding-left:16px; font-size:10px; line-height:2.0;">
+      <li><strong>Do NOT add a tunnel_exit zone with <code>mode=NORMAL_NAV</code></strong> — it sets <code>active_zone_idx_</code> and blocks all other zone triggers within exit_radius for as long as the robot remains inside that radius</li>
+      <li>The zone entry loop <strong>skips zones whose mode == current_mode_</strong> — this is a feature, not a bug. It prevents NORMAL_NAV marker zones from re-locking zone detection. Side effect: you can't chain two same-mode zones that are close together.</li>
+      <li><strong><code>radius</code> must be strictly less than <code>exit_radius</code></strong> — hysteresis is required. Equal values cause repeated mode flip-flop as the robot hovers at the boundary. The parser rejects equal values at startup.</li>
+      <li>An <strong>unlabeled zone</strong> (no <code>label:</code> field) loads silently with <code>label=""</code> — no warning. This makes debug logs harder to read.</li>
+      <li>A <strong>zone without <code>mode:</code></strong> is rejected at startup with an error — it does not silently default.</li>
+    </ul>
+  </div>
+
+  <h3 id="s6-7">6.7 lidar_odom_gate Must Always Run with use_localization</h3>
+  <div class="card">
+    <div class="card-title"><span class="dot dot-purple"></span>Gate Node Is Not Optional</div>
+    <ul style="color:var(--subtext); padding-left:16px; font-size:10px; line-height:2.0;">
+      <li>EKF2 subscribes to <code>/lidar_odometry_gated</code> — the gate node's output. <strong>Without the gate node running, EKF2 receives no lidar odometry at all</strong>, even when zone_nav is in NORMAL_NAV.</li>
+      <li>The gate has a <strong>5s watchdog</strong>: if zone_nav_manager crashes while in BLIND_DRIVE (gate closed), the gate automatically re-opens after 5s of silence on <code>/nav_mode</code>. This prevents EKF2 from starving permanently if the manager crashes mid-tunnel.</li>
+      <li>Default mode is <strong>INIT</strong>, which keeps the gate open (pass-through). Safe for development runs without zone_nav active.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══ SECTION 7 ═══ -->
+<div class="page section pagebreak" id="s7">
+  <div class="section-header">
+    <span class="section-num">7</span>
+    <h2>Debugging Checklist</h2>
+  </div>
+
+  <p>Step-by-step diagnostics. Work top-to-bottom. Each step assumes the previous passes.</p>
+
+  <h3>Topics to Monitor During a Test Run</h3>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="dot dot-cyan"></span>Monitor Commands</div>
+      <pre>
+# State machine state (expect INIT until green light)
+ros2 topic echo /nav_mode
+
+# Mux arbitration (expect AUTONOMOUS during Nav2 run)
+ros2 topic echo /mux_mode
+
+# NDT quality: >0.8 in tunnel, <0.8 after exit
+ros2 topic echo /ndt_fitness_score
+
+# Speed cap active
+ros2 topic echo /speed_limit
+
+# What actually reaches the motors
+ros2 topic echo /cmd_vel_safe
+
+# Must be False for robot to move
+ros2 topic echo /estop_active
+
+# Robot position in map frame
+ros2 topic echo /odometry/filtered --field pose.pose.position</pre>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>Service Verification Commands</div>
+      <pre>
+# Verify costmap services exist (doubled namespace)
+ros2 service list | grep global_costmap
+ros2 service list | grep local_costmap
+ros2 service list | grep cmd_vel_mux_node
+
+# Manually trigger green light (bench test)
+ros2 topic pub --once /green_light   std_msgs/msg/Bool "data: true"
+
+# Check current mux mode
+ros2 param get /cmd_vel_mux_node mode
+
+# Force AUTONOMOUS mode manually
+ros2 param set /cmd_vel_mux_node mode AUTONOMOUS
+
+# Check node list
+ros2 node list | grep -E   "zone_nav|cmd_vel_mux|lidar_odom_gate"</pre>
+    </div>
+  </div>
+
+  <h3>Common Failure Modes and Diagnostics</h3>
+  <table>
+    <thead>
+      <tr><th>Symptom</th><th>First Check</th><th>Likely Cause</th><th>Fix</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Robot won't move after green light</strong></td>
+        <td><code>ros2 topic echo /mux_mode</code></td>
+        <td>Mux still in JOYSTICK, or <code>/estop_active</code> is True</td>
+        <td>Check <code>/estop_active</code>. Manually set mux to AUTONOMOUS if estop clear.</td>
+      </tr>
+      <tr>
+        <td><strong>Robot ignores zone entry</strong></td>
+        <td><code>ros2 topic echo /nav_mode</code></td>
+        <td>Zone coordinates wrong vs actual robot position, or zone has same mode as current</td>
+        <td>Echo <code>/odometry/filtered</code> near zone. Compare against YAML coordinates. Check mode != current_mode_ rule.</td>
+      </tr>
+      <tr>
+        <td><strong>Speed doesn't change in zone</strong></td>
+        <td><code>ros2 topic echo /speed_limit</code></td>
+        <td>speed_limit not publishing, or controller_server not running</td>
+        <td>Check zone_nav_manager is alive. Verify controller_server node is up with <code>ros2 node list</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Costmap not updating in PUSH_THROUGH</strong></td>
+        <td><code>ros2 service list | grep costmap</code></td>
+        <td>Wrong service path (single namespace instead of doubled)</td>
+        <td>Verify service path has doubled namespace. See Section 6.2.</td>
+      </tr>
+      <tr>
+        <td><strong>Robot drifts severely in tunnel</strong></td>
+        <td><code>ros2 topic echo /lidar_odometry_gated</code></td>
+        <td>Gate not closing — lidar still feeding EKF2 with corrupt odometry during BLIND_DRIVE</td>
+        <td>Confirm lidar_odom_gate node is running. Check /nav_mode is publishing BLIND_DRIVE. Check gate node logs.</td>
+      </tr>
+      <tr>
+        <td><strong>DONE never triggered at finish</strong></td>
+        <td>Check finish_line coordinates in YAML</td>
+        <td>Finish zone coordinates wrong, or lap counter never reached total_laps</td>
+        <td>Echo <code>/odometry/filtered</code> at finish. Verify <code>/ndt_fitness_score</code> recovered after tunnel (needed for position accuracy).</td>
+      </tr>
+      <tr>
+        <td><strong>EKF2 has no lidar input</strong></td>
+        <td><code>ros2 topic hz /lidar_odometry_gated</code></td>
+        <td>lidar_odom_gate not running, or gate stuck closed (zone_nav crashed in BLIND_DRIVE)</td>
+        <td>Start lidar_odom_gate. If crashed mid-tunnel, gate re-opens after 5s watchdog — or restart gate node.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-good">
+    <div class="callout-title">Quick Health Check</div>
+    Run <code>scripts/health_check_zone_nav.sh</code> before every test run. It checks all topics,
+    services, and current mode values in under 30 seconds and gives you a PASS/FAIL summary.
+  </div>
+</div>
+
+<!-- ═══ SECTION 8 ═══ -->
+<div class="page section pagebreak" id="s8">
+  <div class="section-header">
+    <span class="section-num green">8</span>
+    <h2>Scripts Reference</h2>
+  </div>
+
+  <p>
+    All scripts live in <code>scripts/</code> at the repository root. Run <code>chmod +x scripts/*.sh</code>
+    once after cloning. All scripts require a sourced ROS 2 environment.
+  </p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>health_check_zone_nav.sh</div>
+      <p><strong>Pre-run sanity check.</strong> Run before every test. Checks all required topics are
+      publishing (<code>/nav_mode</code>, <code>/mux_mode</code>, <code>/odometry/filtered</code>,
+      <code>/ndt_fitness_score</code>, <code>/cmd_vel_safe</code>). Verifies all three SetParameters
+      services are available. Reads current mode values. Prints colour-coded PASS/FAIL for each check.
+      Exits 0 if all pass, 1 if any fail.</p>
+      <pre>./scripts/health_check_zone_nav.sh</pre>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-cyan"></span>inspect_zone_nav.sh</div>
+      <p><strong>Live dashboard.</strong> Updates every 1 second. Shows current state machine mode,
+      mux mode, e-stop status, NDT fitness score, robot X/Y position, active speed limit,
+      and current <code>/cmd_vel_safe</code> output. Handles timeouts gracefully (shows TIMEOUT in red).
+      Press Ctrl-C to exit.</p>
+      <pre>./scripts/inspect_zone_nav.sh</pre>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-yellow"></span>trigger_green_light.sh</div>
+      <p><strong>Bench testing without the physical green light.</strong> Publishes a single True message
+      on <code>/green_light</code> to trigger the INIT → NORMAL_NAV transition. Use this when developing
+      on a bench without the physical starting light hardware connected.</p>
+      <pre>./scripts/trigger_green_light.sh</pre>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot dot-purple"></span>set_mux_mode.sh</div>
+      <p><strong>Manual mode switch helper.</strong> Calls <code>ros2 param set</code> on
+      <code>/cmd_vel_mux_node</code> to change mux mode. Accepts JOYSTICK, AUTONOMOUS, or BLIND_DRIVE.
+      Refuses ESTOP_LOCK (hardware-only) with an explanatory error. Prints current mode if called
+      with no argument.</p>
+      <pre>./scripts/set_mux_mode.sh AUTONOMOUS
+./scripts/set_mux_mode.sh JOYSTICK</pre>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Recommended Test Run Order</div>
+    1. Source ROS 2 workspace. 2. Launch full stack. 3. Run <code>health_check_zone_nav.sh</code> — fix any FAILs.
+    4. Open <code>inspect_zone_nav.sh</code> in a second terminal. 5. Run <code>trigger_green_light.sh</code>.
+    6. Watch inspect dashboard: nav_mode should change INIT → NORMAL_NAV, mux_mode → AUTONOMOUS.
+  </div>
+
+  <hr class="divider"/>
+  <p style="text-align:center; color: var(--muted); font-size:9px;">
+    DIY Robot Challenge 2026 — Zone-Aware Navigation Software Design Guide v1.0 — Team Juggernauts — 2026
+  </p>
+</div>
+
+
+<script>
+document.querySelectorAll('.card-title').forEach(function(title) {
+  var btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = 'copy';
+  btn.addEventListener('click', function() {
+    var card = title.closest('.card');
+    var text = card.innerText.replace(/^copy$/m, '').trim();
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = 'copied!';
+      setTimeout(function() { btn.textContent = 'copy'; }, 1500);
+    });
+  });
+  title.appendChild(btn);
+});
+</script>
+
+</body>
+</html>
