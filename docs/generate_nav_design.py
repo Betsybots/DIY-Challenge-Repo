@@ -224,91 +224,147 @@ SVG_TUNNEL = """
 # Diagram 5 — Course zone map (hand-crafted SVG)
 # ─────────────────────────────────────────────────────────────────────────────
 SVG_COURSE_MAP = """
-<svg viewBox="0 0 760 420" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif" font-size="9">
-  <rect width="760" height="420" fill="#0f172a" rx="8"/>
+<svg viewBox="0 0 820 500" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif" font-size="9">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#64748b"/>
+    </marker>
+    <marker id="arr-grn" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
+    </marker>
+  </defs>
 
-  <!-- Outer boundary -->
-  <rect x="20" y="20" width="720" height="380" fill="none" stroke="#334155" stroke-width="2" rx="6"/>
+  <rect width="820" height="500" fill="#0f172a" rx="8"/>
 
-  <!-- START/FINISH -->
-  <rect x="300" y="340" width="160" height="44" fill="#1e293b" stroke="#22c55e" stroke-width="1.5" rx="4"/>
-  <text x="380" y="358" text-anchor="middle" fill="#22c55e" font-weight="600">START / FINISH</text>
-  <text x="380" y="374" text-anchor="middle" fill="#94a3b8">32" wide straight</text>
+  <!-- ── TITLE ── -->
+  <text x="410" y="22" text-anchor="middle" fill="#475569" font-size="9" letter-spacing="1">COURSE ROUTE — SEQUENTIAL ZONE MAP  (approximate layout, not to scale)</text>
 
-  <!-- Car wash -->
-  <rect x="460" y="340" width="120" height="44" fill="#172554" stroke="#3b82f6" stroke-width="1.5" rx="4"/>
-  <text x="520" y="358" text-anchor="middle" fill="#93c5fd" font-weight="600">CAR WASH</text>
-  <text x="520" y="370" text-anchor="middle" fill="#64748b">hanging ribbons</text>
-  <text x="520" y="382" text-anchor="middle" fill="#ef4444">⚠ costmap filter</text>
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 1 (top, left→right): START → GRAVEL → BANK -->
+  <!-- ═══════════════════════════════════════════════ -->
 
-  <!-- Hoop section -->
-  <rect x="580" y="240" width="120" height="90" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" rx="4"/>
-  <text x="640" y="258" text-anchor="middle" fill="#c4b5fd" font-weight="600">HOOP</text>
-  <text x="640" y="271" text-anchor="middle" fill="#94a3b8">random positions</text>
-  <text x="640" y="284" text-anchor="middle" fill="#94a3b8">36" wide</text>
-  <text x="640" y="298" text-anchor="middle" fill="#22c55e">NORMAL_NAV</text>
+  <!-- 1. START / FINISH -->
+  <rect x="30" y="40" width="130" height="50" fill="#1e293b" stroke="#22c55e" stroke-width="1.5" rx="4"/>
+  <text x="95" y="59" text-anchor="middle" fill="#22c55e" font-weight="700" font-size="10">① START / FINISH</text>
+  <text x="95" y="73" text-anchor="middle" fill="#94a3b8">32" wide · flat</text>
+  <text x="95" y="85" text-anchor="middle" fill="#22c55e" font-size="8">NORMAL_NAV</text>
 
-  <!-- Obstacle section (buckets) -->
-  <rect x="200" y="180" width="260" height="150" fill="#1c1917" stroke="#f97316" stroke-width="1.5" rx="4"/>
-  <text x="330" y="198" text-anchor="middle" fill="#fdba74" font-weight="600">OBSTACLE SECTION</text>
-  <text x="330" y="211" text-anchor="middle" fill="#94a3b8">2–9 gallon buckets (random)</text>
-  <!-- Bucket circles -->
-  <circle cx="270" cy="250" r="22" fill="#292524" stroke="#f97316" stroke-width="1.2" stroke-dasharray="4,2"/>
-  <circle cx="320" cy="280" r="22" fill="#292524" stroke="#f97316" stroke-width="1.2" stroke-dasharray="4,2"/>
-  <circle cx="370" cy="245" r="22" fill="#292524" stroke="#f97316" stroke-width="1.2" stroke-dasharray="4,2"/>
-  <circle cx="410" cy="290" r="22" fill="#292524" stroke="#f97316" stroke-width="1.2" stroke-dasharray="4,2"/>
-  <text x="330" y="320" text-anchor="middle" fill="#f97316">NAVIGATE_AROUND</text>
+  <!-- arrow → -->
+  <line x1="160" y1="65" x2="195" y2="65" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
 
-  <!-- Gravel + ramps (top) -->
-  <rect x="140" y="30" width="460" height="70" fill="#1c1917" stroke="#eab308" stroke-width="1.5" rx="4"/>
-  <text x="370" y="50" text-anchor="middle" fill="#fde68a" font-weight="600">GRAVEL SECTION  +  RAMPS</text>
-  <text x="370" y="65" text-anchor="middle" fill="#94a3b8">4×8 box / 1.5" deep pea gravel  ·  2" ramp down+up  ·  48" wide</text>
-  <text x="370" y="80" text-anchor="middle" fill="#eab308">SLOW_NAV (0.3 m/s)  —  IMU pitch detection</text>
+  <!-- 2. POTHOLE / WIDE -->
+  <rect x="195" y="40" width="130" height="50" fill="#1a1a1a" stroke="#94a3b8" stroke-width="1" rx="4" stroke-dasharray="4,2"/>
+  <text x="260" y="59" text-anchor="middle" fill="#94a3b8" font-weight="700" font-size="10">② POTHOLE / WIDE</text>
+  <text x="260" y="73" text-anchor="middle" fill="#64748b">0.75" bumps · 11×26'</text>
+  <text x="260" y="85" text-anchor="middle" fill="#94a3b8" font-size="8">NORMAL_NAV</text>
 
-  <!-- Bank section (top right) -->
-  <rect x="610" y="30" width="120" height="70" fill="#1a1a2e" stroke="#6366f1" stroke-width="1.5" rx="4"/>
-  <text x="670" y="55" text-anchor="middle" fill="#a5b4fc" font-weight="600">BANK</text>
-  <text x="670" y="68" text-anchor="middle" fill="#94a3b8">8.5° lateral tilt</text>
-  <text x="670" y="81" text-anchor="middle" fill="#6366f1">SLOW_NAV</text>
+  <!-- arrow → -->
+  <line x1="325" y1="65" x2="360" y2="65" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
 
-  <!-- Narrow section (left) -->
-  <rect x="30" y="120" width="100" height="140" fill="#1a1a1a" stroke="#84cc16" stroke-width="1.5" rx="4"/>
-  <text x="80" y="145" text-anchor="middle" fill="#bef264" font-weight="600">NARROW</text>
-  <text x="80" y="158" text-anchor="middle" fill="#94a3b8">20" wide</text>
-  <text x="80" y="171" text-anchor="middle" fill="#94a3b8">curved path</text>
-  <text x="80" y="188" text-anchor="middle" fill="#84cc16">SLOW_NAV</text>
-  <text x="80" y="201" text-anchor="middle" fill="#84cc16">&lt;4cm lateral</text>
-  <text x="80" y="214" text-anchor="middle" fill="#84cc16">accuracy req.</text>
+  <!-- 3. GRAVEL + RAMPS -->
+  <rect x="360" y="40" width="150" height="50" fill="#1c1917" stroke="#eab308" stroke-width="1.5" rx="4"/>
+  <text x="435" y="57" text-anchor="middle" fill="#fde68a" font-weight="700" font-size="10">③ GRAVEL + RAMPS</text>
+  <text x="435" y="70" text-anchor="middle" fill="#94a3b8">4×8 gravel box · 2" ramps</text>
+  <text x="435" y="83" text-anchor="middle" fill="#eab308" font-size="8">SLOW_NAV · IMU pitch detect</text>
 
-  <!-- Tunnel (left lower) -->
-  <rect x="30" y="270" width="160" height="60" fill="#450a0a" stroke="#ef4444" stroke-width="1.5" rx="4"/>
-  <text x="110" y="293" text-anchor="middle" fill="#fca5a5" font-weight="600">TUNNEL</text>
-  <text x="110" y="306" text-anchor="middle" fill="#94a3b8">32" wide · 6" long</text>
-  <text x="110" y="319" text-anchor="middle" fill="#ef4444">BLIND_DRIVE ⚡</text>
+  <!-- arrow → -->
+  <line x1="510" y1="65" x2="545" y2="65" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
 
-  <!-- Ramp section (bottom left) -->
-  <rect x="30" y="340" width="150" height="44" fill="#1c1917" stroke="#eab308" stroke-width="1.5" rx="4"/>
-  <text x="105" y="358" text-anchor="middle" fill="#fde68a" font-weight="600">RAMP / HELIX</text>
-  <text x="105" y="372" text-anchor="middle" fill="#94a3b8">4' radius · 11% grade</text>
+  <!-- 4. BANK -->
+  <rect x="545" y="40" width="120" height="50" fill="#1a1a2e" stroke="#6366f1" stroke-width="1.5" rx="4"/>
+  <text x="605" y="59" text-anchor="middle" fill="#a5b4fc" font-weight="700" font-size="10">④ BANK</text>
+  <text x="605" y="73" text-anchor="middle" fill="#94a3b8">8.5° lateral tilt · 48"</text>
+  <text x="605" y="85" text-anchor="middle" fill="#6366f1" font-size="8">SLOW_NAV</text>
 
-  <!-- Pothole (wide section) -->
-  <rect x="140" y="110" width="200" height="60" fill="#1a1a1a" stroke="#94a3b8" stroke-width="1" rx="4" stroke-dasharray="4,2"/>
-  <text x="240" y="132" text-anchor="middle" fill="#94a3b8" font-weight="600">POTHOLE / WIDE</text>
-  <text x="240" y="147" text-anchor="middle" fill="#64748b">0.75" bumps · 11×26' area</text>
-  <text x="240" y="160" text-anchor="middle" fill="#94a3b8">NORMAL_NAV</text>
+  <!-- arrow ↓ (right side, going down) -->
+  <line x1="665" y1="65" x2="710" y2="65" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="710" y1="65" x2="710" y2="160" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
 
-  <!-- Arrows showing rough flow direction -->
-  <text x="380" y="410" text-anchor="middle" fill="#475569" font-size="8">Course layout approximate — not to scale</text>
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 2 (right→left): HOOP → OBSTACLE           -->
+  <!-- ═══════════════════════════════════════════════ -->
 
-  <!-- Legend -->
-  <rect x="590" y="355" width="10" height="10" fill="#450a0a" stroke="#ef4444" stroke-width="1" rx="1"/>
-  <text x="604" y="364" fill="#94a3b8">BLIND_DRIVE</text>
-  <rect x="590" y="370" width="10" height="10" fill="#14532d" stroke="#22c55e" stroke-width="1" rx="1"/>
-  <text x="604" y="379" fill="#94a3b8">NORMAL_NAV</text>
-  <rect x="670" y="355" width="10" height="10" fill="#164e63" stroke="#06b6d4" stroke-width="1" rx="1"/>
-  <text x="684" y="364" fill="#94a3b8">SLOW_NAV</text>
-  <rect x="670" y="370" width="10" height="10" fill="#1c1917" stroke="#f97316" stroke-width="1" rx="1"/>
-  <text x="684" y="379" fill="#94a3b8">NAVIGATE_AROUND</text>
+  <!-- 5. HOOP -->
+  <rect x="545" y="160" width="160" height="50" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" rx="4"/>
+  <text x="625" y="179" text-anchor="middle" fill="#c4b5fd" font-weight="700" font-size="10">⑤ HOOP SECTION</text>
+  <text x="625" y="193" text-anchor="middle" fill="#94a3b8">random hoop positions · 36"</text>
+  <text x="625" y="205" text-anchor="middle" fill="#a855f7" font-size="8">NORMAL_NAV</text>
+
+  <!-- arrow ← -->
+  <line x1="545" y1="185" x2="510" y2="185" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 6. OBSTACLE (buckets) -->
+  <rect x="280" y="150" width="230" height="80" fill="#1c1917" stroke="#f97316" stroke-width="1.5" rx="4"/>
+  <text x="395" y="170" text-anchor="middle" fill="#fdba74" font-weight="700" font-size="10">⑥ OBSTACLE — BUCKETS</text>
+  <text x="395" y="183" text-anchor="middle" fill="#94a3b8">2–9 × 5-gal buckets (random)</text>
+  <!-- mini bucket dots -->
+  <circle cx="320" cy="210" r="10" fill="#292524" stroke="#f97316" stroke-width="1" stroke-dasharray="3,2"/>
+  <circle cx="355" cy="200" r="10" fill="#292524" stroke="#f97316" stroke-width="1" stroke-dasharray="3,2"/>
+  <circle cx="390" cy="215" r="10" fill="#292524" stroke="#f97316" stroke-width="1" stroke-dasharray="3,2"/>
+  <circle cx="430" cy="205" r="10" fill="#292524" stroke="#f97316" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="395" y="225" text-anchor="middle" fill="#f97316" font-size="8">NAVIGATE_AROUND</text>
+
+  <!-- arrow ← -->
+  <line x1="280" y1="185" x2="245" y2="185" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 7. CAR WASH -->
+  <rect x="100" y="160" width="145" height="50" fill="#172554" stroke="#3b82f6" stroke-width="1.5" rx="4"/>
+  <text x="172" y="179" text-anchor="middle" fill="#93c5fd" font-weight="700" font-size="10">⑦ CAR WASH</text>
+  <text x="172" y="193" text-anchor="middle" fill="#64748b">hanging ribbons · 48"</text>
+  <text x="172" y="205" text-anchor="middle" fill="#ef4444" font-size="8">PUSH_THROUGH ⚠</text>
+
+  <!-- arrow ↓ -->
+  <line x1="100" y1="185" x2="55" y2="185" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="55" y1="185" x2="55" y2="290" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 3 (left→right): NARROW → TUNNEL → RAMP    -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- 8. NARROW -->
+  <rect x="30" y="290" width="130" height="60" fill="#1a1a1a" stroke="#84cc16" stroke-width="1.5" rx="4"/>
+  <text x="95" y="309" text-anchor="middle" fill="#bef264" font-weight="700" font-size="10">⑧ NARROW</text>
+  <text x="95" y="323" text-anchor="middle" fill="#94a3b8">20" wide · curved</text>
+  <text x="95" y="336" text-anchor="middle" fill="#84cc16" font-size="8">SLOW_NAV · &lt;4cm accuracy</text>
+  <text x="95" y="347" text-anchor="middle" fill="#84cc16" font-size="8">req.</text>
+
+  <!-- arrow → -->
+  <line x1="160" y1="320" x2="195" y2="320" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 9. TUNNEL -->
+  <rect x="195" y="290" width="150" height="60" fill="#450a0a" stroke="#ef4444" stroke-width="1.5" rx="4"/>
+  <text x="270" y="309" text-anchor="middle" fill="#fca5a5" font-weight="700" font-size="10">⑨ TUNNEL</text>
+  <text x="270" y="323" text-anchor="middle" fill="#94a3b8">32" wide · 6' long · foil-lined</text>
+  <text x="270" y="337" text-anchor="middle" fill="#ef4444" font-size="8">BLIND_DRIVE ⚡ lidar+RF dead</text>
+  <text x="270" y="349" text-anchor="middle" fill="#64748b" font-size="8">wheel+IMU dead reckoning</text>
+
+  <!-- arrow → -->
+  <line x1="345" y1="320" x2="380" y2="320" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 10. RAMP / HELIX -->
+  <rect x="380" y="290" width="160" height="60" fill="#1c1917" stroke="#eab308" stroke-width="1.5" rx="4"/>
+  <text x="460" y="309" text-anchor="middle" fill="#fde68a" font-weight="700" font-size="10">⑩ RAMP / HELIX</text>
+  <text x="460" y="323" text-anchor="middle" fill="#94a3b8">4' radius · 11% grade · 32"</text>
+  <text x="460" y="337" text-anchor="middle" fill="#eab308" font-size="8">SLOW_NAV · IMU pitch + roll</text>
+
+  <!-- arrow → then back to START (loop arrow) -->
+  <line x1="540" y1="320" x2="680" y2="320" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="680" y1="320" x2="680" y2="440" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="680" y1="440" x2="95" y2="440" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="95" y1="440" x2="95" y2="392" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="410" y="458" text-anchor="middle" fill="#475569" font-size="8">↩ returns to START / FINISH</text>
+
+  <!-- ── LEGEND ── -->
+  <rect x="600" y="270" width="10" height="10" fill="#450a0a" stroke="#ef4444" stroke-width="1" rx="1"/>
+  <text x="614" y="279" fill="#94a3b8">BLIND_DRIVE</text>
+  <rect x="600" y="286" width="10" height="10" fill="#1e293b" stroke="#22c55e" stroke-width="1" rx="1"/>
+  <text x="614" y="295" fill="#94a3b8">NORMAL_NAV</text>
+  <rect x="600" y="302" width="10" height="10" fill="#1c1917" stroke="#eab308" stroke-width="1" rx="1"/>
+  <text x="614" y="311" fill="#94a3b8">SLOW_NAV</text>
+  <rect x="700" y="270" width="10" height="10" fill="#1c1917" stroke="#f97316" stroke-width="1" rx="1"/>
+  <text x="714" y="279" fill="#94a3b8">NAVIGATE_AROUND</text>
+  <rect x="700" y="286" width="10" height="10" fill="#172554" stroke="#3b82f6" stroke-width="1" rx="1"/>
+  <text x="714" y="295" fill="#94a3b8">PUSH_THROUGH</text>
 </svg>
 """
 
