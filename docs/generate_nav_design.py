@@ -576,7 +576,7 @@ HTML = f"""<!DOCTYPE html>
   <div class="callout callout-warn">
     <div class="callout-title">Map Quality is Foundation</div>
     The quality of this single mapping run determines how well NDT-OMP localises on competition day.
-    Drive slowly, complete full loop closure, verify in RViz before saving. Build this map early — it's
+    Drive slowly, complete full loop closure, verify in RViz before saving. We need to build this map early — it's
     the single most important pre-competition task.
   </div>
 
