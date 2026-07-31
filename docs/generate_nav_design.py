@@ -111,7 +111,7 @@ digraph costmap {
     fontname="Inter" fontsize=10 fontcolor="#94a3b8"
     color="#334155" style=rounded bgcolor="#111827"
 
-    obs_g  [label="obstacle_layer\\n/hesai/points → mark/clear" fillcolor="#172554" fontcolor="#93c5fd" color="#3b82f6"]
+    obs_g  [label="obstacle_layer\\n/hesai/points\\n(marks hits, clears free space)" fillcolor="#172554" fontcolor="#93c5fd" color="#3b82f6"]
     inf_g  [label="inflation_layer\\nradius: 0.45m" fillcolor="#14532d" fontcolor="#86efac" color="#22c55e"]
     obs_g -> inf_g [label="feeds"]
   }
@@ -664,9 +664,11 @@ HTML = f"""<!DOCTYPE html>
   <div class="grid3">
     <div class="card">
       <div class="card-title"><span class="dot dot-cyan"></span>obstacle_layer</div>
-      <p>Subscribes to <code>/hesai/points</code>. Marks cells occupied when a point lands within
-      <code>max_obstacle_height: 2.0m</code> and <code>obstacle_max_range: 5.0m</code>.
-      Raycasts back to robot to clear free space. Updates at 10 Hz.</p>
+      <p>Subscribes to <code>/hesai/points</code>. When a lidar point lands on a surface,
+      it <strong>marks</strong> that cell occupied. It then raytraces the beam path back to
+      the robot and <strong>clears</strong> every cell along the way as free space.
+      Within <code>max_obstacle_height: 2.0m</code> and <code>obstacle_max_range: 5.0m</code>.
+      Updates at 10 Hz.</p>
     </div>
     <div class="card">
       <div class="card-title"><span class="dot dot-green"></span>inflation_layer</div>

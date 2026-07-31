@@ -486,27 +486,28 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
 
   <div class="diagram-container">
     <div class="diagram-label">Costmap Layer Architecture</div>
-    <svg width="479pt" height="342pt"
- viewBox="0.00 0.00 479.00 341.50" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 337.5)">
+    <svg width="479pt" height="347pt"
+ viewBox="0.00 0.00 479.00 346.50" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 342.5)">
 <title>costmap</title>
-<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-337.5 475,-337.5 475,4 -4,4"/>
+<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-342.5 475,-342.5 475,4 -4,4"/>
 <g id="clust1" class="cluster">
 <title>cluster_global</title>
-<path fill="#111827" stroke="#334155" d="M20,-73C20,-73 207,-73 207,-73 213,-73 219,-79 219,-85 219,-85 219,-213 219,-213 219,-219 213,-225 207,-225 207,-225 20,-225 20,-225 14,-225 8,-219 8,-213 8,-213 8,-85 8,-85 8,-79 14,-73 20,-73"/>
-<text text-anchor="middle" x="113.5" y="-213" font-family="Inter" font-size="10.00" fill="#94a3b8">Global Costmap &#160;(rolling_window: false)</text>
+<path fill="#111827" stroke="#334155" d="M20,-73C20,-73 207,-73 207,-73 213,-73 219,-79 219,-85 219,-85 219,-218 219,-218 219,-224 213,-230 207,-230 207,-230 20,-230 20,-230 14,-230 8,-224 8,-218 8,-218 8,-85 8,-85 8,-79 14,-73 20,-73"/>
+<text text-anchor="middle" x="113.5" y="-218" font-family="Inter" font-size="10.00" fill="#94a3b8">Global Costmap &#160;(rolling_window: false)</text>
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_local</title>
-<path fill="#111827" stroke="#334155" d="M239,-154C239,-154 451,-154 451,-154 457,-154 463,-160 463,-166 463,-166 463,-313.5 463,-313.5 463,-319.5 457,-325.5 451,-325.5 451,-325.5 239,-325.5 239,-325.5 233,-325.5 227,-319.5 227,-313.5 227,-313.5 227,-166 227,-166 227,-160 233,-154 239,-154"/>
-<text text-anchor="middle" x="345" y="-313.5" font-family="Inter" font-size="10.00" fill="#94a3b8">Local Costmap &#160;(rolling_window: true, 4×4m)</text>
+<path fill="#111827" stroke="#334155" d="M239,-156.5C239,-156.5 451,-156.5 451,-156.5 457,-156.5 463,-162.5 463,-168.5 463,-168.5 463,-318.5 463,-318.5 463,-324.5 457,-330.5 451,-330.5 451,-330.5 239,-330.5 239,-330.5 233,-330.5 227,-324.5 227,-318.5 227,-318.5 227,-168.5 227,-168.5 227,-162.5 233,-156.5 239,-156.5"/>
+<text text-anchor="middle" x="345" y="-318.5" font-family="Inter" font-size="10.00" fill="#94a3b8">Local Costmap &#160;(rolling_window: true, 4×4m)</text>
 </g>
 <!-- obs_g -->
 <g id="node1" class="node">
 <title>obs_g</title>
-<path fill="#172554" stroke="#3b82f6" stroke-width="1.2" d="M174,-198C174,-198 52,-198 52,-198 46,-198 40,-192 40,-186 40,-186 40,-174 40,-174 40,-168 46,-162 52,-162 52,-162 174,-162 174,-162 180,-162 186,-168 186,-174 186,-174 186,-186 186,-186 186,-192 180,-198 174,-198"/>
-<text text-anchor="middle" x="113" y="-183" font-family="Inter" font-size="10.00" fill="#93c5fd">obstacle_layer</text>
-<text text-anchor="middle" x="113" y="-172" font-family="Inter" font-size="10.00" fill="#93c5fd">/hesai/points → mark/clear</text>
+<path fill="#172554" stroke="#3b82f6" stroke-width="1.2" d="M183.5,-203C183.5,-203 42.5,-203 42.5,-203 36.5,-203 30.5,-197 30.5,-191 30.5,-191 30.5,-174 30.5,-174 30.5,-168 36.5,-162 42.5,-162 42.5,-162 183.5,-162 183.5,-162 189.5,-162 195.5,-168 195.5,-174 195.5,-174 195.5,-191 195.5,-191 195.5,-197 189.5,-203 183.5,-203"/>
+<text text-anchor="middle" x="113" y="-191" font-family="Inter" font-size="10.00" fill="#93c5fd">obstacle_layer</text>
+<text text-anchor="middle" x="113" y="-180" font-family="Inter" font-size="10.00" fill="#93c5fd">/hesai/points</text>
+<text text-anchor="middle" x="113" y="-169" font-family="Inter" font-size="10.00" fill="#93c5fd">(marks hits, clears free space)</text>
 </g>
 <!-- inf_g -->
 <g id="node2" class="node">
@@ -518,8 +519,8 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
 <!-- obs_g&#45;&gt;inf_g -->
 <g id="edge1" class="edge">
 <title>obs_g&#45;&gt;inf_g</title>
-<path fill="none" stroke="#475569" d="M113,-161.62C113,-161.62 113,-127.03 113,-127.03"/>
-<polygon fill="#475569" stroke="#475569" points="116.5,-127.03 113,-117.03 109.5,-127.03 116.5,-127.03"/>
+<path fill="none" stroke="#475569" d="M113,-161.86C113,-161.86 113,-127.13 113,-127.13"/>
+<polygon fill="#475569" stroke="#475569" points="116.5,-127.13 113,-117.13 109.5,-127.13 116.5,-127.13"/>
 <text text-anchor="middle" x="125" y="-137.6" font-family="Inter" font-size="8.00" fill="#94a3b8">feeds</text>
 </g>
 <!-- smac -->
@@ -539,23 +540,23 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
 <!-- vox_l -->
 <g id="node3" class="node">
 <title>vox_l</title>
-<path fill="#172554" stroke="#3b82f6" stroke-width="1.2" d="M403.5,-298.5C403.5,-298.5 286.5,-298.5 286.5,-298.5 280.5,-298.5 274.5,-292.5 274.5,-286.5 274.5,-286.5 274.5,-274.5 274.5,-274.5 274.5,-268.5 280.5,-262.5 286.5,-262.5 286.5,-262.5 403.5,-262.5 403.5,-262.5 409.5,-262.5 415.5,-268.5 415.5,-274.5 415.5,-274.5 415.5,-286.5 415.5,-286.5 415.5,-292.5 409.5,-298.5 403.5,-298.5"/>
-<text text-anchor="middle" x="345" y="-283.5" font-family="Inter" font-size="10.00" fill="#93c5fd">voxel_layer</text>
-<text text-anchor="middle" x="345" y="-272.5" font-family="Inter" font-size="10.00" fill="#93c5fd">/hesai/points → 3D voxels</text>
+<path fill="#172554" stroke="#3b82f6" stroke-width="1.2" d="M403.5,-303.5C403.5,-303.5 286.5,-303.5 286.5,-303.5 280.5,-303.5 274.5,-297.5 274.5,-291.5 274.5,-291.5 274.5,-279.5 274.5,-279.5 274.5,-273.5 280.5,-267.5 286.5,-267.5 286.5,-267.5 403.5,-267.5 403.5,-267.5 409.5,-267.5 415.5,-273.5 415.5,-279.5 415.5,-279.5 415.5,-291.5 415.5,-291.5 415.5,-297.5 409.5,-303.5 403.5,-303.5"/>
+<text text-anchor="middle" x="345" y="-288.5" font-family="Inter" font-size="10.00" fill="#93c5fd">voxel_layer</text>
+<text text-anchor="middle" x="345" y="-277.5" font-family="Inter" font-size="10.00" fill="#93c5fd">/hesai/points → 3D voxels</text>
 </g>
 <!-- inf_l -->
 <g id="node4" class="node">
 <title>inf_l</title>
-<path fill="#14532d" stroke="#22c55e" stroke-width="1.2" d="M376,-198C376,-198 314,-198 314,-198 308,-198 302,-192 302,-186 302,-186 302,-174 302,-174 302,-168 308,-162 314,-162 314,-162 376,-162 376,-162 382,-162 388,-168 388,-174 388,-174 388,-186 388,-186 388,-192 382,-198 376,-198"/>
-<text text-anchor="middle" x="345" y="-183" font-family="Inter" font-size="10.00" fill="#86efac">inflation_layer</text>
-<text text-anchor="middle" x="345" y="-172" font-family="Inter" font-size="10.00" fill="#86efac">radius: 0.40m</text>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.2" d="M376,-200.5C376,-200.5 314,-200.5 314,-200.5 308,-200.5 302,-194.5 302,-188.5 302,-188.5 302,-176.5 302,-176.5 302,-170.5 308,-164.5 314,-164.5 314,-164.5 376,-164.5 376,-164.5 382,-164.5 388,-170.5 388,-176.5 388,-176.5 388,-188.5 388,-188.5 388,-194.5 382,-200.5 376,-200.5"/>
+<text text-anchor="middle" x="345" y="-185.5" font-family="Inter" font-size="10.00" fill="#86efac">inflation_layer</text>
+<text text-anchor="middle" x="345" y="-174.5" font-family="Inter" font-size="10.00" fill="#86efac">radius: 0.40m</text>
 </g>
 <!-- vox_l&#45;&gt;inf_l -->
 <g id="edge2" class="edge">
 <title>vox_l&#45;&gt;inf_l</title>
-<path fill="none" stroke="#475569" d="M345,-262.07C345,-262.07 345,-208.32 345,-208.32"/>
-<polygon fill="#475569" stroke="#475569" points="348.5,-208.32 345,-198.32 341.5,-208.32 348.5,-208.32"/>
-<text text-anchor="middle" x="357" y="-235.6" font-family="Inter" font-size="8.00" fill="#94a3b8">feeds</text>
+<path fill="none" stroke="#475569" d="M345,-267.09C345,-267.09 345,-210.75 345,-210.75"/>
+<polygon fill="#475569" stroke="#475569" points="348.5,-210.75 345,-200.75 341.5,-210.75 348.5,-210.75"/>
+<text text-anchor="middle" x="357" y="-240.6" font-family="Inter" font-size="8.00" fill="#94a3b8">feeds</text>
 </g>
 <!-- mppi -->
 <g id="node6" class="node">
@@ -567,25 +568,25 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
 <!-- inf_l&#45;&gt;mppi -->
 <g id="edge4" class="edge">
 <title>inf_l&#45;&gt;mppi</title>
-<path fill="none" stroke="#475569" d="M345,-161.62C345,-161.62 345,-127.03 345,-127.03"/>
-<polygon fill="#475569" stroke="#475569" points="348.5,-127.03 345,-117.03 341.5,-127.03 348.5,-127.03"/>
+<path fill="none" stroke="#475569" d="M345,-164.38C345,-164.38 345,-127.08 345,-127.08"/>
+<polygon fill="#475569" stroke="#475569" points="348.5,-127.08 345,-117.08 341.5,-127.08 348.5,-127.08"/>
 <text text-anchor="middle" x="363" y="-137.6" font-family="Inter" font-size="8.00" fill="#94a3b8">costmap</text>
 </g>
 <!-- note -->
 <g id="node7" class="node">
 <title>note</title>
-<polygon fill="#0f172a" stroke="#22c55e" stroke-width="1.2" points="166,-301 54,-301 54,-260 172,-260 172,-295 166,-301"/>
-<polyline fill="none" stroke="#22c55e" stroke-width="1.2" points="166,-301 166,-295 "/>
-<polyline fill="none" stroke="#22c55e" stroke-width="1.2" points="172,-295 166,-295 "/>
-<text text-anchor="middle" x="113" y="-289" font-family="Inter" font-size="10.00" fill="#22c55e">No static_layer.</text>
-<text text-anchor="middle" x="113" y="-278" font-family="Inter" font-size="10.00" fill="#22c55e">No .pgm file needed.</text>
-<text text-anchor="middle" x="113" y="-267" font-family="Inter" font-size="10.00" fill="#22c55e">All from live lidar.</text>
+<polygon fill="#0f172a" stroke="#22c55e" stroke-width="1.2" points="166,-306 54,-306 54,-265 172,-265 172,-300 166,-306"/>
+<polyline fill="none" stroke="#22c55e" stroke-width="1.2" points="166,-306 166,-300 "/>
+<polyline fill="none" stroke="#22c55e" stroke-width="1.2" points="172,-300 166,-300 "/>
+<text text-anchor="middle" x="113" y="-294" font-family="Inter" font-size="10.00" fill="#22c55e">No static_layer.</text>
+<text text-anchor="middle" x="113" y="-283" font-family="Inter" font-size="10.00" fill="#22c55e">No .pgm file needed.</text>
+<text text-anchor="middle" x="113" y="-272" font-family="Inter" font-size="10.00" fill="#22c55e">All from live lidar.</text>
 </g>
 <!-- note&#45;&gt;obs_g -->
 <g id="edge5" class="edge">
 <title>note&#45;&gt;obs_g</title>
-<path fill="none" stroke="#22c55e" stroke-dasharray="5,2" d="M113,-259.68C113,-259.68 113,-208.1 113,-208.1"/>
-<polygon fill="#22c55e" stroke="#22c55e" points="116.5,-208.1 113,-198.1 109.5,-208.1 116.5,-208.1"/>
+<path fill="none" stroke="#22c55e" stroke-dasharray="5,2" d="M113,-264.66C113,-264.66 113,-213.31 113,-213.31"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="116.5,-213.31 113,-203.31 109.5,-213.31 116.5,-213.31"/>
 </g>
 </g>
 </svg>
@@ -608,9 +609,11 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
   <div class="grid3">
     <div class="card">
       <div class="card-title"><span class="dot dot-cyan"></span>obstacle_layer</div>
-      <p>Subscribes to <code>/hesai/points</code>. Marks cells occupied when a point lands within
-      <code>max_obstacle_height: 2.0m</code> and <code>obstacle_max_range: 5.0m</code>.
-      Raycasts back to robot to clear free space. Updates at 10 Hz.</p>
+      <p>Subscribes to <code>/hesai/points</code>. When a lidar point lands on a surface,
+      it <strong>marks</strong> that cell occupied. It then raytraces the beam path back to
+      the robot and <strong>clears</strong> every cell along the way as free space.
+      Within <code>max_obstacle_height: 2.0m</code> and <code>obstacle_max_range: 5.0m</code>.
+      Updates at 10 Hz.</p>
     </div>
     <div class="card">
       <div class="card-title"><span class="dot dot-green"></span>inflation_layer</div>
