@@ -2,7 +2,7 @@
 """
 generate_nav_design.py
 Generates docs/Navigation_Design_Guide.html + .pdf
-Obstacle course navigation design document — Team Betsybots 2026
+Obstacle course navigation design document — Team Juggernauts 2026
 """
 
 import subprocess
@@ -468,7 +468,7 @@ HTML = f"""<!DOCTYPE html>
     </div>
     <div class="cover-meta-item">
       <div class="label">Team</div>
-      <div class="value">Betsybots</div>
+      <div class="value">Juggernauts</div>
     </div>
   </div>
   <div class="cover-stack">
@@ -1064,7 +1064,7 @@ global_costmap:
 
   <hr class="divider"/>
   <p style="text-align:center; color: var(--muted); font-size:9px;">
-    DIY Robot Challenge 2026 — Obstacle Course Navigation Design v1.0 — Team Betsybots — July 2026
+    DIY Robot Challenge 2026 — Obstacle Course Navigation Design v1.0 — Team Juggernauts — July 2026
   </p>
 </div>
 
