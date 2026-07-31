@@ -409,7 +409,10 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
   <h3 id="s2-1">2.1 LIO-SAM — Offline Map Generation (done once before competition)</h3>
   <p>
     We drive the course once with LIO-SAM running. It builds a globally consistent 3D point cloud map
-    using a factor graph with loop closure. When we're happy with the map quality in RViz, we call the
+    using a factor graph — a statistical graph that links sensor measurements together so errors can be
+    corrected globally. As the robot drives and revisits previously seen places, it performs
+    <em>loop closure</em>: it recognises that it is back at a known location, then pulls the entire trajectory
+    into alignment to remove accumulated drift. When we're happy with the map quality in RViz, we call the
     <code>/lio_sam/save_map</code> service and get three files: <code>CornerMap.pcd</code>,
     <code>SurfMap.pcd</code>, and most importantly <code>GlobalMap.pcd</code> — the combined map
     that everything else works from.
@@ -426,7 +429,9 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
     NDT-OMP (Normal Distributions Transform with OpenMP parallelism) loads <code>GlobalMap.pcd</code>
     at startup and continuously matches each incoming Hesai scan against it. The output is the
     <strong>map→odom transform</strong> — this is what tells Nav2 where the robot is in the global frame.
-    It publishes directly into the TF tree, so Nav2 doesn't need to know anything about how it works.
+    It publishes directly into the <strong>TF tree</strong> — ROS 2's coordinate frame system that tracks
+    the spatial relationship between every frame (map, odom, base_link) at all times — so Nav2 doesn't
+    need to know anything about how it works.
   </p>
   <p>
     AMCL (Adaptive Monte Carlo Localization) is the standard ROS 2 method for estimating robot position — it scatters random guesses across a 2D floor map and converges on the best match. It works fine indoors but falls apart outdoors where there is no clean flat map. NDT-OMP replaces it entirely: instead of a 2D grid, it matches each incoming lidar scan against our 3D point cloud map using fast voxel-based alignment.
@@ -437,7 +442,9 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
   <p>
     FAST-LIO2 runs at 10 Hz — once per lidar scan. Between scans there's a 100ms gap where the
     robot's pose estimate doesn't update. For the MPPI controller running at 20 Hz, this gap
-    causes jerky velocity commands. The dual EKF eliminates this.
+    causes jerky velocity commands. The <strong>dual EKF</strong> (Extended Kalman Filter — a
+    recursive estimator that fuses noisy sensor inputs into a smooth, statistically optimal estimate)
+    eliminates this.
   </p>
 
   <div class="grid2">
@@ -968,8 +975,12 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
   <p>
     This is the default mode for open sections — pothole area, hoop section, wide open areas.
     Nav2's Smac Hybrid-A* planner generates a global path respecting the robot's turn radius.
-    The MPPI controller samples thousands of trajectory rollouts and picks the one that best
-    follows the path while avoiding obstacles. The full live costmap is active.
+    Hybrid-A* is a path-finding algorithm that searches a grid while also accounting for the
+    robot's heading and minimum turning radius — so paths are physically drivable, not just
+    geometrically shortest.
+    The MPPI (Model Predictive Path Integral) controller samples thousands of random trajectory
+    rollouts forward in time and picks the one that best follows the path while avoiding obstacles.
+    The full live costmap is active.
   </p>
   <p>
     Typical speed: <strong>0.5–0.6 m/s</strong>. The costmap accumulates obstacle data as the robot
@@ -992,7 +1003,9 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
   <p>
     The tunnel is the hardest section. The foil-lined foam walls block both lidar returns and RF signals.
     FAST-LIO2 loses its input the moment the robot enters and can't recover until it exits.
-    This is a known, fixed-length obstacle — we handle it with deliberate dead reckoning.
+    This is a known, fixed-length obstacle — we handle it with deliberate <em>dead reckoning</em>:
+    estimating position purely from known starting point, wheel speed, and heading — no external
+    sensor reference.
   </p>
 
   <div class="diagram-container">
