@@ -36,7 +36,7 @@ DOT_LOCALIZATION = """
 digraph localization {
   graph [bgcolor="#0f172a" fontname="Inter" rankdir=LR splines=ortho nodesep=0.6 ranksep=0.9]
   node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.5]
-  edge  [fontname="Inter" fontsize=9 color="#475569"]
+  edge  [fontname="Inter" fontsize=9 color="#475569" fontcolor="#94a3b8"]
 
   hesai   [label="Hesai QT64\\n/hesai/points" fillcolor="#0c1a2e" fontcolor="#0ea5e9" color="#0ea5e9"]
   imu     [label="ACEINNA IMU\\n/imu/data"    fillcolor="#0c1a2e" fontcolor="#a855f7" color="#a855f7"]
@@ -74,7 +74,7 @@ DOT_STATE_MACHINE = """
 digraph state_machine {
   graph [bgcolor="#0f172a" fontname="Inter" rankdir=TB splines=curved nodesep=0.5 ranksep=0.7]
   node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.5 width=1.8]
-  edge  [fontname="Inter" fontsize=8 color="#475569"]
+  edge  [fontname="Inter" fontsize=8 color="#475569" fontcolor="#94a3b8"]
 
   START      [label="START\\nWait for pose" fillcolor="#1e293b" fontcolor="#94a3b8" color="#475569"]
   NORMAL     [label="NORMAL_NAV\\nNav2 Smac+MPPI\\nFull speed"    fillcolor="#14532d" fontcolor="#86efac" color="#22c55e"]
@@ -104,7 +104,7 @@ DOT_COSTMAP = """
 digraph costmap {
   graph [bgcolor="#0f172a" fontname="Inter" rankdir=TB splines=ortho nodesep=0.4 ranksep=0.5]
   node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.2]
-  edge  [fontname="Inter" fontsize=8 color="#475569"]
+  edge  [fontname="Inter" fontsize=8 color="#475569" fontcolor="#94a3b8"]
 
   subgraph cluster_global {
     label="Global Costmap  (rolling_window: false)"
