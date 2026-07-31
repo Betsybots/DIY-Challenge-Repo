@@ -522,8 +522,8 @@ HTML = f"""<!DOCTYPE html>
       requires projecting down to a single horizontal slice. On our course:</p>
       <ul style="color:var(--subtext); padding-left:16px; margin-top:6px; font-size:10px; line-height:1.8;">
         <li>Ramps make the floor non-flat — a 2D slice shows the ramp as a wall</li>
-        <li>Gravel returns are inconsistent — holes appear in the free space</li>
-        <li>Bucket obstacles baked in at mapping time reappear at competition even after moving</li>
+        <li>Gravel gives noisy lidar returns — the free space ends up with gaps and holes in it</li>
+        <li>Bucket positions are baked into the map at recording time — if they move before competition, the map is wrong</li>
         <li>Tunnel ceiling returns appear as impassable walls in 2D</li>
         <li>The map origin and orientation must match exactly — easy to get wrong</li>
       </ul>
