@@ -1,7 +1,25 @@
-# EKF1 — Local frame (odom → base_link)
-# ═══════════════════════════════════════
-# Fuses: FAST-LIO2 lidar odometry (50 Hz) + IMU angular velocity (400 Hz)
-# Output: /odometry/filtered at 50 Hz for Nav2 local MPPI controller
+# ─────────────────────────────────────────────────────────────────────────────
+# ekf_local.yaml  —  EKF2: Wheel+IMU (EKF1) + FAST-LIO2  (50 Hz)
+# ─────────────────────────────────────────────────────────────────────────────
+# PURPOSE:
+#   Produces /odometry/filtered — the smooth, drift-corrected odom-frame
+#   estimate consumed by Nav2's MPPI controller.
+#
+# DUAL EKF DESIGN:
+#   EKF1 (ekf_wimu.yaml) runs at 100 Hz using wheel+IMU only.
+#     → Output: /wimu_odom  (fast but drifts over time)
+#   EKF2 (this file) runs at 50 Hz, fusing:
+#     → /wimu_odom       (high rate, smooth — from EKF1)
+#     → /lidar_odometry  (accurate, 10 Hz — from FAST-LIO2)
+#   Result: smooth 50 Hz output that is continuously corrected by lidar.
+#
+# INPUTS:
+#   /wimu_odom       — EKF1 output: wheel+IMU fused at 100 Hz
+#   /lidar_odometry  — FAST-LIO2 lidar-inertial odometry at 10 Hz
+#
+# OUTPUT:
+#   /odometry/filtered — fused odom-frame estimate for Nav2 MPPI (50 Hz)
+#   TF: odom → base_link — maintained by this node
 #
 # CALIB NOTES:
 #   process_noise_covariance  ← tune with AprilTag calibration sessions
@@ -10,10 +28,11 @@
 #
 # Fused state: [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
 #               0  1  2    3     4     5   6   7   8    9      10     11   12  13  14
+# ─────────────────────────────────────────────────────────────────────────────
 
 ekf_filter_node_odom:
     ros__parameters:
-        frequency: 50.0
+        frequency: 50.0             # 50 Hz output — smooth enough for MPPI at 20 Hz
         sensor_timeout: 0.1
         two_d_mode: true            # outdoor ground robot — flatten to 2D
         transform_time_offset: 0.0
@@ -24,37 +43,39 @@ ekf_filter_node_odom:
         map_frame:       map
         odom_frame:      odom
         base_link_frame: base_link
-        world_frame:     odom       # EKF1 operates in odom frame
+        world_frame:     odom       # EKF2 operates in odom frame
 
-        publish_tf: true
+        publish_tf: true            # EKF2 publishes odom → base_link TF for Nav2
         publish_acceleration: false
 
-        # ── Lidar odometry from FAST-LIO2 ──
-        # Provides: x, y, z, yaw, vx, vy, vyaw
-        odom0: /lidar_odometry
-        odom0_config: [true,  true,  false,   # x  y  z     (use x,y; z unused in 2D)
-                       false, false, true,    # roll pitch yaw
-                       true,  true,  false,   # vx vy vz
+        # ── Input 0: EKF1 output (wheel + IMU) ───────────────────────────────
+        # High rate (100 Hz), smooth, fills gaps between lidar scans.
+        # We use velocity only — position from wheels drifts; lidar corrects it.
+        odom0: /wimu_odom
+        odom0_config: [false, false, false,   # x  y  z   — don't trust wheel position
+                       false, false, false,   # roll pitch yaw
+                       true,  true,  false,   # vx vy vz   — trust wheel velocity
                        false, false, true,    # vroll vpitch vyaw
                        false, false, false]   # ax ay az
         odom0_queue_size: 10
-        odom0_nodelay: false
+        odom0_nodelay: true         # process EKF1 output immediately
         odom0_differential: false
         odom0_relative: false
 
-        # ── IMU — angular velocity continuity ──
-        # Provides: vroll, vpitch, vyaw (gyro) — smooths LiDAR scan gaps
-        imu0: /imu/data
-        imu0_config: [false, false, false,   # x  y  z
-                      false, false, false,   # roll pitch yaw (trust FAST-LIO2 for heading)
-                      false, false, false,   # vx vy vz
-                      true,  true,  true,    # vroll vpitch vyaw (gyroscope)
-                      false, false, false]   # ax ay az
-        imu0_queue_size: 10
-        imu0_nodelay: true
-        imu0_differential: false
-        imu0_relative: false
-        imu0_remove_gravitational_acceleration: true
+        # ── Input 1: FAST-LIO2 lidar odometry ────────────────────────────────
+        # 10 Hz accurate pose from lidar-inertial odometry.
+        # Used for x, y, yaw (full pose) — this is the drift correction source.
+        # Velocities also used as they are well-estimated by FAST-LIO2.
+        odom1: /lidar_odometry
+        odom1_config: [true,  true,  false,   # x  y  z   — use lidar position
+                       false, false, true,    # roll pitch yaw — use lidar heading
+                       true,  true,  false,   # vx vy vz   — use lidar velocity
+                       false, false, true,    # vroll vpitch vyaw
+                       false, false, false]   # ax ay az
+        odom1_queue_size: 10
+        odom1_nodelay: false
+        odom1_differential: false
+        odom1_relative: false
 
         # ── Process noise (Q) — CALIB: tune via AprilTag sessions ──
         # [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]

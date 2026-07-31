@@ -1,0 +1,112 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ekf_wimu.yaml  —  EKF1: Wheel + IMU only  (100 Hz)
+# ─────────────────────────────────────────────────────────────────────────────
+# PURPOSE:
+#   Provides a fast, gap-free odometry estimate by fusing dead-wheel encoders
+#   and IMU. This runs at 100 Hz and fills the 100ms gaps between FAST-LIO2
+#   scans (10 Hz). Output /wimu_odom is fed into EKF2 as the high-rate input.
+#
+# WHY THIS EXISTS (dual EKF design):
+#   FAST-LIO2 outputs at 10 Hz — once per lidar scan. Between scans the robot
+#   has no updated pose. The MPPI controller runs at 20 Hz and needs smooth
+#   inputs. Without EKF1, MPPI gets 10 Hz jerky updates which causes
+#   oscillating velocity commands. EKF1 bridges those gaps with wheel+IMU.
+#
+# INPUTS:
+#   /wheel_cmd_vel  — dead-wheel encoder odometry (differential drive)
+#   /imu/data       — ACEINNA IMU (angular velocity at 400 Hz, accel at 200 Hz)
+#
+# OUTPUT:
+#   /wimu_odom      — smooth, fast, odom-frame estimate (drifts over time)
+#
+# LIMITATION:
+#   Wheel odometry drifts — especially on gravel and ramps where wheels slip.
+#   EKF2 corrects this drift using FAST-LIO2 every 100ms.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ekf_filter_node_wimu:
+    ros__parameters:
+        frequency: 100.0            # 100 Hz — 10x faster than FAST-LIO2
+        sensor_timeout: 0.05        # 50ms timeout — tight, matches 100 Hz rate
+        two_d_mode: true            # outdoor ground robot — flatten to 2D
+        transform_time_offset: 0.0
+        transform_timeout: 0.0
+        print_diagnostics: false    # keep logs clean at 100 Hz
+        debug: false
+
+        map_frame:       map
+        odom_frame:      odom
+        base_link_frame: base_link
+        world_frame:     odom       # EKF1 works in local odom frame
+
+        publish_tf: false           # EKF1 does NOT publish TF — EKF2 owns odom->base_link TF
+
+        # ── Wheel encoder odometry ────────────────────────────────────────────
+        # Dead-wheel encoders give x, y, vx, vy, vyaw in the odom frame.
+        # We trust velocity measurements more than absolute position from wheels
+        # since wheel slip causes position to drift quickly.
+        odom0: /wheel_cmd_vel
+        odom0_config: [false, false, false,   # x  y  z       — don't use absolute position
+                       false, false, false,   # roll pitch yaw — don't use heading from wheels
+                       true,  true,  false,   # vx vy vz       — trust wheel velocity
+                       false, false, true,    # vroll vpitch vyaw — use yaw rate from wheels
+                       false, false, false]   # ax ay az
+        odom0_queue_size: 5
+        odom0_nodelay: true         # process immediately — no extra delay at 100 Hz
+        odom0_differential: false
+        odom0_relative: false
+
+        # ── IMU — angular velocity and acceleration ───────────────────────────
+        # ACEINNA IMU provides 400 Hz gyroscope and 200 Hz accelerometer.
+        # We use angular velocity (vyaw) for heading rate and linear acceleration
+        # for short-term velocity estimation between wheel updates.
+        # We do NOT use IMU absolute orientation (roll/pitch/yaw) — trust FAST-LIO2
+        # for heading since IMU heading drifts without magnetometer correction.
+        imu0: /imu/data
+        imu0_config: [false, false, false,   # x  y  z
+                      false, false, false,   # roll pitch yaw — don't use IMU absolute heading
+                      false, false, false,   # vx vy vz
+                      true,  true,  true,    # vroll vpitch vyaw — gyro angular rates
+                      true,  true,  false]   # ax ay az — use planar accelerations (no z)
+        imu0_queue_size: 10
+        imu0_nodelay: true
+        imu0_differential: false
+        imu0_relative: false
+        imu0_remove_gravitational_acceleration: true  # subtract 9.81 from az
+
+        # ── Process noise (Q) ─────────────────────────────────────────────────
+        # Higher values = trust sensor updates more over prediction.
+        # Wheel odometry on outdoor surfaces (gravel, ramps) is noisy —
+        # keep x/y process noise moderate so EKF doesn't over-smooth wheel slip.
+        # [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+        process_noise_covariance: [0.08, 0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                   0,    0.08, 0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                   0,    0,    0.06, 0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                   0,    0,    0,    0.03, 0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                   0,    0,    0,    0,    0.03, 0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                   0,    0,    0,    0,    0,    0.05, 0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                   0,    0,    0,    0,    0,    0,    0.03,  0,     0,    0,    0,    0,    0,    0,    0,
+                                   0,    0,    0,    0,    0,    0,    0,     0.03,  0,    0,    0,    0,    0,    0,    0,
+                                   0,    0,    0,    0,    0,    0,    0,     0,     0.04, 0,    0,    0,    0,    0,    0,
+                                   0,    0,    0,    0,    0,    0,    0,     0,     0,    0.01, 0,    0,    0,    0,    0,
+                                   0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0.01, 0,    0,    0,    0,
+                                   0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0.02, 0,    0,    0,
+                                   0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0.01, 0,    0,
+                                   0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0.01, 0,
+                                   0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0.015]
+
+        initial_estimate_covariance: [0.1,  0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                      0,    0.1,  0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                      0,    0,    1e-9, 0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                      0,    0,    0,    1e-9, 0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                      0,    0,    0,    0,    1e-9, 0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                      0,    0,    0,    0,    0,    0.1,  0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                      0,    0,    0,    0,    0,    0,    0.1,  0,    0,    0,     0,     0,     0,    0,    0,
+                                      0,    0,    0,    0,    0,    0,    0,    0.1,  0,    0,     0,     0,     0,    0,    0,
+                                      0,    0,    0,    0,    0,    0,    0,    0,    1e-9, 0,     0,     0,     0,    0,    0,
+                                      0,    0,    0,    0,    0,    0,    0,    0,    0,    0.01,  0,     0,     0,    0,    0,
+                                      0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0.01,  0,     0,    0,    0,
+                                      0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0.1,   0,    0,    0,
+                                      0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0.1,  0,    0,
+                                      0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0.1,  0,
+                                      0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    1e-9]

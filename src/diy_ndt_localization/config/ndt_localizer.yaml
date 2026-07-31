@@ -1,0 +1,62 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ndt_localizer.yaml
+# Configuration for the NDT-OMP map-matching localization node.
+#
+# What it does:
+#   Loads GlobalMap.pcd at startup, then for every incoming Hesai lidar scan
+#   it runs NDT-OMP alignment to find the robot's pose in the map frame.
+#   Publishes the result as:
+#     - nav_msgs/Odometry  on  /ndt_pose        (pose + covariance for EKF)
+#     - TF transform        map -> odom          (consumed directly by Nav2)
+#
+# Tuning guide:
+#   ndt_resolution    — voxel size for NDT grid. Larger = faster but less precise.
+#                       0.5–1.0m is typical for outdoor lidar. Start at 1.0.
+#   ndt_step_size     — gradient descent step. Smaller = more stable, slower to converge.
+#   ndt_max_iterations — more iterations = better convergence, higher CPU cost.
+#   fitness_score_threshold — if NDT reports a score above this, the match is
+#                             considered unreliable and the TF is NOT published.
+#                             Tune by watching /ndt_fitness_score in RViz.
+#   voxel_leaf_size   — input cloud downsampling. 0.2m = good balance for Hesai QT64.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ndt_localizer_node:
+  ros__parameters:
+
+    # ── Map ──────────────────────────────────────────────────────────────────
+    # Absolute path to the GlobalMap.pcd saved by LIO-SAM.
+    # Update this before each competition run if map was regenerated.
+    map_path: "/home/juggernauts/maps/GlobalMap.pcd"
+
+    # ── NDT-OMP algorithm parameters ─────────────────────────────────────────
+    ndt_resolution: 1.0          # voxel cell size in metres for target map grid
+    ndt_step_size: 0.1           # gradient step size for Newton optimisation
+    ndt_outlier_ratio: 0.55      # fraction of points allowed to be outliers
+    ndt_max_iterations: 30       # max alignment iterations per scan
+    num_threads: 4               # OpenMP threads — Jetson Orin Nano has 6 cores
+
+    # ── Input cloud filtering ─────────────────────────────────────────────────
+    voxel_leaf_size: 0.2         # downsample incoming scan before alignment (metres)
+    min_scan_range: 0.5          # ignore points closer than this (robot body returns)
+    max_scan_range: 50.0         # ignore points farther than this (noise)
+
+    # ── Reliability gate ─────────────────────────────────────────────────────
+    # NDT fitness score = mean squared error of matched points.
+    # If score exceeds this threshold, the pose estimate is likely wrong
+    # (e.g. robot in featureless area, tunnel entry) — TF is held from last good pose.
+    fitness_score_threshold: 1.0
+
+    # ── TF frames ────────────────────────────────────────────────────────────
+    map_frame:       "map"
+    odom_frame:      "odom"
+    base_link_frame: "base_link"
+
+    # ── Topics ───────────────────────────────────────────────────────────────
+    input_cloud_topic: "/hesai/points"   # raw lidar from Hesai QT64
+    output_pose_topic: "/ndt_pose"       # Odometry output for EKF2 input
+    fitness_score_topic: "/ndt_fitness_score"  # monitor match quality in RViz
+
+    # ── Publish rate ─────────────────────────────────────────────────────────
+    # NDT runs once per incoming scan (10 Hz from Hesai).
+    # Setting this lower acts as a throttle if CPU is overwhelmed.
+    publish_tf: true             # publish map->odom TF directly (true = no separate node needed)
