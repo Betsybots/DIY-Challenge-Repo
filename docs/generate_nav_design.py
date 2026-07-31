@@ -72,7 +72,7 @@ digraph localization {
 # ─────────────────────────────────────────────────────────────────────────────
 DOT_STATE_MACHINE = """
 digraph state_machine {
-  graph [bgcolor="#0f172a" fontname="Inter" rankdir=LR splines=ortho nodesep=0.7 ranksep=1.1]
+  graph [bgcolor="#0f172a" fontname="Inter" rankdir=LR splines=spline nodesep=0.9 ranksep=1.4]
   node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.5 width=2.0 height=0.8]
   edge  [fontname="Inter" fontsize=8]
 
