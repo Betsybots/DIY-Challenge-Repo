@@ -601,9 +601,7 @@ HTML = f"""<!DOCTYPE html>
   <p>
     FAST-LIO2 runs at 10 Hz — once per lidar scan. Between scans there's a 100ms gap where the
     robot's pose estimate doesn't update. For the MPPI controller running at 20 Hz, this gap
-    causes jerky velocity commands. The <strong>dual EKF</strong> (Extended Kalman Filter — a
-    recursive estimator that fuses noisy sensor inputs into a smooth, statistically optimal estimate)
-    eliminates this.
+    causes jerky velocity commands. The <strong>dual EKF</strong> eliminates this.
   </p>
 
   <div class="grid2">
