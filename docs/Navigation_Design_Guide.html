@@ -63,8 +63,10 @@ h4 { font-size: 12px; font-weight: 600; color: var(--subtext); margin: 14px 0 6p
 p { color: var(--subtext); margin-bottom: 10px; }
 p strong { color: var(--text); font-weight: 600; }
 
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; user-select: contain; -webkit-user-select: text; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; position: relative; }
 .card-title { font-size: 12px; font-weight: 600; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+.copy-btn { margin-left: auto; background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 9px; padding: 2px 7px; cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; }
+.copy-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
 .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .dot-cyan   { background: var(--cyan); }
 .dot-green  { background: var(--green); }
@@ -1323,6 +1325,23 @@ global_costmap:
     DIY Robot Challenge 2026 — Obstacle Course Navigation Design v1.0 — Team Juggernauts — July 2026
   </p>
 </div>
+
+<script>
+document.querySelectorAll('.card-title').forEach(function(title) {
+  var btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = 'copy';
+  btn.addEventListener('click', function() {
+    var card = title.closest('.card');
+    var text = card.innerText.replace(/^copy$/m, '').trim();
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = 'copied!';
+      setTimeout(function() { btn.textContent = 'copy'; }, 1500);
+    });
+  });
+  title.appendChild(btn);
+});
+</script>
 
 </body>
 </html>
