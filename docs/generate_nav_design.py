@@ -144,83 +144,78 @@ digraph costmap {
 # Diagram 4 — Tunnel blind drive sequence (hand-crafted SVG)
 # ─────────────────────────────────────────────────────────────────────────────
 SVG_TUNNEL = """
-<svg viewBox="0 0 760 180" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif">
+<svg viewBox="0 0 760 230" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif">
   <defs>
-    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
-    </marker>
-    <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
-    </marker>
-    <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
-    </marker>
-    <marker id="arr-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#f97316"/>
-    </marker>
+    <marker id="arr"        markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/></marker>
+    <marker id="arr-green"  markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/></marker>
+    <marker id="arr-red"    markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/></marker>
   </defs>
 
   <!-- Background -->
-  <rect width="760" height="180" fill="#0f172a" rx="8"/>
+  <rect width="760" height="230" fill="#0f172a" rx="8"/>
 
-  <!-- Course ground -->
-  <rect x="20" y="100" width="720" height="12" fill="#1e293b" rx="2"/>
+  <!-- ── Section boxes ── -->
+  <!-- Pre-tunnel (open) -->
+  <rect x="15"  y="22" width="177" height="120" fill="none" stroke="#334155" stroke-dasharray="4,3" rx="5"/>
+  <!-- Tunnel walls + interior -->
+  <rect x="200" y="22" width="340" height="9"   fill="#475569" rx="2"/>
+  <rect x="200" y="133" width="340" height="9"  fill="#475569" rx="2"/>
+  <rect x="200" y="31"  width="340" height="102" fill="#1a1a2e"/>
+  <!-- Post-tunnel (open) -->
+  <rect x="548" y="22" width="177" height="120" fill="none" stroke="#334155" stroke-dasharray="4,3" rx="5"/>
 
-  <!-- Pre-tunnel: open section -->
-  <rect x="20" y="60" width="160" height="52" fill="none" stroke="#334155" stroke-dasharray="4,3" rx="4"/>
-  <text x="100" y="50" text-anchor="middle" fill="#94a3b8" font-size="9">Open section</text>
-  <text x="100" y="88" text-anchor="middle" fill="#22c55e" font-size="9">FAST-LIO2 active</text>
-  <text x="100" y="100" text-anchor="middle" fill="#22c55e" font-size="9">EKF fusing</text>
+  <!-- Ground bar -->
+  <rect x="15" y="142" width="710" height="8" fill="#1e293b" rx="2"/>
 
-  <!-- Tunnel walls -->
-  <rect x="200" y="62" width="340" height="8" fill="#334155" rx="2"/>
-  <rect x="200" y="102" width="340" height="8" fill="#334155" rx="2"/>
-  <!-- Tunnel roof fill -->
-  <rect x="200" y="70" width="340" height="32" fill="#1a1a2e" rx="0"/>
-  <text x="370" y="52" text-anchor="middle" fill="#ef4444" font-size="9" font-weight="600">TUNNEL (foil-lined — lidar blocked)</text>
-  <text x="370" y="92" text-anchor="middle" fill="#fca5a5" font-size="9">BLIND_DRIVE: wheel+IMU EKF only</text>
-  <!-- RF/lidar block icon -->
-  <text x="370" y="106" text-anchor="middle" fill="#ef4444" font-size="8">⚡ lidar signal lost</text>
+  <!-- ── Section header labels ── -->
+  <text x="103"  y="39" text-anchor="middle" fill="#94a3b8"  font-size="9" font-weight="600">Open section</text>
+  <text x="370"  y="39" text-anchor="middle" fill="#ef4444"  font-size="9" font-weight="700">TUNNEL — foil-lined, lidar blocked</text>
+  <text x="636"  y="39" text-anchor="middle" fill="#94a3b8"  font-size="9" font-weight="600">Open section</text>
 
-  <!-- Post-tunnel: open again -->
-  <rect x="560" y="60" width="160" height="52" fill="none" stroke="#334155" stroke-dasharray="4,3" rx="4"/>
-  <text x="640" y="50" text-anchor="middle" fill="#94a3b8" font-size="9">Open section</text>
-  <text x="640" y="88" text-anchor="middle" fill="#22c55e" font-size="9">FAST-LIO2 resumes</text>
-  <text x="640" y="100" text-anchor="middle" fill="#22c55e" font-size="9">TF drift corrected</text>
+  <!-- ── Robot icons (row 1, top half) ── -->
+  <!-- Blue — pre-tunnel -->
+  <rect x="76"  y="50" width="54" height="36" fill="#0c4a6e" stroke="#0ea5e9" stroke-width="1.5" rx="5"/>
+  <text x="103" y="74" text-anchor="middle" fill="#7dd3fc" font-size="20">🤖</text>
 
-  <!-- Robot icon pre-tunnel -->
-  <rect x="130" y="74" width="28" height="22" fill="#0ea5e9" rx="3"/>
-  <text x="144" y="89" text-anchor="middle" fill="#fff" font-size="8">🤖</text>
+  <!-- Red — mid-tunnel -->
+  <rect x="343" y="50" width="54" height="36" fill="#450a0a" stroke="#ef4444" stroke-width="1.5" rx="5"/>
+  <text x="370" y="74" text-anchor="middle" fill="#fca5a5" font-size="20">🤖</text>
 
-  <!-- Robot icon mid-tunnel -->
-  <rect x="340" y="74" width="28" height="22" fill="#ef4444" rx="3"/>
-  <text x="354" y="89" text-anchor="middle" fill="#fff" font-size="8">🤖</text>
+  <!-- Green — post-tunnel -->
+  <rect x="609" y="50" width="54" height="36" fill="#052e16" stroke="#22c55e" stroke-width="1.5" rx="5"/>
+  <text x="636" y="74" text-anchor="middle" fill="#86efac" font-size="20">🤖</text>
 
-  <!-- Robot icon post-tunnel -->
-  <rect x="600" y="74" width="28" height="22" fill="#22c55e" rx="3"/>
-  <text x="614" y="89" text-anchor="middle" fill="#fff" font-size="8">🤖</text>
+  <!-- ── Arrows between robots ── -->
+  <line x1="132" y1="68" x2="196" y2="68" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="399" y1="68" x2="540" y2="68" stroke="#ef4444" stroke-width="2"   stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <line x1="567" y1="68" x2="607" y2="68" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arr-green)"/>
 
-  <!-- Arrows -->
-  <line x1="158" y1="85" x2="196" y2="85" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="368" y1="85" x2="536" y2="85" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
-  <line x1="558" y1="85" x2="596" y2="85" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <!-- ── Status text (row 2, bottom half of section boxes) ── -->
+  <text x="103" y="105" text-anchor="middle" fill="#22c55e" font-size="9" font-weight="600">FAST-LIO2 active</text>
+  <text x="103" y="119" text-anchor="middle" fill="#22c55e" font-size="9">EKF fusing lidar+wheel+IMU</text>
 
-  <!-- Entry/exit markers -->
-  <line x1="200" y1="55" x2="200" y2="115" stroke="#f97316" stroke-width="1" stroke-dasharray="3,2"/>
-  <text x="200" y="130" text-anchor="middle" fill="#f97316" font-size="8">Entry</text>
-  <text x="200" y="140" text-anchor="middle" fill="#f97316" font-size="8">freeze TF</text>
+  <text x="370" y="105" text-anchor="middle" fill="#fca5a5" font-size="9" font-weight="600">BLIND_DRIVE — wheel + IMU EKF only</text>
+  <text x="370" y="119" text-anchor="middle" fill="#ef4444" font-size="9">⚡ lidar signal lost · dead reckoning</text>
 
-  <line x1="540" y1="55" x2="540" y2="115" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,2"/>
-  <text x="540" y="130" text-anchor="middle" fill="#22c55e" font-size="8">Exit</text>
-  <text x="540" y="140" text-anchor="middle" fill="#22c55e" font-size="8">restore TF</text>
+  <text x="636" y="105" text-anchor="middle" fill="#22c55e" font-size="9" font-weight="600">FAST-LIO2 resumes</text>
+  <text x="636" y="119" text-anchor="middle" fill="#22c55e" font-size="9">TF drift corrected</text>
 
-  <!-- Legend -->
-  <rect x="20" y="150" width="10" height="10" fill="#0ea5e9" rx="2"/>
-  <text x="34" y="159" fill="#94a3b8" font-size="8">Normal nav (FAST-LIO2 active)</text>
-  <rect x="220" y="150" width="10" height="10" fill="#ef4444" rx="2"/>
-  <text x="234" y="159" fill="#94a3b8" font-size="8">Blind drive (dead reckoning)</text>
-  <rect x="430" y="150" width="10" height="10" fill="#22c55e" rx="2"/>
-  <text x="444" y="159" fill="#94a3b8" font-size="8">Resumed nav (re-localised)</text>
+  <!-- ── Entry / Exit vertical markers ── -->
+  <line x1="200" y1="18" x2="200" y2="152" stroke="#f97316" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="200" y="165" text-anchor="middle" fill="#f97316" font-size="8" font-weight="700">Entry</text>
+  <text x="200" y="176" text-anchor="middle" fill="#f97316" font-size="8">freeze TF</text>
+
+  <line x1="540" y1="18" x2="540" y2="152" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="540" y="165" text-anchor="middle" fill="#22c55e" font-size="8" font-weight="700">Exit</text>
+  <text x="540" y="176" text-anchor="middle" fill="#22c55e" font-size="8">restore TF</text>
+
+  <!-- ── Legend ── -->
+  <rect x="15"  y="198" width="10" height="10" fill="#0ea5e9" rx="2"/>
+  <text x="30"  y="207" fill="#94a3b8" font-size="8">Normal nav (FAST-LIO2 active)</text>
+  <rect x="220" y="198" width="10" height="10" fill="#ef4444" rx="2"/>
+  <text x="235" y="207" fill="#94a3b8" font-size="8">Blind drive (dead reckoning only)</text>
+  <rect x="440" y="198" width="10" height="10" fill="#22c55e" rx="2"/>
+  <text x="455" y="207" fill="#94a3b8" font-size="8">Resumed nav (re-localised)</text>
 </svg>
 """
 
