@@ -588,7 +588,7 @@ HTML = f"""<!DOCTYPE html>
     It publishes directly into the TF tree, so Nav2 doesn't need to know anything about how it works.
   </p>
   <p>
-    This replaces AMCL entirely. Unlike AMCL, NDT-OMP works in 3D and doesn't need a 2D map.
+    AMCL (Adaptive Monte Carlo Localization) is the standard ROS 2 method for estimating robot position — it scatters random guesses across a 2D floor map and converges on the best match. It works fine indoors but falls apart outdoors where there is no clean flat map. NDT-OMP replaces it entirely: instead of a 2D grid, it matches each incoming lidar scan against our 3D point cloud map using fast voxel-based alignment.
     It is already in our repo as the <code>ndt_omp_ros2</code> submodule.
   </p>
 
