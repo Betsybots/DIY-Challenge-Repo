@@ -24,9 +24,9 @@ def dot_to_svg(dot_src: str) -> str:
         capture_output=True,
     )
     svg = result.stdout.decode()
-    # Strip XML declaration and DOCTYPE for inline embedding
-    lines = [l for l in svg.splitlines() if not l.startswith("<?xml") and not l.startswith("<!DOCTYPE")]
-    return "\n".join(lines)
+    # Strip everything before <svg — removes XML declaration, DOCTYPE, and DTD URL lines
+    idx = svg.find("<svg")
+    return svg[idx:] if idx != -1 else svg
 
 
 # ─────────────────────────────────────────────────────────────────────────────
