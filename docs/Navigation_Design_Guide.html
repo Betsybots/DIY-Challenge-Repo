@@ -99,7 +99,17 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
   .grid2 { grid-template-columns: 1fr; }
   .grid3 { grid-template-columns: 1fr; }
   .copy-btn { display: none; }
+  .pdf-btn { display: none; }
 }
+
+.pdf-btn {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  background: var(--cyan); color: #0a0e1a; border: none; border-radius: 8px;
+  padding: 10px 20px; font-size: 12px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(14,165,233,0.4); letter-spacing: 0.5px;
+  transition: background 0.15s, transform 0.1s;
+}
+.pdf-btn:hover { background: #38bdf8; transform: translateY(-1px); }
 
 .diagram-container { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 14px 0; text-align: center; overflow: hidden; }
 .diagram-container svg { max-width: 100%; height: auto; }
@@ -1334,6 +1344,8 @@ global_costmap:
     DIY Robot Challenge 2026 — Obstacle Course Navigation Design v1.0 — Team Juggernauts — July 2026
   </p>
 </div>
+
+<button class="pdf-btn" onclick="window.print()">⬇ Download PDF</button>
 
 <script>
 document.querySelectorAll('.card-title').forEach(function(title) {
