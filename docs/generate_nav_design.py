@@ -72,12 +72,12 @@ digraph localization {
 # ─────────────────────────────────────────────────────────────────────────────
 DOT_STATE_MACHINE = """
 digraph state_machine {
-  graph [bgcolor="#0f172a" fontname="Inter" rankdir=TB splines=curved nodesep=1.2 ranksep=1.4]
-  node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.5 width=2.2 height=0.9]
-  edge  [fontname="Inter" fontsize=9]
+  graph [bgcolor="#0f172a" fontname="Inter" rankdir=LR splines=spline nodesep=0.9 ranksep=1.6]
+  node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.5 width=2.0 height=0.8]
+  edge  [fontname="Inter" fontsize=8]
 
   START    [label="START\\nDetect green light"         fillcolor="#1e293b" fontcolor="#94a3b8" color="#475569"]
-  NORMAL   [label="NORMAL_NAV\\nNav2 Smac+MPPI\\nFull speed" fillcolor="#14532d" fontcolor="#86efac" color="#22c55e" width=2.6]
+  NORMAL   [label="NORMAL_NAV\\nNav2 Smac+MPPI\\nFull speed" fillcolor="#14532d" fontcolor="#86efac" color="#22c55e"]
   SLOW     [label="SLOW_NAV\\nReduced speed\\n0.2 m/s" fillcolor="#164e63" fontcolor="#a5f3fc" color="#06b6d4"]
   BLIND    [label="BLIND_DRIVE\\nWheel+IMU only\\nFixed heading" fillcolor="#450a0a" fontcolor="#fca5a5" color="#ef4444"]
   NAVIGATE [label="NAVIGATE_AROUND\\nLive costmap\\nDynamic replan" fillcolor="#1e1b4b" fontcolor="#c4b5fd" color="#a855f7"]
@@ -86,16 +86,16 @@ digraph state_machine {
 
   { rank=same; SLOW; BLIND; NAVIGATE; PUSH; DONE }
 
-  START    -> NORMAL   [label="  green light detected" color="#22c55e"  fontcolor="#86efac"]
-  NORMAL   -> SLOW     [label="narrow/ramp/bank  "     color="#06b6d4"  fontcolor="#a5f3fc"]
-  NORMAL   -> BLIND    [label="  tunnel entry"          color="#ef4444"  fontcolor="#fca5a5"]
-  NORMAL   -> NAVIGATE [label="bucket zone  "           color="#a855f7"  fontcolor="#c4b5fd"]
-  NORMAL   -> PUSH     [label="  car wash zone"         color="#f97316"  fontcolor="#fdba74"]
-  NORMAL   -> DONE     [label="lap 2 at finish  "       color="#475569"  fontcolor="#94a3b8"]
-  SLOW     -> NORMAL   [label="zone exit  "             color="#06b6d4"  fontcolor="#a5f3fc"]
-  BLIND    -> NORMAL   [label="  lidar restored"        color="#ef4444"  fontcolor="#fca5a5"]
-  NAVIGATE -> NORMAL   [label="cleared  "               color="#a855f7"  fontcolor="#c4b5fd"]
-  PUSH     -> NORMAL   [label="  zone exit"             color="#f97316"  fontcolor="#fdba74"]
+  START    -> NORMAL   [label="green light detected"  color="#22c55e"  fontcolor="#86efac"]
+  NORMAL   -> SLOW     [label="narrow/ramp/bank"      color="#06b6d4"  fontcolor="#a5f3fc"]
+  NORMAL   -> BLIND    [label="tunnel entry"          color="#ef4444"  fontcolor="#fca5a5"]
+  NORMAL   -> NAVIGATE [label="bucket zone"           color="#a855f7"  fontcolor="#c4b5fd"]
+  NORMAL   -> PUSH     [label="car wash zone"         color="#f97316"  fontcolor="#fdba74"]
+  NORMAL   -> DONE     [label="lap 2 at finish"       color="#475569"  fontcolor="#94a3b8"]
+  SLOW     -> NORMAL   [label="zone exit"             color="#06b6d4"  fontcolor="#a5f3fc"]
+  BLIND    -> NORMAL   [label="lidar restored"        color="#ef4444"  fontcolor="#fca5a5"]
+  NAVIGATE -> NORMAL   [label="cleared"               color="#a855f7"  fontcolor="#c4b5fd"]
+  PUSH     -> NORMAL   [label="zone exit"             color="#f97316"  fontcolor="#fdba74"]
 }
 """
 
