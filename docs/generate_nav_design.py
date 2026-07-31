@@ -72,28 +72,30 @@ digraph localization {
 # ─────────────────────────────────────────────────────────────────────────────
 DOT_STATE_MACHINE = """
 digraph state_machine {
-  graph [bgcolor="#0f172a" fontname="Inter" rankdir=TB splines=curved nodesep=0.5 ranksep=0.7]
-  node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.5 width=1.8]
-  edge  [fontname="Inter" fontsize=8 color="#475569" fontcolor="#94a3b8"]
+  graph [bgcolor="#0f172a" fontname="Inter" rankdir=LR splines=ortho nodesep=0.7 ranksep=1.1]
+  node  [fontname="Inter" fontsize=10 style="filled,rounded" shape=box penwidth=1.5 width=2.0 height=0.8]
+  edge  [fontname="Inter" fontsize=8]
 
-  START      [label="START\\nWait for pose" fillcolor="#1e293b" fontcolor="#94a3b8" color="#475569"]
-  NORMAL     [label="NORMAL_NAV\\nNav2 Smac+MPPI\\nFull speed"    fillcolor="#14532d" fontcolor="#86efac" color="#22c55e"]
-  SLOW       [label="SLOW_NAV\\nNav2 reduced speed\\n0.2 m/s"     fillcolor="#164e63" fontcolor="#a5f3fc" color="#06b6d4"]
-  BLIND      [label="BLIND_DRIVE\\nWheel+IMU only\\nFixed heading" fillcolor="#450a0a" fontcolor="#fca5a5" color="#ef4444"]
-  NAVIGATE   [label="NAVIGATE_AROUND\\nLive costmap\\nDynamic replan" fillcolor="#1e1b4b" fontcolor="#c4b5fd" color="#a855f7"]
-  PUSH       [label="PUSH_THROUGH\\nStraight waypoint\\nObstacle layer OFF" fillcolor="#422006" fontcolor="#fdba74" color="#f97316"]
-  DONE       [label="DONE\\nStop + signal" fillcolor="#1e293b" fontcolor="#94a3b8" color="#475569"]
+  START    [label="START\\nWait for pose"              fillcolor="#1e293b" fontcolor="#94a3b8" color="#475569"]
+  NORMAL   [label="NORMAL_NAV\\nNav2 Smac+MPPI\\nFull speed" fillcolor="#14532d" fontcolor="#86efac" color="#22c55e"]
+  SLOW     [label="SLOW_NAV\\nReduced speed\\n0.2 m/s" fillcolor="#164e63" fontcolor="#a5f3fc" color="#06b6d4"]
+  BLIND    [label="BLIND_DRIVE\\nWheel+IMU only\\nFixed heading" fillcolor="#450a0a" fontcolor="#fca5a5" color="#ef4444"]
+  NAVIGATE [label="NAVIGATE_AROUND\\nLive costmap\\nDynamic replan" fillcolor="#1e1b4b" fontcolor="#c4b5fd" color="#a855f7"]
+  PUSH     [label="PUSH_THROUGH\\nStraight drive\\nObstacle layer OFF" fillcolor="#422006" fontcolor="#fdba74" color="#f97316"]
+  DONE     [label="DONE\\nStop + signal"               fillcolor="#1e293b" fontcolor="#94a3b8" color="#475569"]
 
-  START   -> NORMAL   [label="pose valid"]
-  NORMAL  -> SLOW     [label="narrow / ramp\\n/ bank zone"]
-  NORMAL  -> BLIND    [label="tunnel entry\\n(lidar loss)"]
-  NORMAL  -> NAVIGATE [label="obstacle zone\\n(buckets)"]
-  NORMAL  -> PUSH     [label="car wash zone"]
-  SLOW    -> NORMAL   [label="zone exit"]
-  BLIND   -> NORMAL   [label="tunnel exit\\n(lidar restored)"]
-  NAVIGATE -> NORMAL  [label="obstacle cleared"]
-  PUSH    -> NORMAL   [label="zone exit"]
-  NORMAL  -> DONE     [label="finish waypoint"]
+  { rank=same; SLOW; BLIND; NAVIGATE; PUSH; DONE }
+
+  START    -> NORMAL   [label="pose valid"          color="#22c55e"  fontcolor="#86efac"]
+  NORMAL   -> SLOW     [label="narrow/ramp/bank"    color="#06b6d4"  fontcolor="#a5f3fc"]
+  NORMAL   -> BLIND    [label="tunnel entry"        color="#ef4444"  fontcolor="#fca5a5"]
+  NORMAL   -> NAVIGATE [label="bucket zone"         color="#a855f7"  fontcolor="#c4b5fd"]
+  NORMAL   -> PUSH     [label="car wash zone"       color="#f97316"  fontcolor="#fdba74"]
+  NORMAL   -> DONE     [label="finish waypoint"     color="#475569"  fontcolor="#94a3b8"]
+  SLOW     -> NORMAL   [label="zone exit"           color="#06b6d4"  fontcolor="#a5f3fc"]
+  BLIND    -> NORMAL   [label="lidar restored"      color="#ef4444"  fontcolor="#fca5a5"]
+  NAVIGATE -> NORMAL   [label="cleared"             color="#a855f7"  fontcolor="#c4b5fd"]
+  PUSH     -> NORMAL   [label="zone exit"           color="#f97316"  fontcolor="#fdba74"]
 }
 """
 
@@ -873,9 +875,11 @@ HTML = f"""<!DOCTYPE html>
   <p>
     The narrow section, ramps, bank, and helix all trigger SLOW_NAV. Same Nav2 stack, but with
     velocity limits lowered. The key concern in the narrow section is <strong>lateral accuracy</strong>
-    — with only 2 inches of clearance on each side, we need NDT-OMP localization to be solid
-    before entering. The state machine forces an NDT re-localization check at the zone entry waypoint
-    before proceeding.
+    — our robot is 17–18" wide and the passage is only 20" wide, leaving just <strong>1–1.5" clearance
+    per side</strong>. This is the tightest tolerance on the entire course. We need NDT-OMP localization
+    to be solid before entering and may need to reduce <code>inflation_radius</code> to 0.2m so Nav2
+    doesn't mark the path as impassable.
+    The state machine forces an NDT re-localization check at the zone entry waypoint before proceeding.
   </p>
   <p>
     Typical speed: <strong>0.2–0.3 m/s</strong>. IMU pitch threshold triggers the ramp detection automatically.
@@ -1003,7 +1007,7 @@ global_costmap:
       <tr>
         <td><code>inflation_radius: 0.45m</code></td>
         <td>global costmap</td>
-        <td>With 20" narrow section and ~28" robot width, this is tight — may need tuning to 0.3m for narrow zones</td>
+        <td>With 20" narrow section and 17–18" robot width, only ~1.5" clearance per side — must reduce to 0.2m for narrow zone or Nav2 marks path impassable</td>
       </tr>
       <tr>
         <td><code>raytrace_max_range: 6.0m</code></td>
@@ -1105,7 +1109,7 @@ global_costmap:
       <tr>
         <td><strong style="color:var(--yellow)">9</strong></td>
         <td><strong>Inflation radius override</strong> for narrow section</td>
-        <td>May be required to navigate the 20" narrow section with current footprint.</td>
+        <td>Required — robot is 17–18" wide in a 20" passage. Default 0.45m marks it impassable.</td>
         <td>Sep–Oct</td>
       </tr>
       <tr>

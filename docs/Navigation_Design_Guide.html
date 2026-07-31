@@ -882,138 +882,134 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
 
   <div class="diagram-container">
     <div class="diagram-label">Navigation State Machine — Mode Transitions</div>
-    <svg width="891pt" height="253pt"
- viewBox="0.00 0.00 891.00 253.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 249)">
+    <svg width="719pt" height="558pt"
+ viewBox="0.00 0.00 719.00 558.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 554)">
 <title>state_machine</title>
-<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-249 887,-249 887,4 -4,4"/>
+<polygon fill="#0f172a" stroke="transparent" points="-4,4 -4,-554 715,-554 715,4 -4,4"/>
 <!-- START -->
 <g id="node1" class="node">
 <title>START</title>
-<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M483,-245C483,-245 377,-245 377,-245 371,-245 365,-239 365,-233 365,-233 365,-221 365,-221 365,-215 371,-209 377,-209 377,-209 483,-209 483,-209 489,-209 495,-215 495,-221 495,-221 495,-233 495,-233 495,-239 489,-245 483,-245"/>
-<text text-anchor="middle" x="430" y="-230" font-family="Inter" font-size="10.00" fill="#94a3b8">START</text>
-<text text-anchor="middle" x="430" y="-219" font-family="Inter" font-size="10.00" fill="#94a3b8">Wait for pose</text>
+<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M132,-314C132,-314 12,-314 12,-314 6,-314 0,-308 0,-302 0,-302 0,-268 0,-268 0,-262 6,-256 12,-256 12,-256 132,-256 132,-256 138,-256 144,-262 144,-268 144,-268 144,-302 144,-302 144,-308 138,-314 132,-314"/>
+<text text-anchor="middle" x="72" y="-288" font-family="Inter" font-size="10.00" fill="#94a3b8">START</text>
+<text text-anchor="middle" x="72" y="-277" font-family="Inter" font-size="10.00" fill="#94a3b8">Wait for pose</text>
 </g>
 <!-- NORMAL -->
 <g id="node2" class="node">
 <title>NORMAL</title>
-<path fill="#14532d" stroke="#22c55e" stroke-width="1.5" d="M483,-150C483,-150 377,-150 377,-150 371,-150 365,-144 365,-138 365,-138 365,-121 365,-121 365,-115 371,-109 377,-109 377,-109 483,-109 483,-109 489,-109 495,-115 495,-121 495,-121 495,-138 495,-138 495,-144 489,-150 483,-150"/>
-<text text-anchor="middle" x="430" y="-138" font-family="Inter" font-size="10.00" fill="#86efac">NORMAL_NAV</text>
-<text text-anchor="middle" x="430" y="-127" font-family="Inter" font-size="10.00" fill="#86efac">Nav2 Smac+MPPI</text>
-<text text-anchor="middle" x="430" y="-116" font-family="Inter" font-size="10.00" fill="#86efac">Full speed</text>
+<path fill="#14532d" stroke="#22c55e" stroke-width="1.5" d="M399,-314C399,-314 279,-314 279,-314 273,-314 267,-308 267,-302 267,-302 267,-268 267,-268 267,-262 273,-256 279,-256 279,-256 399,-256 399,-256 405,-256 411,-262 411,-268 411,-268 411,-302 411,-302 411,-308 405,-314 399,-314"/>
+<text text-anchor="middle" x="339" y="-293.5" font-family="Inter" font-size="10.00" fill="#86efac">NORMAL_NAV</text>
+<text text-anchor="middle" x="339" y="-282.5" font-family="Inter" font-size="10.00" fill="#86efac">Nav2 Smac+MPPI</text>
+<text text-anchor="middle" x="339" y="-271.5" font-family="Inter" font-size="10.00" fill="#86efac">Full speed</text>
 </g>
 <!-- START&#45;&gt;NORMAL -->
 <g id="edge1" class="edge">
 <title>START&#45;&gt;NORMAL</title>
-<path fill="none" stroke="#475569" d="M427.78,-208.8C426.66,-196.9 426.82,-186.71 428.25,-160.29"/>
-<polygon fill="#475569" stroke="#475569" points="431.74,-160.42 428.8,-150.24 424.75,-160.04 431.74,-160.42"/>
-<text text-anchor="middle" x="451.5" y="-177.6" font-family="Inter" font-size="8.00" fill="#94a3b8">pose valid</text>
+<path fill="none" stroke="#22c55e" d="M144.25,-285C144.25,-285 256.69,-285 256.69,-285"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="256.69,-288.5 266.69,-285 256.69,-281.5 256.69,-288.5"/>
+<text text-anchor="middle" x="205.5" y="-287.6" font-family="Inter" font-size="8.00" fill="#86efac">pose valid</text>
 </g>
 <!-- SLOW -->
 <g id="node3" class="node">
 <title>SLOW</title>
-<path fill="#164e63" stroke="#06b6d4" stroke-width="1.5" d="M118,-41C118,-41 12,-41 12,-41 6,-41 0,-35 0,-29 0,-29 0,-12 0,-12 0,-6 6,0 12,0 12,0 118,0 118,0 124,0 130,-6 130,-12 130,-12 130,-29 130,-29 130,-35 124,-41 118,-41"/>
-<text text-anchor="middle" x="65" y="-29" font-family="Inter" font-size="10.00" fill="#a5f3fc">SLOW_NAV</text>
-<text text-anchor="middle" x="65" y="-18" font-family="Inter" font-size="10.00" fill="#a5f3fc">Nav2 reduced speed</text>
-<text text-anchor="middle" x="65" y="-7" font-family="Inter" font-size="10.00" fill="#a5f3fc">0.2 m/s</text>
+<path fill="#164e63" stroke="#06b6d4" stroke-width="1.5" d="M699,-515C699,-515 579,-515 579,-515 573,-515 567,-509 567,-503 567,-503 567,-469 567,-469 567,-463 573,-457 579,-457 579,-457 699,-457 699,-457 705,-457 711,-463 711,-469 711,-469 711,-503 711,-503 711,-509 705,-515 699,-515"/>
+<text text-anchor="middle" x="639" y="-494.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">SLOW_NAV</text>
+<text text-anchor="middle" x="639" y="-483.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">Reduced speed</text>
+<text text-anchor="middle" x="639" y="-472.5" font-family="Inter" font-size="10.00" fill="#a5f3fc">0.2 m/s</text>
 </g>
 <!-- NORMAL&#45;&gt;SLOW -->
 <g id="edge2" class="edge">
 <title>NORMAL&#45;&gt;SLOW</title>
-<path fill="none" stroke="#475569" d="M364.94,-111.08C230.03,-72.85 185.24,-59.93 136.57,-44.23"/>
-<polygon fill="#475569" stroke="#475569" points="137.35,-40.8 126.75,-41.05 135.19,-47.46 137.35,-40.8"/>
-<text text-anchor="middle" x="89" y="-77.6" font-family="Inter" font-size="8.00" fill="#94a3b8">narrow / ramp</text>
-<text text-anchor="middle" x="89" y="-68.6" font-family="Inter" font-size="8.00" fill="#94a3b8">/ bank zone</text>
+<path fill="none" stroke="#06b6d4" d="M315,-314.29C315,-372.18 315,-495.67 315,-495.67 315,-495.67 556.69,-495.67 556.69,-495.67"/>
+<polygon fill="#06b6d4" stroke="#06b6d4" points="556.69,-499.17 566.69,-495.67 556.69,-492.17 556.69,-499.17"/>
+<text text-anchor="middle" x="489" y="-543.6" font-family="Inter" font-size="8.00" fill="#a5f3fc">narrow/ramp/bank</text>
 </g>
 <!-- BLIND -->
 <g id="node4" class="node">
 <title>BLIND</title>
-<path fill="#450a0a" stroke="#ef4444" stroke-width="1.5" d="M303,-41C303,-41 197,-41 197,-41 191,-41 185,-35 185,-29 185,-29 185,-12 185,-12 185,-6 191,0 197,0 197,0 303,0 303,0 309,0 315,-6 315,-12 315,-12 315,-29 315,-29 315,-35 309,-41 303,-41"/>
-<text text-anchor="middle" x="250" y="-29" font-family="Inter" font-size="10.00" fill="#fca5a5">BLIND_DRIVE</text>
-<text text-anchor="middle" x="250" y="-18" font-family="Inter" font-size="10.00" fill="#fca5a5">Wheel+IMU only</text>
-<text text-anchor="middle" x="250" y="-7" font-family="Inter" font-size="10.00" fill="#fca5a5">Fixed heading</text>
+<path fill="#450a0a" stroke="#ef4444" stroke-width="1.5" d="M699,-405C699,-405 579,-405 579,-405 573,-405 567,-399 567,-393 567,-393 567,-359 567,-359 567,-353 573,-347 579,-347 579,-347 699,-347 699,-347 705,-347 711,-353 711,-359 711,-359 711,-393 711,-393 711,-399 705,-405 699,-405"/>
+<text text-anchor="middle" x="639" y="-384.5" font-family="Inter" font-size="10.00" fill="#fca5a5">BLIND_DRIVE</text>
+<text text-anchor="middle" x="639" y="-373.5" font-family="Inter" font-size="10.00" fill="#fca5a5">Wheel+IMU only</text>
+<text text-anchor="middle" x="639" y="-362.5" font-family="Inter" font-size="10.00" fill="#fca5a5">Fixed heading</text>
 </g>
 <!-- NORMAL&#45;&gt;BLIND -->
 <g id="edge3" class="edge">
 <title>NORMAL&#45;&gt;BLIND</title>
-<path fill="none" stroke="#475569" d="M393.53,-108.9C332.51,-74.4 309.72,-61.21 287.85,-46.74"/>
-<polygon fill="#475569" stroke="#475569" points="289.68,-43.76 279.43,-41.08 285.78,-49.57 289.68,-43.76"/>
-<text text-anchor="middle" x="262" y="-77.6" font-family="Inter" font-size="8.00" fill="#94a3b8">tunnel entry</text>
-<text text-anchor="middle" x="262" y="-68.6" font-family="Inter" font-size="8.00" fill="#94a3b8">(lidar loss)</text>
+<path fill="none" stroke="#ef4444" d="M411.16,-307C492.93,-307 615,-307 615,-307 615,-307 615,-336.74 615,-336.74"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="611.5,-336.74 615,-346.74 618.5,-336.74 611.5,-336.74"/>
+<text text-anchor="middle" x="489" y="-415.6" font-family="Inter" font-size="8.00" fill="#fca5a5">tunnel entry</text>
 </g>
 <!-- NAVIGATE -->
 <g id="node5" class="node">
 <title>NAVIGATE</title>
-<path fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" d="M504,-41C504,-41 398,-41 398,-41 392,-41 386,-35 386,-29 386,-29 386,-12 386,-12 386,-6 392,0 398,0 398,0 504,0 504,0 510,0 516,-6 516,-12 516,-12 516,-29 516,-29 516,-35 510,-41 504,-41"/>
-<text text-anchor="middle" x="451" y="-29" font-family="Inter" font-size="10.00" fill="#c4b5fd">NAVIGATE_AROUND</text>
-<text text-anchor="middle" x="451" y="-18" font-family="Inter" font-size="10.00" fill="#c4b5fd">Live costmap</text>
-<text text-anchor="middle" x="451" y="-7" font-family="Inter" font-size="10.00" fill="#c4b5fd">Dynamic replan</text>
+<path fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5" d="M699,-293C699,-293 579,-293 579,-293 573,-293 567,-287 567,-281 567,-281 567,-247 567,-247 567,-241 573,-235 579,-235 579,-235 699,-235 699,-235 705,-235 711,-241 711,-247 711,-247 711,-281 711,-281 711,-287 705,-293 699,-293"/>
+<text text-anchor="middle" x="639" y="-272.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">NAVIGATE_AROUND</text>
+<text text-anchor="middle" x="639" y="-261.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">Live costmap</text>
+<text text-anchor="middle" x="639" y="-250.5" font-family="Inter" font-size="10.00" fill="#c4b5fd">Dynamic replan</text>
 </g>
 <!-- NORMAL&#45;&gt;NAVIGATE -->
 <g id="edge4" class="edge">
 <title>NORMAL&#45;&gt;NAVIGATE</title>
-<path fill="none" stroke="#475569" d="M432.72,-108.76C436.84,-77.5 438.98,-62.71 441.75,-50.76"/>
-<polygon fill="#475569" stroke="#475569" points="445.14,-51.64 444.3,-41.08 438.37,-49.86 445.14,-51.64"/>
-<text text-anchor="middle" x="459" y="-77.6" font-family="Inter" font-size="8.00" fill="#94a3b8">obstacle zone</text>
-<text text-anchor="middle" x="459" y="-68.6" font-family="Inter" font-size="8.00" fill="#94a3b8">(buckets)</text>
+<path fill="none" stroke="#a855f7" d="M411.24,-268.33C411.24,-268.33 556.87,-268.33 556.87,-268.33"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="556.87,-271.83 566.87,-268.33 556.87,-264.83 556.87,-271.83"/>
+<text text-anchor="middle" x="489" y="-287.6" font-family="Inter" font-size="8.00" fill="#c4b5fd">bucket zone</text>
 </g>
 <!-- PUSH -->
 <g id="node6" class="node">
 <title>PUSH</title>
-<path fill="#422006" stroke="#f97316" stroke-width="1.5" d="M698,-41C698,-41 592,-41 592,-41 586,-41 580,-35 580,-29 580,-29 580,-12 580,-12 580,-6 586,0 592,0 592,0 698,0 698,0 704,0 710,-6 710,-12 710,-12 710,-29 710,-29 710,-35 704,-41 698,-41"/>
-<text text-anchor="middle" x="645" y="-29" font-family="Inter" font-size="10.00" fill="#fdba74">PUSH_THROUGH</text>
-<text text-anchor="middle" x="645" y="-18" font-family="Inter" font-size="10.00" fill="#fdba74">Straight waypoint</text>
-<text text-anchor="middle" x="645" y="-7" font-family="Inter" font-size="10.00" fill="#fdba74">Obstacle layer OFF</text>
+<path fill="#422006" stroke="#f97316" stroke-width="1.5" d="M699,-177C699,-177 579,-177 579,-177 573,-177 567,-171 567,-165 567,-165 567,-131 567,-131 567,-125 573,-119 579,-119 579,-119 699,-119 699,-119 705,-119 711,-125 711,-131 711,-131 711,-165 711,-165 711,-171 705,-177 699,-177"/>
+<text text-anchor="middle" x="639" y="-156.5" font-family="Inter" font-size="10.00" fill="#fdba74">PUSH_THROUGH</text>
+<text text-anchor="middle" x="639" y="-145.5" font-family="Inter" font-size="10.00" fill="#fdba74">Straight drive</text>
+<text text-anchor="middle" x="639" y="-134.5" font-family="Inter" font-size="10.00" fill="#fdba74">Obstacle layer OFF</text>
 </g>
 <!-- NORMAL&#45;&gt;PUSH -->
 <g id="edge5" class="edge">
 <title>NORMAL&#45;&gt;PUSH</title>
-<path fill="none" stroke="#475569" d="M470.76,-108.98C542.17,-73.02 569.88,-59.04 596.13,-45.62"/>
-<polygon fill="#475569" stroke="#475569" points="597.73,-48.73 605.04,-41.06 594.54,-42.5 597.73,-48.73"/>
-<text text-anchor="middle" x="669" y="-73.1" font-family="Inter" font-size="8.00" fill="#94a3b8">car wash zone</text>
+<path fill="none" stroke="#f97316" d="M339,-255.67C339,-212.87 339,-138.33 339,-138.33 339,-138.33 556.76,-138.33 556.76,-138.33"/>
+<polygon fill="#f97316" stroke="#f97316" points="556.76,-141.83 566.76,-138.33 556.76,-134.83 556.76,-141.83"/>
+<text text-anchor="middle" x="489" y="-159.6" font-family="Inter" font-size="8.00" fill="#fdba74">car wash zone</text>
 </g>
 <!-- DONE -->
 <g id="node7" class="node">
 <title>DONE</title>
-<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M871,-38.5C871,-38.5 765,-38.5 765,-38.5 759,-38.5 753,-32.5 753,-26.5 753,-26.5 753,-14.5 753,-14.5 753,-8.5 759,-2.5 765,-2.5 765,-2.5 871,-2.5 871,-2.5 877,-2.5 883,-8.5 883,-14.5 883,-14.5 883,-26.5 883,-26.5 883,-32.5 877,-38.5 871,-38.5"/>
-<text text-anchor="middle" x="818" y="-23.5" font-family="Inter" font-size="10.00" fill="#94a3b8">DONE</text>
-<text text-anchor="middle" x="818" y="-12.5" font-family="Inter" font-size="10.00" fill="#94a3b8">Stop + signal</text>
+<path fill="#1e293b" stroke="#475569" stroke-width="1.5" d="M699,-58C699,-58 579,-58 579,-58 573,-58 567,-52 567,-46 567,-46 567,-12 567,-12 567,-6 573,0 579,0 579,0 699,0 699,0 705,0 711,-6 711,-12 711,-12 711,-46 711,-46 711,-52 705,-58 699,-58"/>
+<text text-anchor="middle" x="639" y="-32" font-family="Inter" font-size="10.00" fill="#94a3b8">DONE</text>
+<text text-anchor="middle" x="639" y="-21" font-family="Inter" font-size="10.00" fill="#94a3b8">Stop + signal</text>
 </g>
 <!-- NORMAL&#45;&gt;DONE -->
-<g id="edge10" class="edge">
+<g id="edge6" class="edge">
 <title>NORMAL&#45;&gt;DONE</title>
-<path fill="none" stroke="#475569" d="M495.01,-111.62C645.91,-70.11 692.12,-57.3 746.63,-41.46"/>
-<polygon fill="#475569" stroke="#475569" points="747.94,-44.72 756.57,-38.56 745.99,-38 747.94,-44.72"/>
-<text text-anchor="middle" x="849.5" y="-73.1" font-family="Inter" font-size="8.00" fill="#94a3b8">finish waypoint</text>
+<path fill="none" stroke="#475569" d="M303,-255.63C303,-188.39 303,-29 303,-29 303,-29 556.92,-29 556.92,-29"/>
+<polygon fill="#475569" stroke="#475569" points="556.92,-32.5 566.92,-29 556.92,-25.5 556.92,-32.5"/>
+<text text-anchor="middle" x="489" y="-31.6" font-family="Inter" font-size="8.00" fill="#94a3b8">finish waypoint</text>
 </g>
 <!-- SLOW&#45;&gt;NORMAL -->
-<g id="edge6" class="edge">
+<g id="edge7" class="edge">
 <title>SLOW&#45;&gt;NORMAL</title>
-<path fill="none" stroke="#475569" d="M364.53,-110.96C229.92,-72.82 185.18,-59.91 136.55,-44.22"/>
-<polygon fill="#475569" stroke="#475569" points="137.33,-40.8 126.74,-41.04 135.17,-47.46 137.33,-40.8"/>
-<text text-anchor="middle" x="177.5" y="-73.1" font-family="Inter" font-size="8.00" fill="#94a3b8">zone exit</text>
+<path fill="none" stroke="#06b6d4" d="M566.84,-476.33C485.07,-476.33 363,-476.33 363,-476.33 363,-476.33 363,-324.06 363,-324.06"/>
+<polygon fill="#06b6d4" stroke="#06b6d4" points="366.5,-324.06 363,-314.06 359.5,-324.06 366.5,-324.06"/>
+<text text-anchor="middle" x="489" y="-479.6" font-family="Inter" font-size="8.00" fill="#a5f3fc">zone exit</text>
 </g>
 <!-- BLIND&#45;&gt;NORMAL -->
-<g id="edge7" class="edge">
+<g id="edge8" class="edge">
 <title>BLIND&#45;&gt;NORMAL</title>
-<path fill="none" stroke="#475569" d="M393.44,-108.85C332.44,-74.36 309.67,-61.18 287.79,-46.7"/>
-<polygon fill="#475569" stroke="#475569" points="289.62,-43.71 279.37,-41.04 285.71,-49.52 289.62,-43.71"/>
-<text text-anchor="middle" x="358.5" y="-77.6" font-family="Inter" font-size="8.00" fill="#94a3b8">tunnel exit</text>
-<text text-anchor="middle" x="358.5" y="-68.6" font-family="Inter" font-size="8.00" fill="#94a3b8">(lidar restored)</text>
+<path fill="none" stroke="#ef4444" d="M663,-346.83C663,-325.4 663,-300 663,-300 663,-300 421.31,-300 421.31,-300"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="421.31,-296.5 411.31,-300 421.31,-303.5 421.31,-296.5"/>
+<text text-anchor="middle" x="489" y="-351.6" font-family="Inter" font-size="8.00" fill="#fca5a5">lidar restored</text>
 </g>
 <!-- NAVIGATE&#45;&gt;NORMAL -->
-<g id="edge8" class="edge">
+<g id="edge9" class="edge">
 <title>NAVIGATE&#45;&gt;NORMAL</title>
-<path fill="none" stroke="#475569" d="M432.72,-108.78C436.79,-77.89 438.92,-63.08 441.65,-51.2"/>
-<polygon fill="#475569" stroke="#475569" points="445.13,-51.74 444.27,-41.18 438.36,-49.97 445.13,-51.74"/>
-<text text-anchor="middle" x="563.5" y="-73.1" font-family="Inter" font-size="8.00" fill="#94a3b8">obstacle cleared</text>
+<path fill="none" stroke="#a855f7" d="M566.76,-280.67C566.76,-280.67 421.13,-280.67 421.13,-280.67"/>
+<polygon fill="#a855f7" stroke="#a855f7" points="421.13,-277.17 411.13,-280.67 421.13,-284.17 421.13,-277.17"/>
+<text text-anchor="middle" x="489" y="-223.6" font-family="Inter" font-size="8.00" fill="#c4b5fd">cleared</text>
 </g>
 <!-- PUSH&#45;&gt;NORMAL -->
-<g id="edge9" class="edge">
+<g id="edge10" class="edge">
 <title>PUSH&#45;&gt;NORMAL</title>
-<path fill="none" stroke="#475569" d="M470.84,-108.94C541.81,-73.2 569.59,-59.19 595.71,-45.84"/>
-<polygon fill="#475569" stroke="#475569" points="597.64,-48.78 604.94,-41.11 594.45,-42.55 597.64,-48.78"/>
-<text text-anchor="middle" x="758.5" y="-73.1" font-family="Inter" font-size="8.00" fill="#94a3b8">zone exit</text>
+<path fill="none" stroke="#f97316" d="M566.86,-157.67C488.7,-157.67 375,-157.67 375,-157.67 375,-157.67 375,-245.79 375,-245.79"/>
+<polygon fill="#f97316" stroke="#f97316" points="371.5,-245.79 375,-255.79 378.5,-245.79 371.5,-245.79"/>
+<text text-anchor="middle" x="489" y="-95.6" font-family="Inter" font-size="8.00" fill="#fdba74">zone exit</text>
 </g>
 </g>
 </svg>
@@ -1040,9 +1036,11 @@ pre { background: #0a0e1a; border: 1px solid var(--border); border-left: 3px sol
   <p>
     The narrow section, ramps, bank, and helix all trigger SLOW_NAV. Same Nav2 stack, but with
     velocity limits lowered. The key concern in the narrow section is <strong>lateral accuracy</strong>
-    — with only 2 inches of clearance on each side, we need NDT-OMP localization to be solid
-    before entering. The state machine forces an NDT re-localization check at the zone entry waypoint
-    before proceeding.
+    — our robot is 17–18" wide and the passage is only 20" wide, leaving just <strong>1–1.5" clearance
+    per side</strong>. This is the tightest tolerance on the entire course. We need NDT-OMP localization
+    to be solid before entering and may need to reduce <code>inflation_radius</code> to 0.2m so Nav2
+    doesn't mark the path as impassable.
+    The state machine forces an NDT re-localization check at the zone entry waypoint before proceeding.
   </p>
   <p>
     Typical speed: <strong>0.2–0.3 m/s</strong>. IMU pitch threshold triggers the ramp detection automatically.
@@ -1249,7 +1247,7 @@ global_costmap:
       <tr>
         <td><code>inflation_radius: 0.45m</code></td>
         <td>global costmap</td>
-        <td>With 20" narrow section and ~28" robot width, this is tight — may need tuning to 0.3m for narrow zones</td>
+        <td>With 20" narrow section and 17–18" robot width, only ~1.5" clearance per side — must reduce to 0.2m for narrow zone or Nav2 marks path impassable</td>
       </tr>
       <tr>
         <td><code>raytrace_max_range: 6.0m</code></td>
@@ -1351,7 +1349,7 @@ global_costmap:
       <tr>
         <td><strong style="color:var(--yellow)">9</strong></td>
         <td><strong>Inflation radius override</strong> for narrow section</td>
-        <td>May be required to navigate the 20" narrow section with current footprint.</td>
+        <td>Required — robot is 17–18" wide in a 20" passage. Default 0.45m marks it impassable.</td>
         <td>Sep–Oct</td>
       </tr>
       <tr>
