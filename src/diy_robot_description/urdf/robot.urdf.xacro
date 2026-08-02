@@ -31,7 +31,7 @@
   <xacro:property name="wheel_radius" value="0.09445625"/> <!-- 3.71875 inches-->
   <xacro:property name="wheel_width" value="0.0508"/><!-- 2 inches-->
   <xacro:property name="wheel_ygap" value="0.041275"/><!-- 1.625 inches--> 
-  <xacro:property name="wheel_zoff" value="0.06985"/> <!-- 2.75 inches--> 
+  <xacro:property name="wheel_zoff" value="${base_off_ground + base_height/2 - wheel_radius}"/> <!-- derived from chassis ground clearance --> 
   <xacro:property name="drive_wheel_xoff" value="0.1254125"/><!-- 4.9375 inches-->
   <xacro:property name="rear_wheel_xoff" value="0.1476375"/><!-- 5.8125 inches-->
   <xacro:property name="castor_wheel_radius" value="0.01"/> <!-- 3.71875 inches-->
@@ -42,7 +42,7 @@
   <!-- <xacro:property name="lidar_radius" value="0.038125"/>
   <xacro:property name="lidar_length" value="0.076"/> --> <!-- old values defined as per the actual measurements -->
   <xacro:property name="lidar_radius" value="0.0516"/>
-  <xacro:property name="lidar_length" value="0.0717"/>
+  <xacro:property name="lidar_length" value="0.0717"/>  
   <xacro:property name="imu_length" value="0.03"/>
   <xacro:property name="imu_width" value="0.03"/>
   <xacro:property name="imu_height" value="0.02"/>
@@ -53,12 +53,12 @@
   <xacro:include filename="lidar.urdf.xacro" />
   <xacro:include filename="imu.urdf.xacro" />
 
-  <xacro:lidar_3d_v1 parent="chassis" lidar_radius="${lidar_radius}" lidar_length="${lidar_length}">
+  <xacro:lidar_3d_v1 parent="base_link" lidar_radius="${lidar_radius}" lidar_length="${lidar_length}">
     <origin xyz="${base_length/2-lidar_radius} 0 ${base_height/2}" rpy="0 0 0" />
    <!-- <origin xyz="0.569632 -0.03223 0.502056" rpy="0 0 0" /> -->
   </xacro:lidar_3d_v1>
 
-  <xacro:imu_v1 parent="chassis" imu_length="${imu_length}" imu_width="${imu_width}" imu_height="${imu_height}">
+  <xacro:imu_v1 parent="base_link" imu_length="${imu_length}" imu_width="${imu_width}" imu_height="${imu_height}">
     <origin xyz="${base_length/2-lidar_radius} 0 0" rpy="0 0 0" />
   </xacro:imu_v1>
 
@@ -126,22 +126,14 @@
     </gazebo>
     
     <joint name="${prefix}_joint" type="${joint_type}">
-      <parent link="chassis"/>
+      <parent link="base_link"/>
       <child link="${prefix}_link"/>
       <origin xyz="${x_reflect*wheel_xoff} ${y_reflect*(base_width/2+wheel_ygap)} ${-wheel_zoff}" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
     </joint>
   </xacro:macro>
   
-  <link name="base_footprint"/>
-
-  <joint name="base_footprint_to_chassis" type="fixed">
-    <parent link="base_footprint"/>
-    <child link="chassis"/>
-    <origin xyz="0 0 ${(wheel_radius+wheel_zoff)}" rpy="0 0 0"/>
-  </joint>
-
-  <link name="chassis">
+  <link name="base_link">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/> <!-- change based on TF -->
       <mass value="10.0"/>
@@ -183,8 +175,8 @@
     </collision>
   </link>
 
-  <joint name="chassis_caster_ball" type="continuous">
-    <parent link="chassis"/>
+  <joint name="base_link_caster_ball" type="continuous">
+    <parent link="base_link"/>
     <child link="caster"/>
     <origin xyz="${-1*rear_wheel_xoff} 0.0 ${-1*wheel_zoff}" rpy="0 0 0"/>
   </joint>
@@ -195,7 +187,7 @@
   <xacro:wheel prefix="rearwhl_r" x_reflect="-1" y_reflect="-1" wheel_xoff="${rear_wheel_xoff}" joint_type="continuous"/>
   -->
   <gazebo>
-    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+    <plugin filename="libignition-gazebo-diff-drive-system.so" name="ignition::gazebo::systems::DiffDrive">
         <left_joint>drivewhl_l_joint</left_joint>
         <right_joint>drivewhl_r_joint</right_joint>
         <wheel_separation>${base_width+2*wheel_ygap}</wheel_separation> <!-- Adjust to your robot's width (meters) -->
@@ -205,15 +197,15 @@
     </plugin>
   </gazebo>
   <gazebo>
-    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+    <plugin filename="libignition-gazebo-joint-state-publisher-system.so" name="ignition::gazebo::systems::JointStatePublisher">
         <topic>joint_states</topic> <joint_name>drivewhl_l_joint</joint_name>
         <joint_name>drivewhl_r_joint</joint_name>
     </plugin>
   </gazebo>
    <!-- INSERT GROUND TRUTH POSE PUBLISHER HERE -->
   <gazebo>
-    <plugin filename="libignition-gazebo-pose-publisher-system.so"
-          name="ignition::gazebo::systems::PosePublisher">
+      <plugin filename="libignition-gazebo-pose-publisher-system.so"
+        name="ignition::gazebo::systems::PosePublisher">
       <publish_link_pose>false</publish_link_pose>
       <publish_visual_pose>false</publish_visual_pose>
       <publish_nested_model_pose>true</publish_nested_model_pose>

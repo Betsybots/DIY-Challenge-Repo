@@ -120,7 +120,7 @@
         <uri>../models/grass_plane/model.sdf</uri>
     </include>
 
-<!--
+
     <include>
         <name>model_0</name>
         <uri>../models/straw_bale/model.sdf</uri>
@@ -222,7 +222,7 @@
         <uri>../models/straw_bale/model.sdf</uri>
         <pose>9 1 0 0 0 0.0</pose>
     </include>
-    -->
+
     <!-- Robot Description -->
     <!--
     <include>
