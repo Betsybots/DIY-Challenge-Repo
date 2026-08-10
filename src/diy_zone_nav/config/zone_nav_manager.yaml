@@ -15,7 +15,7 @@ zone_nav_manager:
     update_rate_hz: 10.0      # how often to evaluate zone membership (Hz)
 
     # ── Course laps ──────────────────────────────────────────────────────────
-    total_laps: 2             # transition to DONE after this many finish-line crossings
+    total_laps: 3             # stop after 3 complete laps
 
     # ── Speed profiles (m/s) ─────────────────────────────────────────────────
     # These are published on /speed_limit (nav2_msgs/SpeedLimit, percentage=false)
@@ -61,7 +61,7 @@ zone_nav_manager:
     # ── Default inflation_radius values ──────────────────────────────────────
     # Restored when exiting a zone that overrode them.
     # Must match inflation_layer.inflation_radius in nav2_params.yaml.
-    default_inflation_radius:       0.45   # global_costmap
+    default_inflation_radius:       0.30   # global_costmap  SIM: 0.30 | REAL: 0.45
     local_default_inflation_radius: 0.40   # local_costmap
 
     # ── SetParameters service paths ──────────────────────────────────────────

@@ -213,6 +213,13 @@ class ZoneNavManagerNode : public rclcpp::Node {
     const std::string nav_mode_topic     = get_parameter("nav_mode_topic").as_string();
     const std::string start_topic        = get_parameter("start_signal_topic").as_string();
 
+    // If the mux service is set to a placeholder (sim-only), disable mux calls silently.
+    mux_disabled_ = (mux_srv.find("nonexistent") != std::string::npos ||
+                     mux_srv.find("dummy")        != std::string::npos);
+    if (mux_disabled_) {
+      RCLCPP_INFO(get_logger(), "cmd_vel_mux disabled (sim mode) — mux arbitration skipped");
+    }
+
     // ── Load zone waypoints ────────────────────────────────────────────────
     // Throw rather than calling rclcpp::shutdown() from the constructor: the
     // object would still be handed to rclcpp::spin(), which then operates on a
@@ -321,7 +328,8 @@ class ZoneNavManagerNode : public rclcpp::Node {
   // operator in control). Otherwise re-asserted until the mux reports it.
   std::string desired_mux_mode_;
   std::string reported_mux_mode_;
-  bool        mux_mode_seen_ = false;
+  bool        mux_mode_seen_   = false;
+  bool        mux_disabled_    = false;  // true in sim: skip mux calls silently
 
   // Speed limit currently requested on /speed_limit (absolute m/s, 0.0 = none).
   double desired_speed_limit_ = kNoSpeedLimit;
@@ -828,7 +836,8 @@ class ZoneNavManagerNode : public rclcpp::Node {
   // ESTOP_LOCK is never overridden — the mux rejects that anyway, and the
   // E-stop must only be cleared by the hardware signal.
   void enforceMuxMode() {
-    if (desired_mux_mode_.empty()) return;                     // INIT: leave operator in control
+    if (mux_disabled_) return;                                     // sim: no mux present
+    if (desired_mux_mode_.empty()) return;                         // INIT: leave operator in control
     if (reported_mux_mode_ == kMuxEstopLock) return;           // respect the E-stop
     if (mux_mode_seen_ && reported_mux_mode_ == desired_mux_mode_) {
       mux_reassert_accum_s_ = kMuxReassertPeriodS;             // ready to fire immediately

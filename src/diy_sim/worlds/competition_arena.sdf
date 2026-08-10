@@ -11,7 +11,7 @@
 
     Nominal path width : 1.0 m (~40in)
     Narrow section     : 0.508 m (20in), 96in = 2.44 m long
-    Ramp               : 2in = 0.051 m rise; up 32in, flat 64in, down 32in
+    Ramp               : 0.15 m rise; slope 7° (1.22m up + 0.5m flat + 1.22m down = 2.94m total)
     Tunnel             : 0.81 m (32in) wide, 1.52 m (5ft) long, 0.635 m (25in) tall
     Wall height: 0.6 m   Wall thickness: 0.05 m
 
@@ -99,7 +99,7 @@
     <!-- Grass texture overlay -->
     <include>
       <name>ground_plane_image</name>
-      <uri>../models/grass_plane/model.sdf</uri>
+      <uri>model://grass_plane</uri>
     </include>
 
     <!-- ==================================================================
@@ -164,36 +164,65 @@
       </link>
     </model>
 
-    <!-- Inclined Ramp  x=5.0..8.25  (48in x 128in section, 2in = 0.051 m rise)
-         Ramp-up  : x=5.000..5.812  (32in = 0.812 m), pitch=+0.063 rad (~3.6 deg)
-         Flat-top : x=5.812..7.437  (64in = 1.625 m), z=0.076 m (board centre)
-         Ramp-down: x=7.437..8.250  (32in = 0.813 m), pitch=-0.063 rad -->
+    <!-- Inclined Ramp  x=5.000..6.277  (height=0.06m, slope=7.0deg=0.1222rad)
+         ──────────────────────────────────────────────────────────────────────
+         COLLISION DISABLED (visual-only) — Phase 1: validate full circuit navigation.
+         Phase 2: re-enable collision + add Ignition joint PID for proper torque sim.
+         Geometry is correct and ready; just uncomment <collision> blocks to re-enable.
+         ────────────────────────────────────────────────────────────────────── -->
     <model name='ramp_up'>
       <static>true</static>
-      <pose>5.406 0 0.0255 0 0.063 0</pose>
+      <pose>5.244 0 0.0052 0 0.1222 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>0.812 1.0 0.05</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.812 1.0 0.05</size></box></geometry>
+        <!-- PHASE 2: uncomment collision block below to re-enable ramp physics
+        <collision name='c'>
+          <geometry><box><size>0.492 1.0 0.05</size></box></geometry>
+          <surface>
+            <friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode></friction>
+            <contact><ode><min_depth>0.001</min_depth><max_vel>0.0</max_vel></ode></contact>
+          </surface>
+        </collision>
+        -->
+        <visual name='v'>
+          <geometry><box><size>0.492 1.0 0.05</size></box></geometry>
           <material><ambient>0.45 0.30 0.12 1</ambient><diffuse>0.45 0.30 0.12 1</diffuse></material>
         </visual>
       </link>
     </model>
     <model name='ramp_flat'>
       <static>true</static>
-      <pose>6.624 0 0.076 0 0 0</pose>
+      <pose>5.639 0 0.035 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>1.625 1.0 0.05</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>1.625 1.0 0.05</size></box></geometry>
+        <!-- PHASE 2: uncomment collision block below to re-enable ramp physics
+        <collision name='c'>
+          <geometry><box><size>0.3 1.0 0.05</size></box></geometry>
+          <surface>
+            <friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode></friction>
+            <contact><ode><min_depth>0.001</min_depth><max_vel>0.0</max_vel></ode></contact>
+          </surface>
+        </collision>
+        -->
+        <visual name='v'>
+          <geometry><box><size>0.3 1.0 0.05</size></box></geometry>
           <material><ambient>0.45 0.30 0.12 1</ambient><diffuse>0.45 0.30 0.12 1</diffuse></material>
         </visual>
       </link>
     </model>
     <model name='ramp_down'>
       <static>true</static>
-      <pose>7.843 0 0.0255 0 -0.063 0</pose>
+      <pose>6.033 0 0.0052 0 -0.1222 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>0.813 1.0 0.05</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.813 1.0 0.05</size></box></geometry>
+        <!-- PHASE 2: uncomment collision block below to re-enable ramp physics
+        <collision name='c'>
+          <geometry><box><size>0.492 1.0 0.05</size></box></geometry>
+          <surface>
+            <friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode></friction>
+            <contact><ode><min_depth>0.001</min_depth><max_vel>0.0</max_vel></ode></contact>
+          </surface>
+        </collision>
+        -->
+        <visual name='v'>
+          <geometry><box><size>0.492 1.0 0.05</size></box></geometry>
           <material><ambient>0.45 0.30 0.12 1</ambient><diffuse>0.45 0.30 0.12 1</diffuse></material>
         </visual>
       </link>
@@ -203,18 +232,8 @@
          TURN 1  (x=13, y=0,  +X to -Y)
          Outer corner: l1_n_wall reaches x=13.525 and l2_e_wall starts at
          y=+0.525 so there is no gap on the outside.
-         Inner corner fill block closes the south/west pocket.
+         No inner corner block — real arena has none.
          ================================================================== -->
-    <model name='turn1_inner_corner'>
-      <static>true</static>
-      <pose>12.7375 -0.2625 0.3 0 0 0</pose>
-      <link name='link'>
-        <collision name='c'><geometry><box><size>0.525 0.525 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.525 0.525 0.6</size></box></geometry>
-          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
 
     <!-- ==================================================================
          LEG 2  (-Y direction, x_center=13, y=0..-13)
@@ -240,89 +259,65 @@
       </link>
     </model>
 
-    <!-- Leg 2 west (inner) wall before narrow  x=12.475, y=-0.525..-2.0 -->
+    <!-- Leg 2 west (inner) wall before narrow  x=12.475, y=-0.525..-3.0 -->
     <model name='l2_w_wall_a'>
       <static>true</static>
-      <pose>12.475 -1.2625 0.3 0 0 0</pose>
+      <pose>12.475 -1.7625 0.3 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 1.525 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 1.525 0.6</size></box></geometry>
+        <collision name='c'><geometry><box><size>0.05 2.475 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.05 2.475 0.6</size></box></geometry>
           <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
         </visual>
       </link>
     </model>
 
-    <!-- Narrow entry funnel west diagonal
-         From (12.475, -2.000) to (12.721, -2.812)
-         Dx=+0.246 Dy=-0.812  length=0.848 m  yaw=-0.295 rad -->
-    <model name='narrow_entry_w'>
+    <!-- Narrow entry chamfer walls y=-3.0..-4.0 — guide robot to centreline.
+         Hard 90° step face at y=-3.0 caused robot to crash into the north face of
+         the narrow wall if robot centre was west of x=12.871.  Angled chamfers
+         slide the robot east toward x=13.0 instead of blocking it.
+         West chamfer: (12.475,-3.0)→(12.721,-4.0)  yaw=-1.330 rad (~76°)
+         East chamfer: (13.525,-3.0)→(13.279,-4.0)  yaw=+1.330 rad -->
+    <model name='narrow_w_chamfer'>
       <static>true</static>
-      <pose>12.598 -2.406 0.3 0 0 -0.295</pose>
+      <pose>12.598 -3.5 0.3 0 0 -1.330</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 0.848 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 0.848 0.6</size></box></geometry>
+        <collision name='c'><geometry><box><size>1.030 0.05 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>1.030 0.05 0.6</size></box></geometry>
+          <material><ambient>0.80 0.20 0.20 1</ambient><diffuse>0.80 0.20 0.20 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name='narrow_e_chamfer'>
+      <static>true</static>
+      <pose>13.402 -3.5 0.3 0 0 1.330</pose>
+      <link name='link'>
+        <collision name='c'><geometry><box><size>1.030 0.05 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>1.030 0.05 0.6</size></box></geometry>
           <material><ambient>0.80 0.20 0.20 1</ambient><diffuse>0.80 0.20 0.20 1</diffuse></material>
         </visual>
       </link>
     </model>
 
-    <!-- Narrow entry funnel east diagonal
-         From (13.525, -2.000) to (13.279, -2.812)
-         Dx=-0.246 Dy=-0.812  length=0.848 m  yaw=+0.295 rad -->
-    <model name='narrow_entry_e'>
-      <static>true</static>
-      <pose>13.402 -2.406 0.3 0 0 0.295</pose>
-      <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 0.848 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 0.848 0.6</size></box></geometry>
-          <material><ambient>0.80 0.20 0.20 1</ambient><diffuse>0.80 0.20 0.20 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
-
-    <!-- Narrow section walls  (96in = 2.44 m long, y=-2.812..-5.250) -->
+    <!-- Narrow section walls — straight walls y=-4.000..-6.062
+         West wall at x=12.721, East wall at x=13.279 (558mm / 22in clear width)
+         Entry via chamfer walls above (y=-3.0..-4.0) — no hard step face.
+         Exit step at y=-6.062: widens back out to full corridor width -->
     <model name='narrow_w_wall'>
       <static>true</static>
-      <pose>12.721 -4.031 0.3 0 0 0</pose>
+      <pose>12.721 -5.031 0.3 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 2.44 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 2.44 0.6</size></box></geometry>
+        <collision name='c'><geometry><box><size>0.05 2.062 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.05 2.062 0.6</size></box></geometry>
           <material><ambient>0.80 0.20 0.20 1</ambient><diffuse>0.80 0.20 0.20 1</diffuse></material>
         </visual>
       </link>
     </model>
     <model name='narrow_e_wall'>
       <static>true</static>
-      <pose>13.279 -4.031 0.3 0 0 0</pose>
+      <pose>13.279 -5.031 0.3 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 2.44 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 2.44 0.6</size></box></geometry>
-          <material><ambient>0.80 0.20 0.20 1</ambient><diffuse>0.80 0.20 0.20 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
-
-    <!-- Narrow exit funnel west diagonal
-         From (12.721, -5.250) to (12.475, -6.062)  yaw=+0.295 -->
-    <model name='narrow_exit_w'>
-      <static>true</static>
-      <pose>12.598 -5.656 0.3 0 0 0.295</pose>
-      <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 0.848 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 0.848 0.6</size></box></geometry>
-          <material><ambient>0.80 0.20 0.20 1</ambient><diffuse>0.80 0.20 0.20 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
-
-    <!-- Narrow exit funnel east diagonal
-         From (13.279, -5.250) to (13.525, -6.062)  yaw=-0.295 -->
-    <model name='narrow_exit_e'>
-      <static>true</static>
-      <pose>13.402 -5.656 0.3 0 0 -0.295</pose>
-      <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 0.848 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 0.848 0.6</size></box></geometry>
+        <collision name='c'><geometry><box><size>0.05 2.062 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.05 2.062 0.6</size></box></geometry>
           <material><ambient>0.80 0.20 0.20 1</ambient><diffuse>0.80 0.20 0.20 1</diffuse></material>
         </visual>
       </link>
@@ -344,18 +339,8 @@
          TURN 2  (x=13, y=-13,  -Y to -X)
          Outer corner: l2_e_wall reaches y=-13.525 and l3_s_wall starts at
          x=13.525 so there is no gap on the outside.
-         Inner corner fill closes the west/north pocket.
+         No inner corner block — real arena has none.
          ================================================================== -->
-    <model name='turn2_inner_corner'>
-      <static>true</static>
-      <pose>12.7375 -12.7375 0.3 0 0 0</pose>
-      <link name='link'>
-        <collision name='c'><geometry><box><size>0.525 0.525 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.525 0.525 0.6</size></box></geometry>
-          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
 
     <!-- ==================================================================
          LEG 3  (-X direction, y_center=-13, x=13..0)
@@ -367,13 +352,26 @@
            x= 0.. 1.5    Finish straight
          ================================================================== -->
 
-    <!-- Leg 3 south (outer) wall  y=-13.525, x=0..13.525 (wraps Turn-2 corner) -->
-    <model name='l3_s_wall'>
+    <!-- Leg 3 south (outer) wall — split into two segments to leave the wide
+         section flare open (x=3..6).
+         l3_s_wall_a: x=6..13.525 (east of wide section)
+         l3_s_wall_b: x=0..3     (west of wide section / finish straight) -->
+    <model name='l3_s_wall_a'>
       <static>true</static>
-      <pose>6.7625 -13.525 0.3 0 0 0</pose>
+      <pose>9.7625 -13.525 0.3 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>13.525 0.05 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>13.525 0.05 0.6</size></box></geometry>
+        <collision name='c'><geometry><box><size>7.525 0.05 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>7.525 0.05 0.6</size></box></geometry>
+          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name='l3_s_wall_b'>
+      <static>true</static>
+      <pose>1.5 -13.525 0.3 0 0 0</pose>
+      <link name='link'>
+        <collision name='c'><geometry><box><size>3.0 0.05 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>3.0 0.05 0.6</size></box></geometry>
           <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
         </visual>
       </link>
@@ -391,13 +389,13 @@
       </link>
     </model>
 
-    <!-- Leg 3 north wall tunnel+finish zone  y=-12.475, x=0..1.5 -->
+    <!-- Leg 3 north wall tunnel+finish zone  y=-12.475, x=0..3 (extended now tunnel moved to Leg 4) -->
     <model name='l3_n_wall_b'>
       <static>true</static>
-      <pose>0.75 -12.475 0.3 0 0 0</pose>
+      <pose>1.5 -12.475 0.3 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>1.5 0.05 0.6</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>1.5 0.05 0.6</size></box></geometry>
+        <collision name='c'><geometry><box><size>3.0 0.05 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>3.0 0.05 0.6</size></box></geometry>
           <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
         </visual>
       </link>
@@ -568,72 +566,142 @@
       </link>
     </model>
 
+    <!-- (Tunnel moved to Leg 4 — see below) -->
+
     <!-- ==================================================================
-         TUNNEL  x=1.5..3.0, y_center=-13
-         32in wide = 0.81 m: inner faces at y=-12.595 and y=-13.405
-         5ft long  = 1.52 m
-         25in tall = 0.635 m: roof board centre at z=0.6575 m
-         The existing l3_s_wall (y=-13.525) forms the south tunnel boundary.
+         LEG 4  (+Y direction, x_center=-0.5, y=-12.475..-0.525)
+         Return corridor closing the loop back to start.
+         East wall  x=0      (robot's right when heading +Y)
+         West wall  x=-1.0   (outer boundary)
+         SW corner cap closes Leg3 south -> Leg4 west
+         NW corner cap closes Leg4 west  -> Leg1 north
          ================================================================== -->
-    <model name='tunnel_n_wall'>
+
+    <!-- Leg 4 east wall  x=0, y=-0.525..-12.475 -->
+    <model name='leg4_e_wall'>
       <static>true</static>
-      <pose>2.25 -12.595 0.3175 0 0 0</pose>
+      <pose>0.0 -6.5 0.3 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>1.52 0.05 0.635</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>1.52 0.05 0.635</size></box></geometry>
+        <collision name='c'><geometry><box><size>0.05 11.95 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.05 11.95 0.6</size></box></geometry>
+          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Leg 4 west (outer) wall  x=-1.0, y=-0.525..-12.475 -->
+    <model name='leg4_w_wall'>
+      <static>true</static>
+      <pose>-1.0 -6.5 0.3 0 0 0</pose>
+      <link name='link'>
+        <collision name='c'><geometry><box><size>0.05 11.95 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.05 11.95 0.6</size></box></geometry>
+          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ==================================================================
+         TUNNEL in LEG 4  (+Y corridor, x=-1.0..0, y_center=-6.5)
+         32in wide = 0.81 m: inner faces at x=-0.905 (W) and x=-0.095 (E)
+         5ft long  = 1.52 m: y=-7.26 .. y=-5.74
+         25in tall = 0.635 m: roof board centre at z=0.6575 m
+         Side walls (E/W) run along the corridor travel direction (+Y).
+         The outer corridor walls (leg4_e_wall, leg4_w_wall) bound the tunnel
+         exterior; the tiny gaps (~0.07 m) are impassable by the robot.
+         ================================================================== -->
+    <model name='tunnel_e_wall'>
+      <static>true</static>
+      <pose>-0.12 -6.5 0.3175 0 0 0</pose>
+      <link name='link'>
+        <collision name='c'><geometry><box><size>0.05 1.52 0.635</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.05 1.52 0.635</size></box></geometry>
           <material><ambient>0.30 0.30 0.30 1</ambient><diffuse>0.30 0.30 0.30 1</diffuse></material>
         </visual>
       </link>
     </model>
-    <model name='tunnel_s_wall'>
+    <model name='tunnel_w_wall'>
       <static>true</static>
-      <pose>2.25 -13.405 0.3175 0 0 0</pose>
+      <pose>-0.88 -6.5 0.3175 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>1.52 0.05 0.635</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>1.52 0.05 0.635</size></box></geometry>
+        <collision name='c'><geometry><box><size>0.05 1.52 0.635</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.05 1.52 0.635</size></box></geometry>
           <material><ambient>0.30 0.30 0.30 1</ambient><diffuse>0.30 0.30 0.30 1</diffuse></material>
         </visual>
       </link>
     </model>
     <model name='tunnel_roof'>
       <static>true</static>
-      <pose>2.25 -13.0 0.6575 0 0 0</pose>
+      <pose>-0.5 -6.5 0.6575 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>1.52 0.86 0.05</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>1.52 0.86 0.05</size></box></geometry>
+        <collision name='c'><geometry><box><size>0.86 1.52 0.05</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.86 1.52 0.05</size></box></geometry>
           <material><ambient>0.30 0.30 0.30 1</ambient><diffuse>0.30 0.30 0.30 1</diffuse></material>
         </visual>
       </link>
     </model>
-    <!-- Tunnel entry lintel (x=3.0) header beam above opening -->
-    <model name='tunnel_lintel_e'>
+    <!-- Tunnel south lintel (entry from Leg3 end, y=-7.26) -->
+    <model name='tunnel_lintel_s'>
       <static>true</static>
-      <pose>3.0 -13.0 0.66 0 0 0</pose>
+      <pose>-0.5 -7.26 0.66 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 0.86 0.05</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 0.86 0.05</size></box></geometry>
+        <collision name='c'><geometry><box><size>0.86 0.05 0.05</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.86 0.05 0.05</size></box></geometry>
           <material><ambient>0.30 0.30 0.30 1</ambient><diffuse>0.30 0.30 0.30 1</diffuse></material>
         </visual>
       </link>
     </model>
-    <!-- Tunnel exit lintel (x=1.5) -->
-    <model name='tunnel_lintel_w'>
+    <!-- Tunnel north lintel (exit toward start gate, y=-5.74) -->
+    <model name='tunnel_lintel_n'>
       <static>true</static>
-      <pose>1.5 -13.0 0.66 0 0 0</pose>
+      <pose>-0.5 -5.74 0.66 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>0.05 0.86 0.05</size></box></geometry></collision>
-        <visual name='v'><geometry><box><size>0.05 0.86 0.05</size></box></geometry>
+        <collision name='c'><geometry><box><size>0.86 0.05 0.05</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.86 0.05 0.05</size></box></geometry>
           <material><ambient>0.30 0.30 0.30 1</ambient><diffuse>0.30 0.30 0.30 1</diffuse></material>
         </visual>
       </link>
     </model>
 
+    <!-- SW corner south cap  y=-13.525, x=-1.0..0
+         Extends Leg3 south wall across SW corner to meet Leg4 west wall -->
+    <model name='turn3_sw_cap'>
+      <static>true</static>
+      <pose>-0.5 -13.525 0.3 0 0 0</pose>
+      <link name='link'>
+        <collision name='c'><geometry><box><size>1.0 0.05 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>1.0 0.05 0.6</size></box></geometry>
+          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- NW corner north cap  y=+0.525, x=-1.0..0
+         Extends Leg1 north wall across NW corner to meet Leg4 west wall -->
+    <model name='turn4_nw_cap'>
+      <static>true</static>
+      <pose>-0.5 0.525 0.3 0 0 0</pose>
+      <link name='link'>
+        <collision name='c'><geometry><box><size>1.0 0.05 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>1.0 0.05 0.6</size></box></geometry>
+          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
     <!-- ==================================================================
-         FINISH  x=0, y_center=-13
+         START / FINISH GATE
+         Closed loop: finish IS the start gate.
+         Start  posts (yellow) x= 0.0, y=±0.525 — east side (face Leg1)
+         Finish posts (yellow) x=-1.0, y=±0.525 — west side (face Leg4)
+         Gate opening: 1 m wide between x=-1.0 and x=0
+         Robot spawns at x=0, y=0, heading +X onto Leg1.
          ================================================================== -->
+
+    <!-- Finish posts (yellow) — west side of gate, x=-1.0 -->
     <model name='finish_post_n'>
       <static>true</static>
-      <pose>0.0 -12.475 0.3 0 0 0</pose>
+      <pose>-1.0 0.525 0.3 0 0 0</pose>
       <link name='link'>
         <collision name='c'><geometry><box><size>0.08 0.08 0.6</size></box></geometry></collision>
         <visual name='v'><geometry><box><size>0.08 0.08 0.6</size></box></geometry>
@@ -643,11 +711,33 @@
     </model>
     <model name='finish_post_s'>
       <static>true</static>
-      <pose>0.0 -13.525 0.3 0 0 0</pose>
+      <pose>-1.0 -0.525 0.3 0 0 0</pose>
       <link name='link'>
         <collision name='c'><geometry><box><size>0.08 0.08 0.6</size></box></geometry></collision>
         <visual name='v'><geometry><box><size>0.08 0.08 0.6</size></box></geometry>
           <material><ambient>1 1 0 1</ambient><diffuse>1 1 0 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- SW turn entry posts (orange) — mark Leg3→Leg4 corner at x=0 -->
+    <model name='sw_turn_post_n'>
+      <static>true</static>
+      <pose>0.0 -12.475 0.3 0 0 0</pose>
+      <link name='link'>
+        <collision name='c'><geometry><box><size>0.08 0.08 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.08 0.08 0.6</size></box></geometry>
+          <material><ambient>1 0.5 0 1</ambient><diffuse>1 0.5 0 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name='sw_turn_post_s'>
+      <static>true</static>
+      <pose>0.0 -13.525 0.3 0 0 0</pose>
+      <link name='link'>
+        <collision name='c'><geometry><box><size>0.08 0.08 0.6</size></box></geometry></collision>
+        <visual name='v'><geometry><box><size>0.08 0.08 0.6</size></box></geometry>
+          <material><ambient>1 0.5 0 1</ambient><diffuse>1 0.5 0 1</diffuse></material>
         </visual>
       </link>
     </model>

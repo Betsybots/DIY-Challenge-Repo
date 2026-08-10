@@ -1,0 +1,190 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# sim_circuit_waypoints.yaml
+# Closed-loop race circuit centerline waypoints for the competition_arena.sdf.
+#
+# These are submitted to the Nav2 FollowWaypoints action by circuit_runner_node.
+# One full lap = all waypoints below in order.  The circuit runner re-submits
+# after each completion until zone_nav_manager publishes /nav_mode == "DONE".
+#
+# Coordinate frame: map  (origin = start/finish gate east face)
+# yaw: 0.0 = east (+X), π/2 = north (+Y), π = west (-X), -π/2 = south (-Y)
+#
+# ─── Arena geometry reminder ──────────────────────────────────────────────────
+#   Leg 1: +X, y=0,    x=0→13      (ramp at x≈5.4..7.8)
+#   Turn1: right at x=13, inner corner (12.74, -0.26)
+#   Leg 2: -Y, x=13,   y=0→-13     (narrow section y≈-2.4..-5.7)
+#   Turn2: right at y=-13, inner corner (12.74, -12.74)
+#   Leg 3: -X, y=-13,  x=13→0      (bumps x≈10..11.5, buckets x≈6.5..9.3, wide x≈3..6)
+#   Turn3: left at x≈0, y=-13 → Leg 4 entry
+#   Leg 4: +Y, x=-0.5, y=-13→0     (tunnel y≈-7.26..-5.74)
+#   Gate:  x=-1..0, y=0 (finish posts x=-1, start posts x=0)
+# ─────────────────────────────────────────────────────────────────────────────
+
+waypoints:
+
+  # ══ Leg 1 (+X, y = 0) ══════════════════════════════════════════════════════
+  - label: "leg1_start"
+    x:    1.0
+    y:    0.0
+    yaw:  0.0          # heading east
+
+  - label: "leg1_gravel"
+    x:    3.2
+    y:    0.0
+    yaw:  0.0
+
+  - label: "leg1_ramp_up"
+    x:    5.1
+    y:    0.0
+    yaw:  0.0          # ramp approach — zone_nav transitions to SLOW_NAV
+
+  - label: "leg1_ramp_flat"
+    x:    5.64
+    y:    0.0
+    yaw:  0.0
+
+  - label: "leg1_ramp_down"
+    x:    6.1
+    y:    0.0
+    yaw:  0.0
+
+  - label: "leg1_end"
+    x:   12.5
+    y:    0.0
+    yaw:  0.0          # approaching Turn 1
+
+  # ══ Turn 1 (right turn, x=13, y: 0 → -13) ═════════════════════════════════
+  # Turn pocket: x=12.475..13.525, y=-0.525..+0.525, centreline x=13.0
+  # inflation=0.15 (turn1 zone) + keepout on SW corner = planner arcs naturally.
+  # Single deep target — don't over-constrain with intermediate points.
+  - label: "turn1_apex"
+    x:   13.0
+    y:   -1.3
+    yaw: -1.4          # on Leg2 centreline, heading south
+
+  - label: "turn1_center"
+    x:   13.0
+    y:   -1.7
+    yaw: -1.5708          # centering waypoint — aligns robot to x=13.0 before narrow walls
+
+  # ══ Leg 2 (-Y, x = 13) ═════════════════════════════════════════════════════
+  - label: "leg2_narrow_approach"
+    x:   13.0
+    y:   -4.0      # end of chamfer / start of straight narrow walls
+    yaw: -1.5708
+
+  - label: "leg2_narrow_centre"
+    x:   13.0
+    y:   -5.0
+    yaw: -1.5708       # inside straight narrow section (558 mm wide)
+
+  - label: "leg2_narrow_exit"
+    x:   13.0
+    y:   -5.7
+    yaw: -1.5708       # leaving narrow — NORMAL_NAV resumes
+
+  - label: "leg2_mid"
+    x:   13.0
+    y:   -9.0
+    yaw: -1.5708
+
+  - label: "leg2_end"
+    x:   13.0
+    y:  -12.0
+    yaw: -1.5708       # approaching Turn 2
+
+  # ══ Turn 2 (right turn, y=-13, x: 13 → 0) ══════════════════════════════════
+  - label: "turn2_apex"
+    x:   11.5
+    y:  -13.0
+    yaw:  3.14159      # heading west (-X)
+
+  # ══ Leg 3 (-X, y = -13) ════════════════════════════════════════════════════
+  - label: "leg3_bumps"
+    x:   10.0
+    y:  -13.0
+    yaw:  3.14159      # pothole bumps x≈10.0..11.5 — NORMAL_NAV (bumps are small)
+
+  - label: "leg3_buckets_start"
+    x:    9.0
+    y:  -13.0
+    yaw:  3.14159      # zone_nav: NAVIGATE_AROUND begins here
+
+  - label: "leg3_buckets_mid"
+    x:    7.5
+    y:  -13.0
+    yaw:  3.14159
+
+  - label: "leg3_wide_entry"
+    x:    6.0
+    y:  -13.0
+    yaw:  3.14159      # wide section entry (walls spread to y≈-11.3 / -14.7)
+
+  - label: "leg3_wide_centre"
+    x:    4.5
+    y:  -13.0
+    yaw:  3.14159      # centreline stays at y=-13 even in wide section
+
+  - label: "leg3_wide_exit"
+    x:    3.0
+    y:  -13.0
+    yaw:  3.14159      # walls narrow back to ±0.525
+
+  - label: "leg3_end"
+    x:    0.5
+    y:  -13.0
+    yaw:  3.14159      # approaching Turn 3
+
+  # ══ Turn 3 / 4 (left turn, x≈0 → Leg 4 entry) ══════════════════════════════
+  # Robot at (0.5, -13) heading west makes a left (counterclockwise) turn into
+  # Leg 4.  Two intermediate waypoints guide Nav2 around the corner.
+  - label: "turn3_corner"
+    x:    0.0
+    y:  -13.0
+    yaw:  3.14159      # still heading west at corner
+
+  - label: "turn3_leg4_entry"
+    x:   -0.5
+    y:  -12.0
+    yaw:  1.5708       # now heading north (+Y) inside Leg 4 corridor (x=-1..0)
+
+  # ══ Leg 4 (+Y, x = -0.5) ════════════════════════════════════════════════════
+  - label: "leg4_mid"
+    x:   -0.5
+    y:  -10.0
+    yaw:  1.5708
+
+  - label: "leg4_tunnel_south"
+    x:   -0.5
+    y:   -7.26
+    yaw:  1.5708       # tunnel entry lintel — zone_nav: BLIND_DRIVE triggered at y=-7.5
+
+  - label: "leg4_tunnel_centre"
+    x:   -0.5
+    y:   -6.5
+    yaw:  1.5708       # tunnel interior
+
+  - label: "leg4_tunnel_north"
+    x:   -0.5
+    y:   -5.74
+    yaw:  1.5708       # tunnel exit lintel
+
+  - label: "leg4_post_tunnel"
+    x:   -0.5
+    y:   -4.0
+    yaw:  1.5708       # NORMAL_NAV resumes (NDT fitness recovered)
+
+  - label: "leg4_approach_finish"
+    x:   -0.5
+    y:   -1.5
+    yaw:  1.5708       # finish line crossing imminent
+
+  # ══ Gate / Lap closure ══════════════════════════════════════════════════════
+  # The robot reaches y≈0 at x=-0.5, crosses the finish line
+  # (finish_line: x=-0.5, y=0.0, r=1.0), then turns right onto Leg 1.
+  # This final waypoint aligns the robot to face east (+X) ready for the
+  # next lap submission.  The circuit runner re-submits from leg1_start.
+  - label: "gate_turn_east"
+    x:   -0.5
+    y:    0.0
+    yaw:  0.0          # face east — robot now aligned with Leg 1 heading

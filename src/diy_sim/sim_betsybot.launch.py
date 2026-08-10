@@ -6,14 +6,14 @@ from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 
 def generate_launch_description():
-    #model = 'betsybot'  # your package name
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
-    world = LaunchConfiguration('world', default='empty.world')
-    model = 'betsybot'  # entity name in Gazebo
+    world = LaunchConfiguration('world', default='diy_world.sdf')
+    robot_entity = 'betsybot'  # entity name spawned in Gazebo
 
-    pkg_share = get_package_share_directory(model)
-    urdf_file = PathJoinSubstitution([pkg_share, 'description', 'betsybot_description_for_gazebo.urdf.xacro'])
-    world_file = PathJoinSubstitution([pkg_share, 'worlds', world])
+    robot_pkg_share = get_package_share_directory('diy_robot_description')
+    sim_pkg_share = get_package_share_directory('diy_sim')
+    urdf_file = PathJoinSubstitution([robot_pkg_share, 'urdf', 'robot.urdf.xacro'])
+    world_file = PathJoinSubstitution([sim_pkg_share, 'worlds', world])
 
     # 1) Start Gazebo Classic (server + GUI)
     gazebo = IncludeLaunchDescription(
@@ -41,7 +41,7 @@ def generate_launch_description():
         package='gazebo_ros',
         executable='spawn_entity.py',
         arguments=['-topic', 'robot_description',
-                   '-entity', model,
+                   '-entity', robot_entity,
                    '-x', '0', '-y', '0', '-z', '0.05'],
         output='screen'
     )

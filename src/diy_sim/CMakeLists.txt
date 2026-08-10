@@ -9,22 +9,9 @@ endif()
 # Dependencies
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
-find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
-find_package(ros_gz_sim REQUIRED)
-find_package(ros_gz_bridge REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_package(tf2_ros REQUIRED)
-find_package(ros_gz_interfaces REQUIRED)
-find_package(ignition-cmake2 REQUIRED)
-find_package(ignition-plugin1 REQUIRED)
-find_package(ignition-common4 REQUIRED)
-find_package(ignition-gazebo6 REQUIRED)
-#find_package(gz-cmake3 REQUIRED)
-#find_package(gz-plugin2 REQUIRED)
-#find_package(gz-common5 REQUIRED)
-#find_package(gz-sim8 REQUIRED)
 
 # Install directories
 install(
@@ -32,6 +19,15 @@ install(
     models
     worlds
     config
+  DESTINATION
+    share/${PROJECT_NAME}
+)
+
+# Install launch files
+install(
+  FILES
+    sim_betsybot.launch.py
+    sim_competition.launch.py
   DESTINATION
     share/${PROJECT_NAME}
 )
@@ -90,18 +86,9 @@ endif()
 
 # Export dependencies
 ament_export_dependencies(
-  rclcpp
   rclpy
-  ros_gz_sim
-  ros_gz_bridge
   geometry_msgs
   nav_msgs
-  tf2_ros
-  ros_gz_interfaces
-  #gz-sim8
-  #gz-plugin2
-  ignition-gazebo6
-  ignition-plugin1
 )
 
 # Package specific configuration

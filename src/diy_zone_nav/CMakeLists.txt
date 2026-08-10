@@ -44,4 +44,10 @@ install(DIRECTORY config launch scripts
   DESTINATION share/${PROJECT_NAME}
 )
 
+# Install Python circuit runner as a ros2 run-able executable
+install(PROGRAMS scripts/circuit_runner_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME circuit_runner_node
+)
+
 ament_package()

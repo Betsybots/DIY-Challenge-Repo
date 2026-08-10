@@ -1,0 +1,36 @@
+# sim_simple_loop_waypoints.yaml
+# rotate_in_place=true: Nav2 drives to XY, then circuit_runner spins via cmd_vel
+# rotate_in_place=false: Nav2 drives to XY+yaw normally
+#
+# Turn waypoints at x=11/y=-11/x=2 — 2m before walls, well clear of inflation.
+# No "pull" waypoints — after rotation Nav2 navigates directly to next turn.
+
+waypoints:
+
+  # Turn 1 — end of leg1, rotate south
+  - label: "turn1_ne"
+    x:   11.0
+    y:    0.0
+    yaw: -1.5708
+    rotate_in_place: true
+
+  # Turn 2 — end of leg2, rotate west
+  - label: "turn2_se"
+    x:   13.0
+    y:  -11.0
+    yaw:  3.14159
+    rotate_in_place: true
+
+  # Turn 3 — end of leg3, rotate north
+  - label: "turn3_sw"
+    x:    2.0
+    y:  -13.0
+    yaw:  1.5708
+    rotate_in_place: true
+
+  # Gate — end of leg4, rotate east for next lap
+  - label: "gate_nw"
+    x:   -0.5
+    y:   -2.0
+    yaw:  0.0
+    rotate_in_place: true

@@ -23,7 +23,7 @@
   <!-- Define robot constants -->
 
   <xacro:property name="base_off_ground" value="0.0714375"/> <!-- 2.8125 inches-->
-  <xacro:property name="base_width" value="0.346075"/> <!-- 13.625 inches-->
+  <xacro:property name="base_width" value="0.27305"/> <!-- 10.75 inches (chassis only; total width incl. wheels = 16 in / 0.4064 m)-->
   <xacro:property name="base_length" value="0.498475"/> <!-- 19.625 + 7.5 (pool noodle radius) inches-->
   <xacro:property name="base_height" value="0.18415"/> <!-- 7.25 inches-->
   <xacro:property name="pool_noodle_radius" value="0.047625"/> <!-- 1.875 inches-->
@@ -121,8 +121,10 @@
 
     <gazebo reference="${prefix}_link">
         <material>Gazebo/Red</material>
-        <mu1>1.0</mu1>
-        <mu2>1.0</mu2>
+        <mu1>1.5</mu1>
+        <mu2>1.5</mu2>
+        <kp>1e6</kp>
+        <kd>1.0</kd>
     </gazebo>
     
     <joint name="${prefix}_joint" type="${joint_type}">
@@ -130,6 +132,7 @@
       <child link="${prefix}_link"/>
       <origin xyz="${x_reflect*wheel_xoff} ${y_reflect*(base_width/2+wheel_ygap)} ${-wheel_zoff}" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
+      <limit effort="20.0" velocity="10.0"/>
     </joint>
   </xacro:macro>
   
@@ -201,7 +204,26 @@
         <wheel_separation>${base_width+2*wheel_ygap}</wheel_separation> <!-- Adjust to your robot's width (meters) -->
         <wheel_radius>${wheel_radius}</wheel_radius>     <!-- Adjust to your wheel radius (meters) -->
         <topic>cmd_vel</topic>
+        <odom_topic>odom_wheel</odom_topic>   <!-- wheel encoder odom — drifts on ramp/slip -->
+        <!-- Publish odom→base_footprint TF — must match Nav2 robot_base_frame.
+             Ignition namespaces these as diy_robot/odom→diy_robot/base_footprint.
+             SIM only: on real robot EKF1/EKF2 publish this transform instead. -->
+        <odom_frame>odom</odom_frame>
+        <robot_base_frame>base_footprint</robot_base_frame>
+        <tf_topic>/tf</tf_topic>
         <robot_param_node>/robot_state_publisher</robot_param_node>
+    </plugin>
+  </gazebo>
+  <!-- SIM ONLY: Ground-truth odometry from Gazebo physics engine.
+       Publishes perfect pose to /odom — no wheel slip drift.
+       On real robot: EKF2 fuses wheel + IMU + NDT into /odometry/filtered instead. -->
+  <gazebo>
+    <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+        <odom_frame>odom</odom_frame>
+        <robot_base_frame>base_footprint</robot_base_frame>
+        <odom_topic>/odom</odom_topic>
+        <tf_topic>/tf</tf_topic>
+        <odom_publish_frequency>50</odom_publish_frequency>
     </plugin>
   </gazebo>
   <gazebo>

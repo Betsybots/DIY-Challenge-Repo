@@ -101,7 +101,8 @@ def _zone_nav_launch(context, use_zone_nav_lc, waypoints_file_lc):
 def generate_launch_description():
     pkg_dir     = get_package_share_directory('challenge_bringup')
     nav2_params = os.path.join(pkg_dir, 'config', 'nav2_params.yaml')  # MPPI + behaviour config
-    map_yaml    = os.path.join(pkg_dir, 'maps',   'static_map.yaml')   # prior map for Nav2
+    # map_yaml removed — navigation_launch.py does not use AMCL/map_server.
+    # NDT-OMP provides the map→odom TF directly on the real robot.
 
     # ── LaunchConfiguration handles (lazy substitutions) ──────────────────────
     # These are NOT yet resolved strings — they are substitution objects that
@@ -311,9 +312,10 @@ def generate_launch_description():
         ),
 
         # ── BLOCK 11: Nav2 autonomous navigation stack ─────────────────────────
-        # Full Nav2 bringup: Controller (MPPI), Planner (NavFn/Smac), Behaviour
-        # Trees, AMCL localisation against the prior map, global/local costmaps,
-        # and lifecycle manager.
+        # Nav2 planning + control stack: MPPI controller, SmacHybrid planner,
+        # Behaviour Trees, global/local costmaps, lifecycle manager.
+        # Does NOT start AMCL or map_server — per the Navigation Design Guide,
+        # NDT-OMP provides the map→odom TF directly from the 3D point cloud map.
         # Requires use_localization=true for /tf and /odometry/filtered inputs.
         # Publishes /cmd_vel_nav which the mux forwards when in AUTONOMOUS mode.
         IncludeLaunchDescription(
@@ -321,16 +323,14 @@ def generate_launch_description():
                 os.path.join(
                     get_package_share_directory('nav2_bringup'),
                     'launch',
-                    'bringup_launch.py',
+                    'navigation_launch.py',   # no AMCL — NDT-OMP handles map→odom
                 )
             ),
             condition=IfCondition(use_nav2),
             launch_arguments={
-                'map':          map_yaml,     # pre-built prior map for AMCL
                 'params_file':  nav2_params,  # MPPI critics + costmap config
                 'use_sim_time': 'false',      # always false on real hardware
                 'autostart':    'true',       # lifecycle nodes activate automatically
-                'slam':         'false',      # use prior map, not online SLAM
             }.items(),
         ),
 

@@ -1,138 +1,121 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # zone_waypoints.yaml
-# Course zone definitions for the DIY Robot Challenge 2026 obstacle course.
+# Course zone definitions for the SIMULATION competition arena.
 #
-# IMPORTANT: These coordinates are PLACEHOLDERS.
-#   Fill in real x/y values after the LIO-SAM offline mapping run.
-#   Coordinates are in the MAP frame (metres, origin = start line).
+# Coordinates are in the MAP frame (metres).
+# Origin (0,0) = start/finish gate (east face, where start posts stand).
 #
-# HOW TO GET REAL COORDINATES:
-#   1. Run offline_mapping.launch.py and drive the full course.
-#   2. Save GlobalMap.pcd via /lio_sam/save_map service.
-#   3. Launch NDT localizer + RViz.
-#   4. Drive (or teleoperate) to each zone boundary.
-#   5. Echo /odometry/filtered and record x, y at each zone entry/exit.
-#   6. Replace the placeholder values below.
+# Arena layout:
+#   Leg 1: +X direction, centerline y=0,   x= 0..13
+#   Leg 2: -Y direction, centerline x=13,  y= 0..-13  (narrow section mid-leg)
+#   Leg 3: -X direction, centerline y=-13, x=13..0    (bumps, buckets, wide section)
+#   Leg 4: +Y direction, centerline x=-0.5,y=-13..0   (tunnel mid-leg)
+#   Gate:  x=-1..0, y=±0.525 — finish posts (x=-1) adjacent to start posts (x=0)
 #
 # ZONE FORMAT:
-#   Each zone has:
-#     x, y        — centre of the zone trigger point (map frame metres)
-#     radius      — entry trigger distance (metres) — robot enters zone when closer than this
-#     exit_radius — exit trigger distance (metres) — robot leaves zone when farther than this
-#                   exit_radius > radius adds hysteresis to prevent mode flip-flopping
-#     mode        — nav mode to activate: SLOW_NAV | BLIND_DRIVE | NAVIGATE_AROUND | PUSH_THROUGH
-#     label       — human-readable name for logging
-#
-# COURSE SEQUENCE (counterclockwise):
-#   START → Ramp+270° helix → Flat bridge+Tunnel → Wide→Narrow →
-#   Gravel → Flat+180° turn → Pothole → Wide (haybales) →
-#   Buckets → Hoops → 180° slanted bank → Car wash → FINISH
+#   x, y        — centre of zone trigger point (map frame metres)
+#   radius      — entry trigger distance (metres)
+#   exit_radius — exit trigger distance (hysteresis, must be > radius)
+#   mode        — SLOW_NAV | BLIND_DRIVE | NAVIGATE_AROUND | PUSH_THROUGH
+#   label       — human-readable name for logging
 # ─────────────────────────────────────────────────────────────────────────────
 
 zones:
 
-  # ── Zone 1: Ramp + 270° Helix ─────────────────────────────────────────────
-  # Trigger SLOW_NAV before the ramp approach.
-  # IMU pitch/roll will spike here — important for FAST-LIO2 health monitoring.
-  - label:       "ramp_helix"
-    x:           5.0      # PLACEHOLDER — measure after mapping
-    y:           2.0      # PLACEHOLDER
-    radius:      1.5      # enter SLOW_NAV when within 1.5m of this point
-    exit_radius: 3.0      # return to NORMAL_NAV when 3.0m away
+  # ── Zone 0: Turn 1 (Leg1→Leg2, x≈12..13, y≈0..-1) ────────────────────────
+  # 90° right turn in 1.05m corridor. SLOW_NAV ensures turn radius ~0.17m fits.
+  # Turn pocket: x=12.475..13.525, y=-0.525..+0.525 → navigable centre is x=13.0
+  # inflation_radius=0.15: navigable x band = 12.825..13.175 (0.35m) — room to arc
+  - label:            "turn1"
+    x:                13.0
+    y:                -0.5
+    radius:           1.2
+    exit_radius:      1.25
+    mode:             "SLOW_NAV"
+    inflation_radius: 0.25    # simple_loop: no keepout, full corridor — 1.05m − 0.40m − 2×0.25m = 0.15m margin
+
+  # ── Zone 1: Ramp (Leg 1, x≈5.0..6.28, y=0) ───────────────────────────────
+  # 0.06m timber ramp (7°), up 0.49m + flat 0.3m + down 0.49m = 1.28m total.
+  # SLOW_NAV prevents odometry spikes from wheel lifting.
+  - label:       "ramp"
+    x:           5.639   # ramp_flat centre
+    y:           0.0
+    radius:      0.8
+    exit_radius: 1.6
     mode:        "SLOW_NAV"
 
-  # ── Zone 2: Flat Bridge + Tunnel ──────────────────────────────────────────
-  # BLIND_DRIVE: foil-lined tunnel blocks lidar and RF completely.
-  # NDT-OMP will lose match here. EKF1 (wheel+IMU) takes over.
-  # Freeze map->odom TF at entry, restore at exit.
-  - label:       "tunnel_entry"
-    x:           12.0     # PLACEHOLDER
-    y:           4.0      # PLACEHOLDER
-    radius:      1.0      # tight trigger — must enter BLIND_DRIVE right at tunnel mouth
+  # ── Zone 2: Narrow Section (Leg 2, x=13, y=-2.4..-5.7) ───────────────────
+  # Corridor pinched to 0.508 m (20 in).  Robot is ~0.3 m wide → 2" per side.
+  # Reduce inflation_radius so the planner can still find a path.
+  # ndt_fitness_gate: warn if localisation is poor before committing.
+  - label:            "narrow_section"
+    x:                13.0    # corridor centreline
+    y:                -5.031  # mid-point of straight narrow walls (y=-4.0 .. -6.062)
+    radius:           3.5
+    exit_radius:      5.0
+    mode:             "SLOW_NAV"
+    inflation_radius: 0.03
+    ndt_fitness_gate: 0.5     # warn if NDT is weak before 2" clearance
+
+  # ── Zone 3: Bucket Obstacles (Leg 3, x≈6.5..9.3, y≈-13) ─────────────────
+  # Five 5-gallon buckets staggered across the corridor.
+  # NAVIGATE_AROUND keeps the obstacle layer active for dynamic replanning.
+  - label:       "bucket_obstacles"
+    x:           8.0      # cluster centroid
+    y:           -13.0
+    radius:      2.5
+    exit_radius: 4.5
+    mode:        "NAVIGATE_AROUND"
+
+  # ── Zone 5: Turn 2 (Leg2→Leg3, x≈13, y≈-13) ──────────────────────────────
+  - label:       "turn2"
+    x:           13.0
+    y:           -12.5
+    radius:      1.2
+    exit_radius: 2.0
+    mode:        "SLOW_NAV"
+
+  # ── Zone 6: Turn 3 (Leg3→Leg4, x≈0, y≈-13) ───────────────────────────────
+  - label:       "turn3"
+    x:           0.0
+    y:           -12.5
+    radius:      1.2
+    exit_radius: 2.0
+    mode:        "SLOW_NAV"
+
+  # ── Zone 7: Turn 4 / Finish (Leg4→Leg1, x≈-0.5, y≈0) ────────────────────
+  - label:       "turn4"
+    x:           -0.5
+    y:           -0.5
+    radius:      1.2
+    exit_radius: 2.0
+    mode:        "SLOW_NAV"
+
+  # ── Zone 4: Tunnel (Leg 4, x=-0.5, y=-6.5) ───────────────────────────────
+  # Enclosed 0.81 m × 1.52 m tunnel, 0.635 m tall.
+  # BLIND_DRIVE: robot dead-reckons on wheel + IMU; lidar gated off so
+  # reflections from the walls don't corrupt FAST-LIO2 / NDT.
+  # Exit is triggered by NDT fitness recovery after blind_drive_min_duration_s.
+  #
+  # NOTE (Bug44/45): do NOT add a tunnel_exit zone here — it would set
+  # active_zone_idx_ and block the next zone trigger until the robot clears
+  # exit_radius. The BLIND_DRIVE exit is fitness-driven, not geometric.
+  - label:       "tunnel"
+    x:           -0.5     # Leg 4 centreline (x = -1.0..0)
+    y:           -6.5     # tunnel centre (y = -7.26..-5.74)
+    radius:      1.0
     exit_radius: 2.5
     mode:        "BLIND_DRIVE"
 
-  # ── Tunnel exit zone (DOCUMENTATION ONLY — NOT LOADED) ───────────────────
-  # Bug44/45 fix: this block is commented out intentionally.
-  #
-  # PROBLEM: although mode=NORMAL_NAV makes transitionTo() a noop, enterZone()
-  # still sets active_zone_idx_, blocking ALL other zone entry checks until the
-  # robot travels > exit_radius from this point.  If narrow_section lies within
-  # exit_radius of tunnel_exit, the robot will reach the narrow gap at full
-  # NORMAL_NAV speed without the SLOW_NAV trigger ever firing — crash risk.
-  #
-  # BLIND_DRIVE exit is driven purely by NDT fitness (blind_drive_exit_fitness
-  # _threshold) after blind_drive_min_duration_s.  No geometric exit zone is
-  # required.  Keep this as a coordinate reference comment for mapping runs.
-  #
-  # Approximate location (fill in after mapping):
-  #   x: 15.0   y: 4.5   (far end of foil-lined tunnel, map frame)
-  #
-  # If a distance-based failsafe is added in the future, re-enable this zone
-  # with a distinct mode (e.g. a new TUNNEL_EXIT enum value) so the state
-  # machine can handle it without the active_zone_idx_ blocking side-effect.
-
-  # ── Zone 3: Wide → Narrow Section ─────────────────────────────────────────
-  # 16" robot in 20" track = 2" clearance per side.
-  # At default inflation_radius=0.45m the global costmap marks the walls as
-  # lethal and Smac will declare the path impassable before we even enter.
-  # Reduce inflation_radius to 0.2m on entry (= 7.9" clearance each side),
-  # which gives the planner just enough room. Restored to 0.45m on exit.
-  # ndt_fitness_gate: log WARN if NDT fitness > 0.5 — need <4cm lateral accuracy.
-  - label:            "narrow_section"
-    x:                18.0     # PLACEHOLDER
-    y:                6.0      # PLACEHOLDER
-    radius:           1.5
-    exit_radius:      3.0
-    mode:             "SLOW_NAV"
-    inflation_radius: 0.2      # override global_costmap inflation on entry
-    ndt_fitness_gate: 0.5      # warn if NDT is weak before committing to 2" clearance
-
-  # ── Zone 4: Gravel Section ────────────────────────────────────────────────
-  # Wheel slip on gravel degrades odometry. Slow down.
-  - label:       "gravel"
-    x:           22.0     # PLACEHOLDER
-    y:           8.0      # PLACEHOLDER
-    radius:      2.0
-    exit_radius: 4.0
-    mode:        "SLOW_NAV"
-
-  # ── Zone 5: 180° Bank Turn ────────────────────────────────────────────────
-  # 8.5° lateral tilt. SLOW_NAV prevents tip risk and reduces IMU corruption.
-  - label:       "bank_turn"
-    x:           28.0     # PLACEHOLDER
-    y:           5.0      # PLACEHOLDER
-    radius:      2.0
-    exit_radius: 4.0
-    mode:        "SLOW_NAV"
-
-  # ── Zone 6: Bucket Obstacle Section ──────────────────────────────────────
-  # 2–9 randomly placed 5-gallon buckets. Live costmap required.
-  # NAVIGATE_AROUND = full obstacle_layer active, dynamic Smac replanning.
-  - label:       "bucket_obstacles"
-    x:           20.0     # PLACEHOLDER
-    y:           15.0     # PLACEHOLDER
-    radius:      3.0
-    exit_radius: 5.0
-    mode:        "NAVIGATE_AROUND"
-
-  # ── Zone 7: Car Wash ──────────────────────────────────────────────────────
-  # Hanging rubber ribbons look like a solid wall to lidar.
-  # PUSH_THROUGH disables obstacle_layer (or raises max_obstacle_height).
-  # Robot drives straight through on fixed heading — ribbons are flexible.
-  - label:       "car_wash"
-    x:           8.0      # PLACEHOLDER
-    y:           18.0     # PLACEHOLDER
-    radius:      1.5
-    exit_radius: 3.0
-    mode:        "PUSH_THROUGH"
-
 # ── Finish line ───────────────────────────────────────────────────────────────
-# When robot passes this point on lap 2, transition to DONE and stop.
+# Placed at the centre of the start/finish gate opening.
+# The robot crosses this point at the END of each lap (coming north along Leg 4).
+# initial state in_finish_zone_=true means the spawn position is already inside
+# the zone; the robot must leave and return to count lap 1.
 finish_line:
-  x:      2.0             # PLACEHOLDER — same area as START
-  y:      0.5             # PLACEHOLDER
-  radius: 1.0             # stop when within 1.0m of finish on lap 2
+  x:      -0.5    # centre of gate corridor (between start post x=0 and finish post x=-1)
+  y:       0.0    # y=0 threshold — crossed when robot returns from Leg 4
+  radius:  1.0    # lap counted when robot is within 1.0 m of this point
 
 # ── Race settings ─────────────────────────────────────────────────────────────
-total_laps: 2             # competition rule 3.7.1: obstacle course = 2 laps
+total_laps: 3     # stop after 3 complete laps (zone_nav_manager transitions to DONE)

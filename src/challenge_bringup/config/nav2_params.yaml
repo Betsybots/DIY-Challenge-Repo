@@ -1,46 +1,83 @@
+# =============================================================================
+# nav2_params.yaml — Nav2 parameter file for DIY Challenge robot
+#
+# ENVIRONMENT SWITCH:
+#   Simulation (Ignition Gazebo Fortress):
+#     - use_sim_time: true   ← required so Nav2 clock syncs with /clock
+#     - lidar topic:  /lidar_points  (PointCloud2, bridged by bridge_config.yaml)
+#     - robot frames: ros_gz_bridge forwards /tf with BARE frame names (no namespace)
+#                     robot_base_frame: base_footprint
+#                     local costmap global_frame: odom
+#                     odom_topic: /odom
+#
+#   Real robot:
+#     - use_sim_time: false  ← wall-clock time from hardware drivers
+#     - lidar topic:  /hesai/points  (PointCloud2 from Hesai PandarXT driver)
+#     - robot frames: standard ROS frames (no namespace prefix)
+#                     robot_base_frame: base_link
+#                     local costmap global_frame: odom
+#                     odom_topic: /odometry/filtered
+#
+# To switch: search for "# SIM:" and "# REAL:" tags throughout this file.
+# =============================================================================
+
 global_costmap:
   global_costmap:
     ros__parameters:
-      use_sim_time: false
+      use_sim_time: true    # SIM: true  |  REAL: false
       update_frequency: 1.0
       publish_frequency: 1.0
+      # SIM: ros_gz_bridge forwards bare frame names (no diy_robot/ prefix)
+      # REAL: use plain 'map' and 'base_link'
       global_frame: map
-      robot_base_frame: base_link
+      robot_base_frame: base_footprint  # SIM: base_footprint | REAL: base_link
       footprint: "[ [0.35, 0.20], [0.35, -0.20], [-0.35, -0.20], [-0.35, 0.20] ]"
       resolution: 0.05
       rolling_window: false
       track_unknown_space: true
+      # Arena spans x=-2..14, y=-15..2 → 18m wide, 18m tall, origin at SW corner.
+      # Must cover the full circuit so the global planner never goes out-of-bounds.
+      # REAL robot: increase if the real outdoor course is larger.
+      width: 18           # metres  (arena x: -2 .. 15)  SIM/REAL
+      height: 18          # metres  (arena y: -15 .. 2)  SIM/REAL
+      origin_x: -2.0      # SW corner x  SIM/REAL
+      origin_y: -15.0     # SW corner y  SIM/REAL
       # static_layer removed — NDT-OMP provides map->odom TF directly.
-      # No .pgm file needed. obstacle_layer sees walls live from Hesai at 10 Hz.
+      # No .pgm file needed. obstacle_layer sees walls live from lidar at 10 Hz.
       plugins: ["obstacle_layer", "inflation_layer"]
+      # filters: ["keepout_filter"]   # DISABLED for simple_loop test — solid walls don't need it
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        observation_sources: hesai_points
-        hesai_points:
-          topic: /hesai/points
+        observation_sources: lidar_points
+        lidar_points:
+          topic: /lidar_points   # SIM: /lidar_points  |  REAL: /hesai/points
           data_type: "PointCloud2"
           marking: true
           clearing: true
           max_obstacle_height: 2.0
           raytrace_max_range: 6.0
           obstacle_max_range: 5.0
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: "/costmap_filter_info"
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.45
+        inflation_radius: 0.15   # corridor half=0.525m, robot half=0.20m → 0.175m margin each side
 
 local_costmap:
   local_costmap:
     ros__parameters:
-      use_sim_time: false
+      use_sim_time: true    # SIM: true  |  REAL: false
       update_frequency: 8.0
       publish_frequency: 4.0
-      global_frame: odom
-      robot_base_frame: base_link
+      global_frame: odom  # SIM: odom | REAL: odom
+      robot_base_frame: base_footprint  # SIM: base_footprint | REAL: base_link
       rolling_window: true
-      width: 4.0
-      height: 4.0
+      width: 4
+      height: 4
       resolution: 0.05
       footprint: "[ [0.35, 0.20], [0.35, -0.20], [-0.35, -0.20], [-0.35, 0.20] ]"
       plugins: ["voxel_layer", "inflation_layer"]
@@ -52,30 +89,31 @@ local_costmap:
         z_voxels: 16
         max_obstacle_height: 2.0
         mark_threshold: 0
-        observation_sources: hesai_points
-        hesai_points:
-          topic: /hesai/points
+        observation_sources: lidar_points
+        lidar_points:
+          topic: /lidar_points   # SIM: /lidar_points  |  REAL: /hesai/points
           data_type: "PointCloud2"
           marking: true
           clearing: true
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.40
+        inflation_radius: 0.22  # robot half-width=0.20m + 0.02m margin; was 0.40 (over-inflated 1.05m corridor)
 
 planner_server:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true    # SIM: true  |  REAL: false
     expected_planner_frequency: 10.0
     planner_plugins: ["GridBased"]
     GridBased:
-      plugin: "nav2_smac_planner/SmacPlannerHybrid"
-      allow_unknown: true
+      plugin: "nav2_navfn_planner/NavfnPlanner"
       tolerance: 0.25
+      use_astar: false
+      allow_unknown: true
 
 controller_server:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true    # SIM: true  |  REAL: false
     controller_frequency: 20.0
     controller_plugins: ["FollowPath"]
     progress_checker_plugin: "progress_checker"
@@ -83,11 +121,11 @@ controller_server:
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.3
-      movement_time_allowance: 8.0
+      movement_time_allowance: 20.0  # was 8.0 — give more time before triggering recovery
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.20
-      yaw_goal_tolerance: 0.20
+      xy_goal_tolerance: 0.10
+      yaw_goal_tolerance: 3.14159   # any yaw — circuit_runner handles rotation directly
       stateful: true
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
@@ -96,11 +134,11 @@ controller_server:
       batch_size: 1000
       vx_std: 0.2
       vy_std: 0.0
-      wz_std: 0.4
-      vx_max: 0.6
-      vx_min: -0.1
+      wz_std: 0.3        # higher — more angular samples = better lateral correction in corridors
+      vx_max: 0.3
+      vx_min: 0.0
       vy_max: 0.0
-      wz_max: 1.2
+      wz_max: 0.8
       ax_max: 1.0
       ax_min: -1.0
       az_max: 2.0
@@ -139,7 +177,7 @@ controller_server:
       GoalAngleCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.0
+        cost_weight: 10.0
         threshold_to_consider: 0.5
       PreferForwardCritic:
         enabled: true
@@ -149,27 +187,27 @@ controller_server:
       ObstaclesCritic:
         enabled: true
         cost_power: 1
-        repulsion_weight: 1.5
+        repulsion_weight: 2.0
         critical_weight: 20.0
-        consider_footprint: false
+        consider_footprint: true
         collision_cost: 10000.0
         collision_margin_distance: 0.10
         near_goal_distance: 0.5
-        inflation_radius: 0.45
+        inflation_radius: 0.22
         cost_scaling_factor: 3.0
       PathAlignCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 14.0
+        cost_weight: 12.0
         max_path_occupancy_ratio: 0.05
         trajectory_point_step: 4
         threshold_to_consider: 0.5
-        offset_from_furthest: 20
-        use_path_orientations: false
+        offset_from_furthest: 8
+        use_path_orientations: true  # penalise lateral offset AND heading deviation
       PathFollowCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 10.0
         offset_from_furthest: 5
         threshold_to_consider: 1.4
       PathAngleCritic:
@@ -183,13 +221,12 @@ controller_server:
 
 behavior_server:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true    # SIM: true  |  REAL: false
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
-    spin:
-      plugin: "nav2_behaviors/Spin"
+    behavior_plugins: ["backup", "drive_on_heading", "wait"]
+    # spin removed — caused 180° flip then backward driving along corridor
     backup:
       plugin: "nav2_behaviors/BackUp"
     drive_on_heading:
@@ -198,7 +235,7 @@ behavior_server:
       plugin: "nav2_behaviors/Wait"
     local_frame: odom
     global_frame: map
-    robot_base_frame: base_link
+    robot_base_frame: base_footprint  # SIM: base_footprint | REAL: base_link
     transform_tolerance: 0.1
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
@@ -207,7 +244,7 @@ behavior_server:
 
 smoother_server:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true    # SIM: true  |  REAL: false
     smoother_plugins: ["simple_smoother"]
     simple_smoother:
       plugin: "nav2_smoother::SimpleSmoother"
@@ -217,28 +254,46 @@ smoother_server:
 
 bt_navigator:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true    # SIM: true  |  REAL: false
     global_frame: map
-    robot_base_frame: base_link
-    odom_topic: /odometry/filtered
-    default_bt_xml_filename: "navigate_w_replanning_and_recovery.xml"
+    robot_base_frame: base_footprint  # SIM: base_footprint | REAL: base_link
+    odom_topic: /odom  # SIM: /odom | REAL: /odometry/filtered
+    # Custom BT XMLs — Spin removed (caused 180° flip recovery → backward crash)
+    default_nav_to_pose_bt_xml: "$(find-pkg-share challenge_bringup)/behavior_trees/navigate_to_pose_no_spin.xml"
+    default_nav_through_poses_bt_xml: "$(find-pkg-share challenge_bringup)/behavior_trees/navigate_through_poses_no_spin.xml"
 
 waypoint_follower:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true    # SIM: true  |  REAL: false
     stop_on_failure: true
 
-map_server:
+# map_server and amcl sections removed — not used.
+# Per Navigation Design Guide: NDT-OMP provides map→odom TF directly.
+# In sim: sim_competition.launch.py publishes a static map→odom TF.
+# navigation_launch.py (not bringup_launch.py) is used so AMCL never starts.
+
+# ── Keepout filter servers ────────────────────────────────────────────────────
+# Serves the filter mask map and filter info so the KeepoutFilter costmap
+# plugin can block the Turn1/Turn2 inner corner pockets from being planned through.
+filter_mask_server:
   ros__parameters:
-    use_sim_time: false
-    yaml_filename: ""
+    use_sim_time: true
+    yaml_filename: ""   # set at launch via keepout_mask_yaml arg
+
+costmap_filter_info_server:
+  ros__parameters:
+    use_sim_time: true
+    type: 0             # 0 = keepout filter
+    filter_info_topic: "/costmap_filter_info"
+    mask_topic: "/keepout_filter_mask"
+    base: 0.0
+    multiplier: 1.0
 
 lifecycle_manager:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true    # SIM: true  |  REAL: false
     autostart: true
     node_names:
-      - map_server
       - planner_server
       - controller_server
       - smoother_server

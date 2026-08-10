@@ -52,3 +52,5 @@ imu_calib_data/
 *.pgm
 # but keep the static_map.yaml placeholder
 !src/challenge_bringup/maps/static_map.yaml
+frames_*.gv
+frames_*.pdf
