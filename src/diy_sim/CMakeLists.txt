@@ -28,6 +28,7 @@ install(
   FILES
     sim_betsybot.launch.py
     sim_competition.launch.py
+    sim_simple_loop.launch.py
   DESTINATION
     share/${PROJECT_NAME}
 )
@@ -75,6 +76,7 @@ install(
 # Install Python executables
 install(
   PROGRAMS
+    scripts/sim_telemetry.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

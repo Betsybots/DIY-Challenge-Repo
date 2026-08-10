@@ -3,7 +3,9 @@
 <package format="3">
   <name>diy_sim</name>
   <version>1.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Ignition Gazebo Fortress simulation for DIY Robot Challenge 2026.
+  Provides simple_loop and competition_arena worlds, robot spawn + ROS-IGN bridge
+  launch files, and a live telemetry dashboard for nav pipeline testing.</description>
   <maintainer email="arunkumarsesham@gmail.com">arun</maintainer>
   <license>TODO: License declaration</license>
 
@@ -13,6 +15,12 @@
   <depend>rclpy</depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <depend>ros_gz_bridge</depend>
+  <depend>ros_gz_sim</depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>diy_robot_description</exec_depend>
+  <exec_depend>diy_zone_nav</exec_depend>
+  <exec_depend>challenge_bringup</exec_depend>
 
 <!-- ros2_control if using 
   <exec_depend>gazebo_ros2_control</exec_depend>
