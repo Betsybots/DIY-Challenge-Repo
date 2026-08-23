@@ -9,7 +9,14 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(phoenix6 REQUIRED)
+# phoenix6 (CTRE Phoenix) is optional: if not installed, build a placeholder
+find_package(phoenix6 QUIET)
+if(phoenix6_FOUND)
+  set(HAVE_PHOENIX6 TRUE)
+else()
+  set(HAVE_PHOENIX6 FALSE)
+  message(WARNING "phoenix6 not found — building differential-drive without hardware support (simulation-only).")
+endif()
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -21,9 +28,13 @@ MESSAGE(STATUS "${phoenix6_INCLUDE_DIRS} ${phoenix6_LIBRARIES}" )
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
-add_executable(differential-drive src/diff-drive-main.cpp)
-target_link_libraries(${PROJECT_NAME} /usr/lib/phoenix6/libCTRE_Phoenix6.so /usr/lib/phoenix6/libCTRE_PhoenixTools.so)
-#target_link_libraries(${PROJECT_NAME} phoenix6)
+if(HAVE_PHOENIX6)
+  add_executable(differential-drive src/diff-drive-main.cpp)
+  target_link_libraries(differential-drive /usr/lib/phoenix6/libCTRE_Phoenix6.so /usr/lib/phoenix6/libCTRE_PhoenixTools.so)
+else()
+  # Build a small placeholder node so the package can be built without Phoenix SDK.
+  add_executable(differential-drive src/diff-drive-stub.cpp)
+endif()
 target_include_directories(differential-drive PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -31,12 +42,14 @@ target_compile_features(differential-drive PUBLIC c_std_99 cxx_std_17)  # Requir
 
 set(dependencies
   rclcpp
-  phoenix6
   std_msgs
   sensor_msgs
   geometry_msgs
   nav_msgs
 )
+if(HAVE_PHOENIX6)
+  list(APPEND dependencies phoenix6)
+endif()
 ament_target_dependencies(differential-drive ${dependencies})
 
 install(TARGETS differential-drive

@@ -1,0 +1,49 @@
+Starting >>> livox_ros_driver2
+Starting >>> ndt_omp_ros2
+Starting >>> challenge_bringup
+Starting >>> diy_robot_description
+Starting >>> diy_zone_nav
+Starting >>> lio_sam
+Starting >>> code_utils
+Starting >>> differential-drive
+Starting >>> diy_cmd_vel_mux
+Starting >>> diy_estop_controller
+Starting >>> imu_utils
+Starting >>> plan_b
+Finished <<< diy_robot_description [1.07s]
+Finished <<< challenge_bringup [1.10s]
+--- stderr: differential-drive
+CMake Error at CMakeLists.txt:12 (find_package):
+  By not providing "Findphoenix6.cmake" in CMAKE_MODULE_PATH this project has
+  asked CMake to find a package configuration file provided by "phoenix6",
+  but CMake did not find one.
+
+  Could not find a package configuration file provided by "phoenix6" with any
+  of the following names:
+
+    phoenix6Config.cmake
+    phoenix6-config.cmake
+
+  Add the installation prefix of "phoenix6" to CMAKE_PREFIX_PATH or set
+  "phoenix6_DIR" to a directory containing one of the above files.  If
+  "phoenix6" provides a separate development package or SDK, be sure it has
+  been installed.
+
+
+---
+Failed   <<< differential-drive [1.06s, exited with code 1]
+Aborted  <<< diy_zone_nav [1.09s]
+Aborted  <<< code_utils [1.08s]
+Aborted  <<< plan_b [1.03s]
+Aborted  <<< ndt_omp_ros2 [1.52s]
+Aborted  <<< diy_estop_controller [1.63s]
+Aborted  <<< diy_cmd_vel_mux [1.64s]
+Aborted  <<< imu_utils [1.74s]
+Aborted  <<< livox_ros_driver2 [2.36s]
+Aborted  <<< lio_sam [2.69s]
+
+Summary: 2 packages finished [3.22s]
+  1 package failed: differential-drive
+  9 packages aborted: code_utils diy_cmd_vel_mux diy_estop_controller diy_zone_nav imu_utils lio_sam livox_ros_driver2 ndt_omp_ros2 plan_b
+  4 packages had stderr output: differential-drive imu_utils lio_sam livox_ros_driver2
+  5 packages not processed

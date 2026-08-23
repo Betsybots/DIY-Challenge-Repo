@@ -19,6 +19,7 @@ install(
     models
     worlds
     config
+    photos
   DESTINATION
     share/${PROJECT_NAME}
 )
