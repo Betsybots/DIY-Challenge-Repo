@@ -1,0 +1,140 @@
+digraph DIYRobot {
+    rankdir=TB
+    compound=true
+    splines=polyline
+    nodesep=0.5
+    ranksep=0.7
+    fontname="Helvetica"
+    node [fontname="Helvetica" fontsize=11]
+    edge [fontname="Helvetica" fontsize=9]
+
+    // ── SENSORS ─────────────────────────────────────────────────────────────
+    subgraph cluster_sensors {
+        label="SENSORS"
+        style=filled fillcolor="#E8F4FD" color="#2980B9" penwidth=2
+        fontsize=13 fontcolor="#2980B9"
+
+        hesai   [label="Hesai QT64\n3D Lidar\n20 Hz"      shape=box style=filled fillcolor="#AED6F1"]
+        imu     [label="ACEINNA IMU\n400 Hz"               shape=box style=filled fillcolor="#AED6F1"]
+        wheels  [label="Dead-wheel\nEncoders"              shape=box style=filled fillcolor="#AED6F1"]
+    }
+
+    // ── LOCALIZATION ─────────────────────────────────────────────────────────
+    subgraph cluster_loc {
+        label="LOCALIZATION  (diy_localization)"
+        style=filled fillcolor="#FDFEE8" color="#F39C12" penwidth=2
+        fontsize=13 fontcolor="#F39C12"
+
+        fastlio [label="FAST-LIO2\nLidar-Inertial Odometry"  shape=box style=filled fillcolor="#FAD7A0"]
+        ekf1    [label="EKF1  (ekf_wimu.yaml)\nWheels + IMU  →  /wimu_odom\n100 Hz"      shape=box style=filled fillcolor="#FAD7A0"]
+        ekf2    [label="EKF2  (ekf_local.yaml)\n/wimu_odom + /lidar_odometry_gated\n→  /odometry/filtered   TF: odom→base_link\n50 Hz" shape=box style=filled fillcolor="#FAD7A0"]
+        ndt     [label="NDT-OMP\n/hesai/points + PCD map\n→  TF: map→odom"               shape=box style=filled fillcolor="#FAD7A0"]
+        gate    [label="lidar_odom_gate_node\n(blocks during BLIND_DRIVE)"                shape=box style=filled fillcolor="#FDEBD0"]
+    }
+
+    // ── NAV2 ─────────────────────────────────────────────────────────────────
+    subgraph cluster_nav2 {
+        label="NAV2 STACK  (installed via apt — config only)"
+        style=filled fillcolor="#EAFAF1" color="#27AE60" penwidth=2
+        fontsize=13 fontcolor="#27AE60"
+
+        subgraph cluster_gcm {
+            label="Global Costmap"
+            style=filled fillcolor="#D5F5E3" color="#27AE60"
+            gcm [label="StaticLayer  (PGM /map)\nObstacleLayer  (/hesai/points)\nInflationLayer  r=0.15 m" shape=box style=filled fillcolor="#A9DFBF"]
+        }
+        subgraph cluster_lcm {
+            label="Local Costmap"
+            style=filled fillcolor="#D5F5E3" color="#27AE60"
+            lcm [label="VoxelLayer  (/hesai/points)\nInflationLayer  r=0.22 m" shape=box style=filled fillcolor="#A9DFBF"]
+        }
+
+        planner    [label="Planner Server\nNavfnPlanner (Dijkstra)\n→  /plan"            shape=box style=filled fillcolor="#A9DFBF"]
+        controller [label="Controller Server\nMPPI Controller\n(→ swap to RPP via YAML)\n→  /cmd_vel"  shape=box style=filled fillcolor="#A9DFBF"]
+        bt         [label="BT Navigator\nNavigateToPose action"                           shape=box style=filled fillcolor="#A9DFBF"]
+        behaviors  [label="Behavior Server\nBackUp / DriveOnHeading / Wait"               shape=box style=filled fillcolor="#D5F5E3"]
+    }
+
+    // ── OUR CODE ─────────────────────────────────────────────────────────────
+    subgraph cluster_ours {
+        label="OUR CODE  (diy_zone_nav)"
+        style=filled fillcolor="#F5EEF8" color="#8E44AD" penwidth=2
+        fontsize=13 fontcolor="#8E44AD"
+
+        circuit [label="circuit_runner_node\nwaypoints YAML\nrotate_in_place via /cmd_vel\nNavigateToPose client" shape=box style=filled fillcolor="#D7BDE2"]
+        zone    [label="zone_nav_manager\nzone state machine\nNORMAL / SLOW / BLIND_DRIVE / DONE"                  shape=box style=filled fillcolor="#D7BDE2"]
+    }
+
+    // ── CMD_VEL MUX ──────────────────────────────────────────────────────────
+    subgraph cluster_mux {
+        label="CMD_VEL MUX  (diy_cmd_vel_mux)"
+        style=filled fillcolor="#FDEDEC" color="#C0392B" penwidth=2
+        fontsize=13 fontcolor="#C0392B"
+
+        mux [label="cmd_vel_mux_node\nAUTONOMOUS / JOYSTICK / ESTOP_LOCK\narbitrate → /cmd_vel_safe" shape=box style=filled fillcolor="#F1948A"]
+    }
+
+    // ── MOTOR DRIVER ─────────────────────────────────────────────────────────
+    motor [label="Motor Driver\ndifferential-drive node\n/cmd_vel_safe → PWM"  shape=box style=filled fillcolor="#D5D8DC"]
+    wheels_hw [label="Left + Right\nWheels"  shape=ellipse style=filled fillcolor="#BFC9CA"]
+
+    // ── MAP SERVER ───────────────────────────────────────────────────────────
+    mapserver [label="map_server\nclean_map.pgm\n→  /map"  shape=box style=filled fillcolor="#FDFEFE" color="#7F8C8D"]
+
+    // ══ EDGES ════════════════════════════════════════════════════════════════
+
+    // Sensor → FAST-LIO2
+    hesai -> fastlio [label="/hesai/points\n(PointCloud2)"]
+    imu   -> fastlio [label="/imu/data"]
+    imu   -> ekf1    [label="/imu/data"]
+    wheels -> ekf1   [label="/wheel_cmd_vel"]
+
+    // FAST-LIO2 → gate → EKF2
+    fastlio -> gate   [label="/lidar_odometry"]
+    gate    -> ekf2   [label="/lidar_odometry_gated"]
+    ekf1    -> ekf2   [label="/wimu_odom"]
+
+    // NDT-OMP
+    hesai -> ndt      [label="/hesai/points"]
+    ndt   -> gcm      [label="TF: map→odom" style=dashed]
+
+    // Map server
+    mapserver -> gcm  [label="/map"]
+
+    // Costmaps
+    hesai -> gcm      [label="/hesai/points"]
+    hesai -> lcm      [label="/hesai/points"]
+
+    // EKF2 → Nav2
+    ekf2 -> controller [label="/odometry/filtered\nTF: odom→base_link"]
+    ekf2 -> lcm        [label="TF: odom→base_link" style=dashed]
+
+    // Nav2 internal
+    gcm        -> planner    [label="global costmap"]
+    lcm        -> controller [label="local costmap"]
+    planner    -> controller [label="/plan"]
+    bt         -> planner    [label="plan request"]
+    bt         -> controller [label="follow path"]
+
+    // circuit_runner → BT
+    circuit -> bt    [label="NavigateToPose\naction goal"]
+    circuit -> mux   [label="/cmd_vel\n(rotation only)" style=dashed color="#8E44AD"]
+
+    // zone_nav
+    zone -> controller [label="/speed_limit" style=dashed color="#8E44AD"]
+    ekf2 -> zone       [label="/odometry/filtered"]
+
+    // Controller → mux
+    controller -> mux [label="/cmd_vel"]
+
+    // Mux → motor
+    mux   -> motor     [label="/cmd_vel_safe"]
+    motor -> wheels_hw [label="PWM"]
+
+    // Config files (notes)
+    nav2cfg  [label="nav2_params.yaml\ncontroller plugin\ncostmap layers\ngoal tolerances" shape=note style=filled fillcolor="#FDFEE8" color="#F39C12"]
+    wpcfg    [label="sim_simple_loop_waypoints.yaml\nx/y/yaw corners\nrotate_in_place" shape=note style=filled fillcolor="#F5EEF8" color="#8E44AD"]
+
+    nav2cfg -> controller [style=dotted color=gray]
+    wpcfg   -> circuit    [style=dotted color=gray]
+}
