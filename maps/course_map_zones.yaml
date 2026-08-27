@@ -1,0 +1,66 @@
+# Zone definitions for DIY Challenge 2026 course
+# entry_pose: [x_m, y_m, yaw_rad]  in the map frame
+# polygon:    list of [x_m, y_m] vertices (counter-clockwise)
+# traversal_order: 0 = first zone, 9 = last zone
+
+zones:
+  start:
+    label:            "Start / Finish"
+    traversal_order:  0
+    entry_pose:       [5.944, 2.78, 0.0]
+    polygon:          [[5.547, 3.804], [8.717, 3.804], [8.717, 1.609], [5.547, 1.609]]
+
+  car_wash:
+    label:            "Car Wash"
+    traversal_order:  1
+    entry_pose:       [9.114, 2.78, 0.0]
+    polygon:          [[8.717, 3.804], [14.463, 3.804], [14.463, 1.609], [8.717, 1.609]]
+
+  hoop:
+    label:            "Hoop"
+    traversal_order:  2
+    entry_pose:       [12.68, 4.097, 1.5708]
+    polygon:          [[12.085, 7.315], [19.812, 7.315], [19.812, 2.633], [12.085, 2.633]]
+
+  bank:
+    label:            "Bank / Inclined Plane"
+    traversal_order:  3
+    entry_pose:       [12.482, 10.241, 3.1416]
+    polygon:          [[11.293, 14.484], [19.812, 14.484], [19.812, 9.656], [11.293, 9.656]]
+
+  gravel:
+    label:            "Gravel"
+    traversal_order:  4
+    entry_pose:       [7.529, 13.899, 3.1416]
+    polygon:          [[4.557, 14.484], [9.51, 14.484], [9.51, 11.851], [4.557, 11.851]]
+
+  pothole:
+    label:            "Pothole"
+    traversal_order:  5
+    entry_pose:       [7.529, 11.412, 4.7124]
+    polygon:          [[4.557, 11.851], [10.5, 11.851], [10.5, 8.925], [4.557, 8.925]]
+
+  obstacle:
+    label:            "Obstacle / Wide"
+    traversal_order:  6
+    entry_pose:       [6.934, 8.486, 4.7124]
+    polygon:          [[3.764, 8.925], [10.897, 8.925], [10.897, 4.097], [3.764, 4.097]]
+
+  narrow:
+    label:            "Narrow"
+    traversal_order:  7
+    entry_pose:       [0.792, 12.875, 4.7124]
+    polygon:          [[0.198, 13.46], [3.17, 13.46], [3.17, 3.804], [0.198, 3.804]]
+
+  tunnel:
+    label:            "Tunnel"
+    traversal_order:  8
+    entry_pose:       [2.377, 4.097, 3.1416]
+    polygon:          [[1.585, 4.682], [3.962, 4.682], [3.962, 2.926], [1.585, 2.926]]
+
+  ramp:
+    label:            "Ramp / Helix"
+    traversal_order:  9
+    entry_pose:       [1.387, 3.365, 3.1416]
+    polygon:          [[0.0, 3.658], [2.972, 3.658], [2.972, 0.0], [0.0, 0.0]]
+
