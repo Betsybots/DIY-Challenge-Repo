@@ -35,7 +35,9 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-
+from launch.conditions import IfCondition
+import os
+from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
 
@@ -68,6 +70,8 @@ def generate_launch_description():
     goal_tolerance = LaunchConfiguration(
         'goal_tolerance'
     )
+
+    use_rviz = LaunchConfiguration('use_rviz')
 
     # ============================================================
     # Launch description
@@ -144,6 +148,12 @@ def generate_launch_description():
         # --------------------------------------------------------
         # PD gains
         # --------------------------------------------------------
+
+        DeclareLaunchArgument(
+            'use_rviz',
+            default_value='true',
+            description='Whether to launch RViz.'
+        ),
 
         DeclareLaunchArgument(
             'kp',
@@ -232,6 +242,28 @@ def generate_launch_description():
                 'base_frame': base_frame,
 
                 'robot_clearance': robot_clearance,
+            }],
+        ),
+        #========================================================
+        # RViz  
+        #========================================================
+        
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            output='screen',
+            condition=IfCondition(use_rviz),
+            arguments=[
+                '-d',
+                os.path.join(
+                    get_package_share_directory('diy_motion_planner'),
+                    'rviz',
+                    'config.rviz',
+                ),
+            ],
+            parameters=[{
+                'use_sim_time': use_sim_time,
             }],
         ),
 

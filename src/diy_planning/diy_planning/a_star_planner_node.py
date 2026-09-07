@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
+
 """
-A* path planner for the DIY Challenge robot.
+Fast A* planner for the DIY Challenge robot.
 
 Consumes:
     /map
@@ -11,56 +12,51 @@ Publishes:
     /a_star/path
     /a_star/visited_map
 
-The planner includes obstacle inflation so the robot does not plan paths
-too close to walls or obstacles.
-
-Simulation:
-    base_frame := base_footprint
-
-Hardware:
-    base_frame := base_link
+Features:
+    - 8-connected A*
+    - heapq priority queue
+    - octile heuristic
+    - precomputed obstacle inflation
+    - O(1) safety lookup during planning
+    - diagonal corner-cut prevention
+    - visited-map visualization
+    - transient-local QoS for map-like topics
 """
 
+import heapq
 import math
-from queue import PriorityQueue
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseStamped
 from nav_msgs.msg import OccupancyGrid, Path
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile
+from rclpy.qos import (
+    DurabilityPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+)
 from tf2_ros import Buffer, TransformListener
 
 
 class GraphNode:
 
-    def __init__(self, x, y, cost=0.0, heuristic=0.0, prev=None):
+    def __init__(
+        self,
+        x,
+        y,
+        cost=0.0,
+        heuristic=0.0,
+        prev=None
+    ):
         self.x = x
         self.y = y
         self.cost = cost
         self.heuristic = heuristic
         self.prev = prev
 
-    def __lt__(self, other):
-        return (
-            self.cost + self.heuristic
-            < other.cost + other.heuristic
-        )
-
-    def __eq__(self, other):
-        return (
-            self.x == other.x
-            and self.y == other.y
-        )
-
-    def __hash__(self):
-        return hash((self.x, self.y))
-
-    def __add__(self, other):
-        return GraphNode(
-            self.x + other[0],
-            self.y + other[1]
-        )
+    @property
+    def total_cost(self):
+        return self.cost + self.heuristic
 
 
 class AStarPlanner(Node):
@@ -99,48 +95,53 @@ class AStarPlanner(Node):
         )
 
         self.declare_parameter(
+            'visited_map_topic',
+            '/a_star/visited_map'
+        )
+
+        self.declare_parameter(
             'base_frame',
             'base_footprint'
         )
 
-        # Minimum distance from obstacles.
-        #
-        # Example:
-        # map resolution = 0.05 m
-        # clearance = 0.25 m
-        #
-        # => approximately 5 cells around obstacles
         self.declare_parameter(
             'robot_clearance',
-            0.25
+            0.40
         )
 
-        # Treat unknown map cells (-1) as blocked.
+        self.declare_parameter(
+            'occupied_threshold',
+            50
+        )
+
         self.declare_parameter(
             'unknown_is_occupied',
             True
         )
 
-        # Occupancy values >= this number are obstacles.
         self.declare_parameter(
-            'occupied_threshold',
-            50
+            'visited_publish_interval',
+            250
         )
 
         # ============================================================
         # Read parameters
         # ============================================================
 
-        map_topic = self.get_parameter(
+        self.map_topic = self.get_parameter(
             'map_topic'
         ).value
 
-        goal_topic = self.get_parameter(
+        self.goal_topic = self.get_parameter(
             'goal_topic'
         ).value
 
-        path_topic = self.get_parameter(
+        self.path_topic = self.get_parameter(
             'path_topic'
+        ).value
+
+        self.visited_map_topic = self.get_parameter(
+            'visited_map_topic'
         ).value
 
         self.base_frame = self.get_parameter(
@@ -153,27 +154,40 @@ class AStarPlanner(Node):
             ).value
         )
 
-        self.unknown_is_occupied = bool(
-            self.get_parameter(
-                'unknown_is_occupied'
-            ).value
-        )
-
         self.occupied_threshold = int(
             self.get_parameter(
                 'occupied_threshold'
             ).value
         )
 
+        self.unknown_is_occupied = bool(
+            self.get_parameter(
+                'unknown_is_occupied'
+            ).value
+        )
+
+        self.visited_publish_interval = int(
+            self.get_parameter(
+                'visited_publish_interval'
+            ).value
+        )
+
+        if self.visited_publish_interval < 1:
+            self.visited_publish_interval = 1
+
         # ============================================================
         # QoS
         # ============================================================
 
-        map_qos = QoSProfile(
-            depth=10
+        self.map_qos = QoSProfile(
+            depth=1
         )
 
-        map_qos.durability = (
+        self.map_qos.reliability = (
+            ReliabilityPolicy.RELIABLE
+        )
+
+        self.map_qos.durability = (
             DurabilityPolicy.TRANSIENT_LOCAL
         )
 
@@ -183,28 +197,28 @@ class AStarPlanner(Node):
 
         self.map_sub = self.create_subscription(
             OccupancyGrid,
-            map_topic,
+            self.map_topic,
             self.map_callback,
-            map_qos
+            self.map_qos
         )
 
         self.goal_sub = self.create_subscription(
             PoseStamped,
-            goal_topic,
+            self.goal_topic,
             self.goal_callback,
             10
         )
 
         self.path_pub = self.create_publisher(
             Path,
-            path_topic,
-            map_qos
+            self.path_topic,
+            self.map_qos
         )
 
-        self.map_pub = self.create_publisher(
+        self.visited_map_pub = self.create_publisher(
             OccupancyGrid,
-            '/a_star/visited_map',
-            10
+            self.visited_map_topic,
+            self.map_qos
         )
 
         # ============================================================
@@ -212,6 +226,7 @@ class AStarPlanner(Node):
         # ============================================================
 
         self.map_ = None
+        self.safe_grid = None
 
         self.visited_map_ = (
             OccupancyGrid()
@@ -219,9 +234,15 @@ class AStarPlanner(Node):
 
         self.clearance_cells = 0
 
+        # heapq needs a deterministic tie breaker
+        self.heap_counter = 0
+
         self.get_logger().info(
-            f'A* planner ready. '
-            f'Robot clearance = '
+            'Fast A* planner ready'
+        )
+
+        self.get_logger().info(
+            f'  robot_clearance = '
             f'{self.robot_clearance:.2f} m'
         )
 
@@ -236,23 +257,6 @@ class AStarPlanner(Node):
 
         self.map_ = map_msg
 
-        self.visited_map_.header = (
-            map_msg.header
-        )
-
-        self.visited_map_.info = (
-            map_msg.info
-        )
-
-        self.visited_map_.data = (
-            [-1]
-            * (
-                map_msg.info.height
-                * map_msg.info.width
-            )
-        )
-
-        # Convert clearance from meters to cells.
         self.clearance_cells = int(
             math.ceil(
                 self.robot_clearance
@@ -265,9 +269,200 @@ class AStarPlanner(Node):
             f'{map_msg.info.width} x '
             f'{map_msg.info.height}, '
             f'resolution='
-            f'{map_msg.info.resolution:.3f} m, '
-            f'clearance='
-            f'{self.clearance_cells} cells'
+            f'{map_msg.info.resolution:.3f} m'
+        )
+
+        self.get_logger().info(
+            f'Inflating obstacles by '
+            f'{self.robot_clearance:.2f} m '
+            f'({self.clearance_cells} cells)'
+        )
+
+        # ------------------------------------------------------------
+        # PRECOMPUTE SAFE GRID
+        # ------------------------------------------------------------
+
+        self.build_safe_grid()
+
+        # ------------------------------------------------------------
+        # Prepare visited map
+        # ------------------------------------------------------------
+
+        self.reset_visited_map()
+
+        self.get_logger().info(
+            'Inflated safety grid ready'
+        )
+
+    # ================================================================
+    # Precompute inflated obstacle map
+    # ================================================================
+
+    def build_safe_grid(self):
+
+        width = self.map_.info.width
+        height = self.map_.info.height
+
+        total_cells = (
+            width * height
+        )
+
+        # ------------------------------------------------------------
+        # Start by assuming every cell is safe.
+        # ------------------------------------------------------------
+
+        self.safe_grid = [
+            True
+        ] * total_cells
+
+        # ------------------------------------------------------------
+        # First mark original blocked cells.
+        # ------------------------------------------------------------
+
+        blocked_cells = []
+
+        for y in range(height):
+
+            row_offset = y * width
+
+            for x in range(width):
+
+                index = (
+                    row_offset + x
+                )
+
+                value = (
+                    self.map_.data[index]
+                )
+
+                blocked = False
+
+                # Unknown
+                if value < 0:
+
+                    if self.unknown_is_occupied:
+                        blocked = True
+
+                # Occupied
+                elif (
+                    value
+                    >= self.occupied_threshold
+                ):
+
+                    blocked = True
+
+                if blocked:
+
+                    self.safe_grid[index] = False
+
+                    blocked_cells.append(
+                        (x, y)
+                    )
+
+        # ------------------------------------------------------------
+        # Precompute circular inflation offsets once.
+        # ------------------------------------------------------------
+
+        radius = (
+            self.clearance_cells
+        )
+
+        inflation_offsets = []
+
+        radius_squared = (
+            radius * radius
+        )
+
+        for dy in range(
+            -radius,
+            radius + 1
+        ):
+
+            for dx in range(
+                -radius,
+                radius + 1
+            ):
+
+                if (
+                    dx * dx
+                    + dy * dy
+                    <= radius_squared
+                ):
+
+                    inflation_offsets.append(
+                        (dx, dy)
+                    )
+
+        # ------------------------------------------------------------
+        # Inflate every blocked cell.
+        # ------------------------------------------------------------
+
+        for (
+            obstacle_x,
+            obstacle_y
+        ) in blocked_cells:
+
+            for (
+                dx,
+                dy
+            ) in inflation_offsets:
+
+                nx = (
+                    obstacle_x + dx
+                )
+
+                ny = (
+                    obstacle_y + dy
+                )
+
+                if (
+                    0 <= nx < width
+                    and
+                    0 <= ny < height
+                ):
+
+                    index = (
+                        ny * width
+                        + nx
+                    )
+
+                    self.safe_grid[index] = False
+
+        # ------------------------------------------------------------
+        # Treat borders inside clearance radius as unsafe.
+        #
+        # This is equivalent to considering outside-map space blocked.
+        # ------------------------------------------------------------
+
+        if radius > 0:
+
+            for y in range(height):
+
+                for x in range(width):
+
+                    if (
+                        x < radius
+                        or
+                        y < radius
+                        or
+                        x >= width - radius
+                        or
+                        y >= height - radius
+                    ):
+
+                        self.safe_grid[
+                            y * width + x
+                        ] = False
+
+        safe_count = sum(
+            1
+            for value in self.safe_grid
+            if value
+        )
+
+        self.get_logger().info(
+            f'Safe cells: '
+            f'{safe_count}/{total_cells}'
         )
 
     # ================================================================
@@ -276,7 +471,7 @@ class AStarPlanner(Node):
 
     def goal_callback(
         self,
-        pose: PoseStamped
+        goal_msg: PoseStamped
     ):
 
         if self.map_ is None:
@@ -287,23 +482,26 @@ class AStarPlanner(Node):
 
             return
 
-        # Reset visited visualization.
-        self.visited_map_.data = (
-            [-1]
-            * (
-                self.map_.info.height
-                * self.map_.info.width
+        if self.safe_grid is None:
+
+            self.get_logger().error(
+                'Safety grid has not been generated.'
             )
-        )
+
+            return
+
+        # ------------------------------------------------------------
+        # Frame check
+        # ------------------------------------------------------------
 
         if (
-            pose.header.frame_id
+            goal_msg.header.frame_id
             != self.map_.header.frame_id
         ):
 
             self.get_logger().error(
                 f"Goal frame "
-                f"'{pose.header.frame_id}' "
+                f"'{goal_msg.header.frame_id}' "
                 f"does not match map frame "
                 f"'{self.map_.header.frame_id}'"
             )
@@ -311,7 +509,13 @@ class AStarPlanner(Node):
             return
 
         # ------------------------------------------------------------
-        # Get current robot position in map frame
+        # Reset visited visualization
+        # ------------------------------------------------------------
+
+        self.reset_visited_map()
+
+        # ------------------------------------------------------------
+        # Get robot location
         # ------------------------------------------------------------
 
         try:
@@ -327,7 +531,8 @@ class AStarPlanner(Node):
         except Exception as exception:
 
             self.get_logger().error(
-                f'Could not transform map -> '
+                f'Could not transform '
+                f'{self.map_.header.frame_id} -> '
                 f'{self.base_frame}: '
                 f'{exception}'
             )
@@ -344,25 +549,33 @@ class AStarPlanner(Node):
             map_to_base_tf.transform.translation.y
         )
 
+        start_pose.position.z = (
+            map_to_base_tf.transform.translation.z
+        )
+
         start_pose.orientation = (
             map_to_base_tf.transform.rotation
         )
 
-        # ------------------------------------------------------------
-        # Plan
-        # ------------------------------------------------------------
+        self.get_logger().info(
+            f'Planning: '
+            f'({start_pose.position.x:.2f}, '
+            f'{start_pose.position.y:.2f}) '
+            f'-> '
+            f'({goal_msg.pose.position.x:.2f}, '
+            f'{goal_msg.pose.position.y:.2f})'
+        )
 
         path = self.plan(
             start_pose,
-            pose.pose
+            goal_msg.pose
         )
 
         if path.poses:
 
             self.get_logger().info(
-                f'Shortest collision-safe '
-                f'path found with '
-                f'{len(path.poses)} poses!'
+                f'Path found: '
+                f'{len(path.poses)} poses'
             )
 
             self.path_pub.publish(
@@ -372,11 +585,11 @@ class AStarPlanner(Node):
         else:
 
             self.get_logger().warn(
-                'No safe path found to goal.'
+                'No safe path found.'
             )
 
     # ================================================================
-    # A*
+    # Fast A*
     # ================================================================
 
     def plan(
@@ -385,227 +598,19 @@ class AStarPlanner(Node):
         goal: Pose
     ) -> Path:
 
-        # 4-connected grid.
-        explore_directions = [
-            (-1, 0),
-            (1, 0),
-            (0, -1),
-            (0, 1),
-        ]
-
-        start_node = self.world_to_grid(
-            start
-        )
-
-        goal_node = self.world_to_grid(
-            goal
-        )
-
-        # ------------------------------------------------------------
-        # Validate start / goal
-        # ------------------------------------------------------------
-
-        if not self.pose_on_map(start_node):
-
-            self.get_logger().error(
-                'Start is outside the map.'
-            )
-
-            return Path()
-
-        if not self.pose_on_map(goal_node):
-
-            self.get_logger().error(
-                'Goal is outside the map.'
-            )
-
-            return Path()
-
-        if not self.is_safe(start_node):
-
-            self.get_logger().error(
-                'Start is too close to '
-                'an obstacle.'
-            )
-
-            return Path()
-
-        if not self.is_safe(goal_node):
-
-            self.get_logger().error(
-                'Goal is too close to '
-                'an obstacle.'
-            )
-
-            return Path()
-
-        # ------------------------------------------------------------
-        # Open set
-        # ------------------------------------------------------------
-
-        pending_nodes = (
-            PriorityQueue()
-        )
-
-        start_node.cost = 0.0
-
-        start_node.heuristic = (
-            self.manhattan_distance(
-                start_node,
-                goal_node
+        start_node = (
+            self.world_to_grid(
+                start
             )
         )
 
-        pending_nodes.put(
-            start_node
+        goal_node = (
+            self.world_to_grid(
+                goal
+            )
         )
-
-        # Best known cost to each cell.
-        g_score = {
-            (
-                start_node.x,
-                start_node.y
-            ): 0.0
-        }
-
-        # Prevent repeatedly expanding cells.
-        closed_set = set()
-
-        active_node = None
-        goal_reached = False
-
-        # ------------------------------------------------------------
-        # Search
-        # ------------------------------------------------------------
-
-        while (
-            not pending_nodes.empty()
-            and rclpy.ok()
-        ):
-
-            active_node = (
-                pending_nodes.get()
-            )
-
-            active_key = (
-                active_node.x,
-                active_node.y
-            )
-
-            if active_key in closed_set:
-                continue
-
-            closed_set.add(
-                active_key
-            )
-
-            # Goal found.
-            if active_node == goal_node:
-
-                goal_reached = True
-                break
-
-            # -----------------------------------------------
-            # Expand neighbors
-            # -----------------------------------------------
-
-            for (
-                direction_x,
-                direction_y
-            ) in explore_directions:
-
-                new_node = (
-                    active_node
-                    + (
-                        direction_x,
-                        direction_y
-                    )
-                )
-
-                if not self.pose_on_map(
-                    new_node
-                ):
-                    continue
-
-                # Important:
-                # checks inflated obstacle clearance.
-                if not self.is_safe(
-                    new_node
-                ):
-                    continue
-
-                new_key = (
-                    new_node.x,
-                    new_node.y
-                )
-
-                tentative_cost = (
-                    active_node.cost
-                    + 1.0
-                )
-
-                old_cost = g_score.get(
-                    new_key,
-                    float('inf')
-                )
-
-                if tentative_cost >= old_cost:
-                    continue
-
-                g_score[new_key] = (
-                    tentative_cost
-                )
-
-                new_node.cost = (
-                    tentative_cost
-                )
-
-                new_node.heuristic = (
-                    self.manhattan_distance(
-                        new_node,
-                        goal_node
-                    )
-                )
-
-                new_node.prev = (
-                    active_node
-                )
-
-                pending_nodes.put(
-                    new_node
-                )
-
-            # -----------------------------------------------
-            # Visited visualization
-            # -----------------------------------------------
-
-            self.visited_map_.header.stamp = (
-                self.get_clock()
-                .now()
-                .to_msg()
-            )
-
-            self.visited_map_.data[
-                self.pose_to_cell(
-                    active_node
-                )
-            ] = 50
-
-            # Publishing every iteration can be expensive.
-            # For this small map it is acceptable while debugging.
-            self.map_pub.publish(
-                self.visited_map_
-            )
-
-        # ============================================================
-        # Reconstruct path
-        # ============================================================
 
         path = Path()
-
-        if not goal_reached:
-
-            return path
 
         path.header.frame_id = (
             self.map_.header.frame_id
@@ -617,14 +622,411 @@ class AStarPlanner(Node):
             .to_msg()
         )
 
+        # ------------------------------------------------------------
+        # Validate
+        # ------------------------------------------------------------
+
+        if not self.pose_on_map(
+            start_node
+        ):
+
+            self.get_logger().error(
+                'Start outside map'
+            )
+
+            return path
+
+        if not self.pose_on_map(
+            goal_node
+        ):
+
+            self.get_logger().error(
+                'Goal outside map'
+            )
+
+            return path
+
+        if not self.is_safe(
+            start_node
+        ):
+
+            self.get_logger().error(
+                'Start is inside inflated obstacle region'
+            )
+
+            return path
+
+        if not self.is_safe(
+            goal_node
+        ):
+
+            self.get_logger().error(
+                'Goal is inside inflated obstacle region'
+            )
+
+            return path
+
+        # ============================================================
+        # Directions
+        # ============================================================
+
+        directions = [
+
+            (-1, 0, 1.0),
+            (1, 0, 1.0),
+            (0, -1, 1.0),
+            (0, 1, 1.0),
+
+            (-1, -1, math.sqrt(2.0)),
+            (-1, 1, math.sqrt(2.0)),
+            (1, -1, math.sqrt(2.0)),
+            (1, 1, math.sqrt(2.0)),
+        ]
+
+        # ============================================================
+        # heapq open set
+        # ============================================================
+
+        open_heap = []
+
+        start_key = (
+            start_node.x,
+            start_node.y
+        )
+
+        goal_key = (
+            goal_node.x,
+            goal_node.y
+        )
+
+        start_h = (
+            self.octile_distance(
+                start_node,
+                goal_node
+            )
+        )
+
+        # g_score dictionary
+        g_score = {
+            start_key: 0.0
+        }
+
+        # Parent dictionary:
+        #
+        # child -> parent
+        came_from = {}
+
+        self.heap_counter = 0
+
+        heapq.heappush(
+            open_heap,
+            (
+                start_h,
+                self.heap_counter,
+                start_node.x,
+                start_node.y
+            )
+        )
+
+        closed_set = set()
+
+        expanded_count = 0
+
+        goal_reached = False
+
+        # ============================================================
+        # Search
+        # ============================================================
+
         while (
-            active_node is not None
-            and active_node.prev is not None
+            open_heap
             and rclpy.ok()
         ):
 
-            pose = self.grid_to_world(
-                active_node
+            (
+                current_f,
+                _,
+                current_x,
+                current_y
+            ) = heapq.heappop(
+                open_heap
+            )
+
+            current_key = (
+                current_x,
+                current_y
+            )
+
+            if (
+                current_key
+                in closed_set
+            ):
+
+                continue
+
+            closed_set.add(
+                current_key
+            )
+
+            expanded_count += 1
+
+            # --------------------------------------------------------
+            # Visited map
+            # --------------------------------------------------------
+
+            current_index = (
+                current_y
+                * self.map_.info.width
+                + current_x
+            )
+
+            original_value = (
+                self.map_.data[
+                    current_index
+                ]
+            )
+
+            if (
+                original_value
+                < self.occupied_threshold
+            ):
+
+                self.visited_map_.data[
+                    current_index
+                ] = 50
+
+            if (
+                expanded_count
+                % self.visited_publish_interval
+                == 0
+            ):
+
+                self.publish_visited_map()
+
+            # --------------------------------------------------------
+            # Goal
+            # --------------------------------------------------------
+
+            if (
+                current_key
+                == goal_key
+            ):
+
+                goal_reached = True
+                break
+
+            current_g = (
+                g_score[current_key]
+            )
+
+            # ========================================================
+            # Neighbors
+            # ========================================================
+
+            for (
+                dx,
+                dy,
+                movement_cost
+            ) in directions:
+
+                nx = (
+                    current_x + dx
+                )
+
+                ny = (
+                    current_y + dy
+                )
+
+                neighbor = (
+                    GraphNode(
+                        nx,
+                        ny
+                    )
+                )
+
+                if not self.pose_on_map(
+                    neighbor
+                ):
+
+                    continue
+
+                # O(1) lookup now
+                if not self.is_safe(
+                    neighbor
+                ):
+
+                    continue
+
+                # ----------------------------------------------------
+                # Diagonal corner cutting prevention
+                # ----------------------------------------------------
+
+                diagonal = (
+                    dx != 0
+                    and dy != 0
+                )
+
+                if diagonal:
+
+                    horizontal = (
+                        GraphNode(
+                            current_x + dx,
+                            current_y
+                        )
+                    )
+
+                    vertical = (
+                        GraphNode(
+                            current_x,
+                            current_y + dy
+                        )
+                    )
+
+                    if (
+                        not self.is_safe(
+                            horizontal
+                        )
+                        or
+                        not self.is_safe(
+                            vertical
+                        )
+                    ):
+
+                        continue
+
+                neighbor_key = (
+                    nx,
+                    ny
+                )
+
+                tentative_g = (
+                    current_g
+                    + movement_cost
+                )
+
+                existing_g = (
+                    g_score.get(
+                        neighbor_key,
+                        float('inf')
+                    )
+                )
+
+                if (
+                    tentative_g
+                    >= existing_g
+                ):
+
+                    continue
+
+                # ----------------------------------------------------
+                # Better path
+                # ----------------------------------------------------
+
+                came_from[
+                    neighbor_key
+                ] = current_key
+
+                g_score[
+                    neighbor_key
+                ] = tentative_g
+
+                heuristic = (
+                    self.octile_xy(
+                        nx,
+                        ny,
+                        goal_node.x,
+                        goal_node.y
+                    )
+                )
+
+                f_score = (
+                    tentative_g
+                    + heuristic
+                )
+
+                self.heap_counter += 1
+
+                heapq.heappush(
+                    open_heap,
+                    (
+                        f_score,
+                        self.heap_counter,
+                        nx,
+                        ny
+                    )
+                )
+
+        # ============================================================
+        # Final visited visualization
+        # ============================================================
+
+        self.publish_visited_map()
+
+        self.get_logger().info(
+            f'A* expanded '
+            f'{expanded_count} cells'
+        )
+
+        if not goal_reached:
+
+            return path
+
+        # ============================================================
+        # Reconstruct path
+        # ============================================================
+
+        cells = []
+
+        current_key = (
+            goal_key
+        )
+
+        cells.append(
+            current_key
+        )
+
+        while (
+            current_key
+            != start_key
+        ):
+
+            if (
+                current_key
+                not in came_from
+            ):
+
+                self.get_logger().error(
+                    'Broken A* parent chain'
+                )
+
+                return Path()
+
+            current_key = (
+                came_from[
+                    current_key
+                ]
+            )
+
+            cells.append(
+                current_key
+            )
+
+        cells.reverse()
+
+        # ------------------------------------------------------------
+        # Convert cells -> Path
+        # ------------------------------------------------------------
+
+        for (
+            x,
+            y
+        ) in cells:
+
+            pose = (
+                self.grid_to_world_xy(
+                    x,
+                    y
+                )
             )
 
             pose_stamped = (
@@ -641,95 +1043,129 @@ class AStarPlanner(Node):
                 pose_stamped
             )
 
-            active_node = (
-                active_node.prev
-            )
-
-        path.poses.reverse()
-
         return path
 
     # ================================================================
-    # Clearance / obstacle inflation
+    # FAST safety lookup
     # ================================================================
 
     def is_safe(
         self,
         node: GraphNode
-    ) -> bool:
+    ):
 
-        """
-        A cell is safe only if every cell inside the robot-clearance
-        radius is free.
-
-        This effectively inflates walls / obstacles before planning.
-        """
-
-        radius = self.clearance_cells
-
-        for dx in range(
-            -radius,
-            radius + 1
+        if not self.pose_on_map(
+            node
         ):
 
-            for dy in range(
-                -radius,
-                radius + 1
-            ):
+            return False
 
-                # Circular inflation instead of square inflation.
-                if (
-                    dx * dx + dy * dy
-                    > radius * radius
-                ):
-                    continue
+        index = (
+            node.y
+            * self.map_.info.width
+            + node.x
+        )
 
-                check_node = GraphNode(
-                    node.x + dx,
-                    node.y + dy
-                )
+        return (
+            self.safe_grid[index]
+        )
 
-                # Map edge behaves like an obstacle.
-                if not self.pose_on_map(
-                    check_node
-                ):
-                    return False
+    # ================================================================
+    # Visited map
+    # ================================================================
 
-                value = self.map_.data[
-                    self.pose_to_cell(
-                        check_node
-                    )
-                ]
+    def reset_visited_map(self):
 
-                # Unknown.
-                if (
-                    value < 0
-                    and self.unknown_is_occupied
-                ):
-                    return False
+        if self.map_ is None:
+            return
 
-                # Occupied.
-                if (
-                    value
-                    >= self.occupied_threshold
-                ):
-                    return False
+        self.visited_map_ = (
+            OccupancyGrid()
+        )
 
-        return True
+        self.visited_map_.header = (
+            self.map_.header
+        )
+
+        self.visited_map_.info = (
+            self.map_.info
+        )
+
+        self.visited_map_.data = (
+            list(self.map_.data)
+        )
+
+        self.publish_visited_map()
+
+    def publish_visited_map(self):
+
+        if self.map_ is None:
+            return
+
+        self.visited_map_.header.frame_id = (
+            self.map_.header.frame_id
+        )
+
+        self.visited_map_.header.stamp = (
+            self.get_clock()
+            .now()
+            .to_msg()
+        )
+
+        self.visited_map_pub.publish(
+            self.visited_map_
+        )
 
     # ================================================================
     # Heuristic
     # ================================================================
 
-    def manhattan_distance(
+    def octile_distance(
         self,
-        node: GraphNode,
-        goal_node: GraphNode
+        node,
+        goal
     ):
 
+        return self.octile_xy(
+            node.x,
+            node.y,
+            goal.x,
+            goal.y
+        )
+
+    def octile_xy(
+        self,
+        x1,
+        y1,
+        x2,
+        y2
+    ):
+
+        dx = abs(
+            x1 - x2
+        )
+
+        dy = abs(
+            y1 - y2
+        )
+
+        minimum = min(
+            dx,
+            dy
+        )
+
+        maximum = max(
+            dx,
+            dy
+        )
+
         return (
-            abs(node.x - goal_node.x)
-            + abs(node.y - goal_node.y)
+            maximum
+            + (
+                math.sqrt(2.0)
+                - 1.0
+            )
+            * minimum
         )
 
     # ================================================================
@@ -738,7 +1174,7 @@ class AStarPlanner(Node):
 
     def pose_on_map(
         self,
-        node: GraphNode
+        node
     ):
 
         return (
@@ -749,27 +1185,12 @@ class AStarPlanner(Node):
             < self.map_.info.height
         )
 
-    def pose_to_cell(
-        self,
-        node: GraphNode
-    ):
-
-        return (
-            node.y
-            * self.map_.info.width
-            + node.x
-        )
-
-    # ================================================================
-    # World <-> grid
-    # ================================================================
-
     def world_to_grid(
         self,
         pose: Pose
-    ) -> GraphNode:
+    ):
 
-        grid_x = int(
+        x = int(
             math.floor(
                 (
                     pose.position.x
@@ -779,7 +1200,7 @@ class AStarPlanner(Node):
             )
         )
 
-        grid_y = int(
+        y = int(
             math.floor(
                 (
                     pose.position.y
@@ -790,21 +1211,21 @@ class AStarPlanner(Node):
         )
 
         return GraphNode(
-            grid_x,
-            grid_y
+            x,
+            y
         )
 
-    def grid_to_world(
+    def grid_to_world_xy(
         self,
-        node: GraphNode
-    ) -> Pose:
+        x,
+        y
+    ):
 
         pose = Pose()
 
-        # Use center of occupancy-grid cell.
         pose.position.x = (
             (
-                node.x + 0.5
+                x + 0.5
             )
             * self.map_.info.resolution
             + self.map_.info.origin.position.x
@@ -812,13 +1233,17 @@ class AStarPlanner(Node):
 
         pose.position.y = (
             (
-                node.y + 0.5
+                y + 0.5
             )
             * self.map_.info.resolution
             + self.map_.info.origin.position.y
         )
 
-        # Valid identity quaternion.
+        pose.position.z = 0.0
+
+        pose.orientation.x = 0.0
+        pose.orientation.y = 0.0
+        pose.orientation.z = 0.0
         pose.orientation.w = 1.0
 
         return pose
@@ -826,13 +1251,17 @@ class AStarPlanner(Node):
 
 def main(args=None):
 
-    rclpy.init(args=args)
+    rclpy.init(
+        args=args
+    )
 
     node = AStarPlanner()
 
     try:
 
-        rclpy.spin(node)
+        rclpy.spin(
+            node
+        )
 
     except KeyboardInterrupt:
 
@@ -843,8 +1272,10 @@ def main(args=None):
         node.destroy_node()
 
         if rclpy.ok():
+
             rclpy.shutdown()
 
 
 if __name__ == '__main__':
+
     main()

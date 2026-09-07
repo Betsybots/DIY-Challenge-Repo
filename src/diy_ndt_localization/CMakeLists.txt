@@ -22,6 +22,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(ndt_omp_ros2 REQUIRED)
+find_package(OpenMP REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common io filters registration)
 
 include_directories(${PCL_INCLUDE_DIRS})
@@ -44,7 +45,10 @@ ament_target_dependencies(ndt_localizer_node
   ndt_omp_ros2
 )
 
-target_link_libraries(ndt_localizer_node ${PCL_LIBRARIES})
+target_link_libraries(ndt_localizer_node
+  ${PCL_LIBRARIES}
+  OpenMP::OpenMP_CXX
+)
 
 install(TARGETS ndt_localizer_node
   DESTINATION lib/${PROJECT_NAME}

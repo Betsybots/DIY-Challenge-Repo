@@ -14,6 +14,7 @@ setup(
          ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'pd_motion_planner_node = diy_motion_planner.pd_motion_planner_node:main',
+            'pure_pursuit_motion_planner_node = diy_motion_planner.pure_pursuit_motion_planner_node:main',
         ],
     },
 )

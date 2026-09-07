@@ -1,0 +1,379 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro"
+       name="my_mobile_robot">
+
+  <!-- ========================================================= -->
+  <!-- 1. ROBOT PARAMETERS                                      -->
+  <!-- ========================================================= -->
+
+  <!-- Overall robot body dimensions -->
+  <xacro:property name="base_length" value="0.4572"/>   <!-- 18 in -->
+  <xacro:property name="base_width"  value="0.2921"/>   <!-- 11.5 in -->
+  <xacro:property name="base_height" value="0.3048"/>   <!-- 12 in -->
+
+  <!-- Fill these -->
+  <xacro:property name="base_mass" value="YOUR_ROBOT_MASS_KG"/>
+
+  <xacro:property name="wheel_radius" value="YOUR_WHEEL_RADIUS_M"/>
+  <xacro:property name="wheel_width"  value="YOUR_WHEEL_WIDTH_M"/>
+
+  <!-- Distance between LEFT and RIGHT wheel centers -->
+  <xacro:property name="wheel_separation"
+                  value="YOUR_WHEEL_CENTER_TO_CENTER_DISTANCE_M"/>
+
+  <!-- Position of main wheel axle relative to base_link -->
+  <xacro:property name="wheel_x_offset"
+                  value="YOUR_MAIN_WHEEL_X_POSITION_M"/>
+
+  <!-- Support/caster wheel dimensions -->
+  <xacro:property name="caster_radius"
+                  value="YOUR_CASTER_RADIUS_M"/>
+
+  <xacro:property name="caster_width"
+                  value="YOUR_CASTER_WIDTH_M"/>
+
+
+  <!-- ========================================================= -->
+  <!-- 2. INERTIA CALCULATIONS                                   -->
+  <!-- Approximate main robot body as rectangular cuboid         -->
+  <!-- ========================================================= -->
+
+  <xacro:property name="ixx"
+        value="${(1.0/12.0) * base_mass *
+        (base_width*base_width + base_height*base_height)}"/>
+
+  <xacro:property name="iyy"
+        value="${(1.0/12.0) * base_mass *
+        (base_length*base_length + base_height*base_height)}"/>
+
+  <xacro:property name="izz"
+        value="${(1.0/12.0) * base_mass *
+        (base_length*base_length + base_width*base_width)}"/>
+
+
+  <!-- ========================================================= -->
+  <!-- 3. BASE FOOTPRINT                                         -->
+  <!-- ========================================================= -->
+
+  <link name="base_footprint"/>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+
+    <!-- Adjust Z so base_link represents approximately
+         the center of the robot body -->
+    <origin xyz="0 0 ${base_height/2.0}"
+            rpy="0 0 0"/>
+  </joint>
+
+
+  <!-- ========================================================= -->
+  <!-- 4. BASE LINK                                              -->
+  <!-- ========================================================= -->
+
+  <link name="base_link">
+
+    <!-- VISUAL -->
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+
+      <geometry>
+        <box size="${base_length}
+                   ${base_width}
+                   ${base_height}"/>
+      </geometry>
+    </visual>
+
+
+    <!-- COLLISION -->
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+
+      <geometry>
+        <box size="${base_length}
+                   ${base_width}
+                   ${base_height}"/>
+      </geometry>
+    </collision>
+
+
+    <!-- INERTIAL -->
+    <inertial>
+      <origin xyz="0 0 0"
+              rpy="0 0 0"/>
+
+      <mass value="${base_mass}"/>
+
+      <inertia
+          ixx="${ixx}"
+          ixy="0.0"
+          ixz="0.0"
+          iyy="${iyy}"
+          iyz="0.0"
+          izz="${izz}"/>
+    </inertial>
+
+  </link>
+
+
+  <!-- ========================================================= -->
+  <!-- 5. LEFT DRIVE WHEEL                                       -->
+  <!-- ========================================================= -->
+
+  <link name="left_wheel_link">
+
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}"
+                  length="${wheel_width}"/>
+      </geometry>
+
+      <!-- Cylinder axis must align with wheel axle -->
+      <origin xyz="0 0 0"
+              rpy="${pi/2} 0 0"/>
+    </visual>
+
+
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}"
+                  length="${wheel_width}"/>
+      </geometry>
+
+      <origin xyz="0 0 0"
+              rpy="${pi/2} 0 0"/>
+    </collision>
+
+
+    <inertial>
+      <mass value="YOUR_LEFT_WHEEL_MASS_KG"/>
+
+      <origin xyz="0 0 0"
+              rpy="0 0 0"/>
+
+      <inertia
+          ixx="YOUR_VALUE"
+          ixy="0.0"
+          ixz="0.0"
+          iyy="YOUR_VALUE"
+          iyz="0.0"
+          izz="YOUR_VALUE"/>
+    </inertial>
+
+  </link>
+
+
+  <joint name="left_wheel_joint"
+         type="continuous">
+
+    <parent link="base_link"/>
+    <child link="left_wheel_link"/>
+
+    <origin
+        xyz="${wheel_x_offset}
+             ${wheel_separation/2.0}
+             YOUR_WHEEL_Z_POSITION"
+        rpy="0 0 0"/>
+
+    <!-- Wheel rotates around Y axis -->
+    <axis xyz="0 1 0"/>
+
+  </joint>
+
+
+  <!-- ========================================================= -->
+  <!-- 6. RIGHT DRIVE WHEEL                                      -->
+  <!-- ========================================================= -->
+
+  <link name="right_wheel_link">
+
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}"
+                  length="${wheel_width}"/>
+      </geometry>
+
+      <origin xyz="0 0 0"
+              rpy="${pi/2} 0 0"/>
+    </visual>
+
+
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}"
+                  length="${wheel_width}"/>
+      </geometry>
+
+      <origin xyz="0 0 0"
+              rpy="${pi/2} 0 0"/>
+    </collision>
+
+
+    <inertial>
+      <mass value="YOUR_RIGHT_WHEEL_MASS_KG"/>
+
+      <origin xyz="0 0 0"
+              rpy="0 0 0"/>
+
+      <inertia
+          ixx="YOUR_VALUE"
+          ixy="0.0"
+          ixz="0.0"
+          iyy="YOUR_VALUE"
+          iyz="0.0"
+          izz="YOUR_VALUE"/>
+    </inertial>
+
+  </link>
+
+
+  <joint name="right_wheel_joint"
+         type="continuous">
+
+    <parent link="base_link"/>
+    <child link="right_wheel_link"/>
+
+    <origin
+        xyz="${wheel_x_offset}
+             ${-wheel_separation/2.0}
+             YOUR_WHEEL_Z_POSITION"
+        rpy="0 0 0"/>
+
+    <axis xyz="0 1 0"/>
+
+  </joint>
+
+
+  <!-- ========================================================= -->
+  <!-- 7. FRONT LEFT SUPPORT / CASTER                            -->
+  <!-- ========================================================= -->
+
+  <link name="front_left_caster_link">
+
+    <visual>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="YOUR_CASTER_MASS_KG"/>
+
+      <inertia
+          ixx="YOUR_VALUE"
+          ixy="0"
+          ixz="0"
+          iyy="YOUR_VALUE"
+          iyz="0"
+          izz="YOUR_VALUE"/>
+    </inertial>
+
+  </link>
+
+
+  <joint name="front_left_caster_joint"
+         type="fixed">
+
+    <parent link="base_link"/>
+    <child link="front_left_caster_link"/>
+
+    <origin xyz="
+        YOUR_FRONT_CASTER_X
+        YOUR_FRONT_CASTER_Y
+        YOUR_FRONT_CASTER_Z"
+        rpy="0 0 0"/>
+
+  </joint>
+
+
+  <!-- ========================================================= -->
+  <!-- 8. FRONT RIGHT SUPPORT / CASTER                           -->
+  <!-- ========================================================= -->
+
+  <link name="front_right_caster_link">
+
+    <visual>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="YOUR_CASTER_MASS_KG"/>
+
+      <inertia
+          ixx="YOUR_VALUE"
+          ixy="0"
+          ixz="0"
+          iyy="YOUR_VALUE"
+          iyz="0"
+          izz="YOUR_VALUE"/>
+    </inertial>
+
+  </link>
+
+
+  <joint name="front_right_caster_joint"
+         type="fixed">
+
+    <parent link="base_link"/>
+    <child link="front_right_caster_link"/>
+
+    <origin xyz="
+        YOUR_FRONT_CASTER_X
+        YOUR_FRONT_RIGHT_CASTER_Y
+        YOUR_FRONT_CASTER_Z"
+        rpy="0 0 0"/>
+
+  </joint>
+
+
+  <!-- ========================================================= -->
+  <!-- 9. LIDAR                                                  -->
+  <!-- ========================================================= -->
+
+  <link name="lidar_link">
+
+    <visual>
+
+      <geometry>
+        <cylinder
+            radius="YOUR_LIDAR_RADIUS"
+            length="YOUR_LIDAR_HEIGHT"/>
+      </geometry>
+
+    </visual>
+
+  </link>
+
+
+  <joint name="lidar_joint"
+         type="fixed">
+
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+
+    <origin xyz="
+        YOUR_LIDAR_X
+        YOUR_LIDAR_Y
+        YOUR_LIDAR_Z"
+        rpy="0 0 0"/>
+
+  </joint>
+
+
+</robot>
