@@ -23,41 +23,25 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="juggernaut">
   <!-- Define robot constants -->
 
-  <xacro:property name="base_off_ground" value="0.0714375"/> <!-- 2.8125 inches-->
-  <xacro:property name="base_width" value="0.27305"/> <!-- 10.75 inches (chassis only; total width incl. wheels = 16 in / 0.4064 m)-->
-  <xacro:property name="base_length" value="0.498475"/> <!-- 19.625 + 7.5 (pool noodle radius) inches-->
-  <xacro:property name="base_height" value="0.18415"/> <!-- 7.25 inches-->
-  <xacro:property name="pool_noodle_radius" value="0.047625"/> <!-- 1.875 inches-->
-
-  <xacro:property name="wheel_radius" value="0.09445625"/> <!-- 3.71875 inches-->
-  <xacro:property name="wheel_width" value="0.0508"/><!-- 2 inches-->
-  <xacro:property name="wheel_ygap" value="0.041275"/><!-- 1.625 inches--> 
-  <xacro:property name="wheel_zoff" value="0.06985"/> <!-- 2.75 inches--> 
-  <xacro:property name="drive_wheel_xoff" value="0.1254125"/><!-- 4.9375 inches-->
-  <xacro:property name="rear_wheel_xoff" value="0.1476375"/><!-- 5.8125 inches-->
-  <xacro:property name="castor_wheel_radius" value="0.01"/> <!-- 3.71875 inches-->
-
-  <xacro:property name="camera_screw_zoff" value="-0.0385"/>
-  <xacro:property name="camera_screw_xoff" value="-0.007"/>
   <!-- New Values-->
-  <xacro:property name="body_mass" value="10.0"/> <!-- in Kg-->
-  <xacro:property name="base_off_ground" value="0.0523875"/> <!-- 2.0625 inches-->
-  <xacro:property name="base_width" value="0.2159"/> <!-- 8.5 inches (chassis only; total width incl. wheels = 16 in / 0.4064 m)-->
-  <xacro:property name="base_length" value="0.419735"/> <!-- 16.525 inches-->
-  <xacro:property name="base_height" value="0.1524"/> <!-- 6 inches-->
+  <xacro:property name="body_mass" value="9.470"/> <!-- in Kg-->
+  <xacro:property name="base_off_ground" value="0.0508"/> <!-- 2.0 inches / -->
+  <xacro:property name="base_width" value="0.2145665"/> <!-- 8.4475 inches (chassis only; total width incl. wheels = 16 in / 0.4064 m)-->
+  <xacro:property name="base_length" value="0.4318"/> <!-- 17 inches-->
+  <xacro:property name="base_height" value="0.174625"/> <!-- 6.875 inches-->
   <xacro:property name="pool_noodle_radius" value="0.047625"/> <!-- 1.875 inches-->
 
   <xacro:property name="wheel_radius" value="0.0762"/> <!-- 3 inches-->
   <xacro:property name="wheel_width" value="0.0254"/><!-- 1 inches-->
-  <xacro:property name="wheel_ygap" value="0.016256"/><!-- 0.64 inches--> 
-  <xacro:property name="wheel_zoff" value="0.0"/> <!-- 0 inches--> 
+  <xacro:property name="wheel_ygap" value="0.0174625"/><!-- 0.6875 inches--> 
+  <xacro:property name="wheel_zoff" value="-0.0619125"/> <!-- -2.4375 inches--> 
   <xacro:property name="drive_wheel_xoff" value="0.0"/><!-- 0 inches-->
   <xacro:property name="rear_wheel_xoff" value="0.2794"/><!-- 11 inches-->
-  <xacro:property name="castor_wheel_radius" value="0.01"/> <!-- 3.71875 inches-->
-  <xacro:property name="sensor_xoff_from_AR" value="0.072644"/> <!-- 2.86 inches-->
-  <xacro:property name="Lidar_base_height_from_AR" value="0.1285875"/> <!-- 5.0625 inches-->
+  <xacro:property name="castor_wheel_radius" value="0.0762"/> <!-- 3.0inches-->
+  <xacro:property name="sensor_xoff_from_AR" value="0.0568325"/> <!-- 2.2375 inches-->
+  <xacro:property name="Lidar_base_height_from_AR" value="0.149225"/> <!-- 5.875 inches-->
   <xacro:property name="imu_height_from_AR" value="0.0333375"/> <!-- 1.3125 inches-->
-  <xacro:property name="AR_from_front" value="0.0964565"/> <!-- 3.7975 inches-->
+  <xacro:property name="AR_from_front" value="0.0771525"/> <!-- 3.0375 inches-->
   
   <xacro:property name="camera_screw_zoff" value="-0.0385"/>
   <xacro:property name="camera_screw_xoff" value="-0.007"/>
