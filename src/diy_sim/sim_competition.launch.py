@@ -76,7 +76,7 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': use_sim_time,
             'robot_description': ParameterValue(
-                Command([FindExecutable(name='xacro'), ' ', urdf_file]),
+                Command([FindExecutable(name='xacro'), ' ', urdf_file, ' sim:=true']),
                 value_type=str
             )
         }]

@@ -32,6 +32,7 @@ CALIBRATION REMINDERS
 """
 
 import os
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -45,6 +46,8 @@ def generate_launch_description():
     # works regardless of whether the package is built in-place or installed.
     pkg_dir  = get_package_share_directory('diy_robot_description')
     urdf_path = os.path.join(pkg_dir, 'urdf', 'robot.urdf.xacro')
+    raw_robot_desc = Command(['xacro', ' ', urdf_path, ' sim:=false'])
+    robot_desc_param = ParameterValue(raw_robot_desc, value_type=str)
 
     # ── Launch argument ───────────────────────────────────────────────────────
     # use_sim_time allows this launch to be used in Gazebo/ROS bag replay
@@ -70,8 +73,20 @@ def generate_launch_description():
             name='robot_state_publisher',
             output='screen',
             parameters=[{
-                'robot_description': Command(['xacro ', urdf_path]),
+                'robot_description': robot_desc_param,
                 'use_sim_time':      use_sim_time,
             }],
+        ),
+
+        # ── joint_state_publisher ────────────────────────────────────────────
+        # Continuous/revolute joints (wheels) need /joint_states before
+        # robot_state_publisher can broadcast their TF — without this node
+        # those links never appear in the tf tree (e.g. view_frames output).
+        Node(
+            package='joint_state_publisher',
+            executable='joint_state_publisher',
+            name='joint_state_publisher',
+            output='screen',
+            parameters=[{'use_sim_time': use_sim_time}],
         ),
     ])

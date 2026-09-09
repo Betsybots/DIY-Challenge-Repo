@@ -34,6 +34,7 @@
       </collision>
     </link>
 
+    <xacro:if value="$(arg sim)">
     <gazebo reference="lidar_link">
       <sensor type="gpu_lidar" name="gpu_lidar">
         <pose>0 0 0 0 0 0</pose>
@@ -74,6 +75,7 @@
         -->
       </sensor>
     </gazebo>
+    </xacro:if>
 
   </xacro:macro>
 </robot>

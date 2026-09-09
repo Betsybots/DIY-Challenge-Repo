@@ -27,7 +27,7 @@ def generate_launch_description():
 
     # 3. Process the Xacro file into a string for robot description parameters
     urdf_path = os.path.join(pkg_robot_description, 'urdf', 'robot.urdf.xacro')
-    raw_robot_desc = Command(['xacro', ' ', urdf_path])
+    raw_robot_desc = Command(['xacro', ' ', urdf_path, ' sim:=true'])
     robot_desc_param = ParameterValue(raw_robot_desc, value_type=str)
     
     bridge_config_file = os.path.join(pkg_sim, 'config', 'bridge_config.yaml')

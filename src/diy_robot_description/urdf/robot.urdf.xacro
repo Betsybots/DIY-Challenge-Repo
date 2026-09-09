@@ -31,7 +31,7 @@
   <xacro:property name="base_height" value="0.174625"/> <!-- 6.875 inches-->
   <xacro:property name="pool_noodle_radius" value="0.047625"/> <!-- 1.875 inches-->
 
-  <xacro:property name="castor_wheel_width" value="0.0574"/> <!-- 2.26-inch STL depth -->
+  <xacro:property name="castor_wheel_width" value="0.04305"/> <!-- 2.26-inch STL depth; old value 0.0574 -->
 
   <xacro:property name="wheel_radius" value="0.0762"/> <!-- 3 inches-->
   <xacro:property name="wheel_width" value="0.0254"/><!-- 1 inches-->
@@ -60,6 +60,8 @@
   <xacro:property name="hesai_centroid_z" value="0.0124"/>
   
   <xacro:arg name="use_nominal_extrinsics" default="true" />
+  <!-- sim:=true (pass via `xacro robot.urdf.xacro sim:=true`) includes all Gazebo plugins/tags -->
+  <xacro:arg name="sim" default="false" />
   <xacro:include filename="lidar.urdf.xacro" />
   <xacro:include filename="imu.urdf.xacro" />
 
@@ -129,18 +131,20 @@
       </collision>
     </link>
 
-    <gazebo reference="${prefix}_link">
-        <material>Gazebo/Red</material>
-        <mu1>1.5</mu1>
-        <mu2>1.5</mu2>
-        <kp>1e6</kp>
-        <kd>1.0</kd>
-    </gazebo>
-    
+    <xacro:if value="$(arg sim)">
+      <gazebo reference="${prefix}_link">
+          <material>Gazebo/Red</material>
+          <mu1>1.5</mu1>
+          <mu2>1.5</mu2>
+          <kp>1e6</kp>
+          <kd>1.0</kd>
+      </gazebo>
+    </xacro:if>
+
     <joint name="${prefix}_joint" type="${joint_type}">
       <parent link="base_link"/>
       <child link="${prefix}_link"/>
-      <origin xyz="${x_reflect*wheel_xoff} ${y_reflect*(base_width/2+wheel_ygap)} ${-wheel_zoff}" rpy="0 0 0"/>
+      <origin xyz="${x_reflect*wheel_xoff} ${y_reflect*(base_width/2+wheel_ygap)} 0.0" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
       <limit effort="20.0" velocity="10.0"/>
     </joint>
@@ -153,11 +157,11 @@
   <xacro:macro name="rear_caster" params="prefix x_reflect y_reflect wheel_xoff joint_type">
     <link name="${prefix}_link">
       <visual>
-        <origin xyz="-0.093339143 0.185046036 -0.156049187"
-                rpy="${pi/2} 0 0"/>
+        <!-- <origin xyz="-0.093339143 0.185046036 -0.156049187" rpy="${pi/2} 0 0"/> -->
+        <origin xyz="-0.07000435725  0.138784527 -0.11703689025" rpy="${pi/2} 0 0"/>
         <geometry>
           <mesh filename="package://diy_robot_description/urdf/meshes/caster_wheel.stl"
-                scale="0.0254 0.0254 0.0254"/>
+                scale="0.01905 0.01905 0.01905"/>
         </geometry>
         <material name="green"/>
       </visual>
@@ -181,9 +185,9 @@
 
     <!-- Fixed wheel orientation: only the wheel spins about its axle (Y). -->
     <joint name="${prefix}_joint" type="${joint_type}">
-      <parent link="chassis"/>
+      <parent link="base_link"/>
       <child link="${prefix}_link"/>
-      <origin xyz="${x_reflect*wheel_xoff} ${y_reflect*(base_width/2+wheel_ygap)} ${-wheel_zoff}" rpy="0 0 0"/>
+      <origin xyz="${x_reflect*wheel_xoff} ${y_reflect*(base_width/2+wheel_ygap)} 0.0" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
       <dynamics damping="0.02" friction="0.0"/>
       <limit effort="20.0" velocity="20.0"/>
@@ -193,26 +197,21 @@
          fdir1 = chassis/wheel X direction
          mu1   = normal rolling-direction traction
          mu2   = very low lateral resistance along Y, emulating free rollers -->
-    <gazebo reference="${prefix}_link">
-      <material>Gazebo/Green</material>
-      <mu1>1.0</mu1>
-      <mu2>0.02</mu2>
-      <fdir1>1 0 0</fdir1>
-      <kp>1e6</kp>
-      <kd>1.0</kd>
-      <slip1>0.0</slip1>
-      <slip2>1.0</slip2>
-    </gazebo>
+    <xacro:if value="$(arg sim)">
+      <gazebo reference="${prefix}_link">
+        <material>Gazebo/Green</material>
+        <mu1>1.0</mu1>
+        <mu2>0.02</mu2>
+        <fdir1>1 0 0</fdir1>
+        <kp>1e6</kp>
+        <kd>1.0</kd>
+        <slip1>0.0</slip1>
+        <slip2>1.0</slip2>
+      </gazebo>
+    </xacro:if>
   </xacro:macro>
   
-  <link name="base_footprint">
-    <inertial>
-      <mass value="0.001"/>
-      <inertia ixx="1e-06" ixy="0.0" ixz="0.0"
-               iyy="1e-06" iyz="0.0"
-               izz="1e-06"/>
-    </inertial>
-  </link>
+  <link name="base_footprint"/>
 
   <joint name="base_footprint_to_base_link" type="fixed">
     <parent link="base_footprint"/>
@@ -220,21 +219,13 @@
     <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
   </joint>
 
-  <link name="base_link"/>
-
-  <joint name="base_link_to_chassis" type="fixed">
-    <parent link="base_link"/>
-    <child link="chassis"/>
-    <origin xyz="${AR_from_front-base_length/2} 0 ${base_height/2+base_off_ground-wheel_radius}" rpy="0 0 0"/>
-  </joint>
-
-  <link name="chassis">
-    <inertial>
+  <link name="base_link">
+      <inertial>
       <origin xyz="${AR_from_front-base_length/2} 0 ${base_height/2+base_off_ground-wheel_radius}" rpy="0 0 0"/> <!-- change based on TF -->
       <mass value="${body_mass}"/>
-      <inertia ixx="0.5 * body_mass * (base_width * base_width + base_height * base_height)" ixy="0.0" ixz="0.0" 
-               iyy="0.5 * body_mass * (base_length * base_length + base_height * base_height)" iyz="0.0" 
-               izz="0.5 * body_mass * (base_length * base_length + base_width * base_width)"/>
+      <inertia ixx="${body_mass * (base_width**2 + base_height**2)/12.0 + body_mass * (base_height/2+base_off_ground-wheel_radius)**2}" ixy="0.0" ixz="0.0" 
+               iyy="${body_mass * (base_length**2 + base_height**2)/12.0 + body_mass * ((AR_from_front-base_length/2)**2 + (base_height/2+base_off_ground-wheel_radius)**2)}" iyz="0.0" 
+               izz="${body_mass * (base_length**2 + base_width**2)/12.0 + body_mass * (AR_from_front-base_length/2)**2}"/>
     </inertial>
     <visual>
       <origin xyz="${AR_from_front-base_length/2} 0 ${base_height/2+base_off_ground-wheel_radius}" rpy="0 0 0"/>
@@ -250,60 +241,92 @@
       </geometry>
     </collision>
   </link>
+<!--
+  <joint name="base_link_to_chassis" type="fixed">
+    <parent link="base_link"/>
+    <child link="chassis"/>
+    <origin xyz="${AR_from_front-base_length/2} 0 ${base_height/2+base_off_ground-wheel_radius}" rpy="0 0 0"/>
+  </joint>
 
+  <link name="chassis">
+    <inertial>
+      <origin xyz="${AR_from_front-base_length/2} 0 ${base_height/2+base_off_ground-wheel_radius}" rpy="0 0 0"/> 
+      <mass value="${body_mass}"/>
+      <inertia ixx="0.5 * body_mass * (base_width * base_width + base_height * base_height)" ixy="0.0" ixz="0.0" 
+               iyy="0.5 * body_mass * (base_length * base_length + base_height * base_height)" iyz="0.0" 
+               izz="0.5 * body_mass * (base_length * base_length + base_width * base_width)"/>
+    </inertial>
+    <visual>
+      <origin xyz="${AR_from_front-base_length/2} 0 ${base_height/2+base_off_ground-wheel_radius}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <origin xyz="${AR_from_front-base_length/2} 0 ${base_height/2+base_off_ground-wheel_radius}" rpy="0 0 0"/> 
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+    </collision>
+  </link>
+-->
   <xacro:wheel prefix="drivewhl_l" x_reflect="1" y_reflect="1" wheel_xoff="${drive_wheel_xoff}" joint_type="continuous"/>
   <xacro:wheel prefix="drivewhl_r" x_reflect="1" y_reflect="-1" wheel_xoff="${drive_wheel_xoff}" joint_type="continuous"/>
   <xacro:rear_caster prefix="rearwhl_l" x_reflect="-1" y_reflect="1" wheel_xoff="${rear_wheel_xoff}" joint_type="continuous"/>
   <xacro:rear_caster prefix="rearwhl_r" x_reflect="-1" y_reflect="-1" wheel_xoff="${rear_wheel_xoff}" joint_type="continuous"/>
-  <gazebo>
-    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
-        <left_joint>drivewhl_l_joint</left_joint>
-        <right_joint>drivewhl_r_joint</right_joint>
-        <wheel_separation>${base_width+2*wheel_ygap}</wheel_separation> <!-- Adjust to your robot's width (meters) -->
-        <wheel_radius>${wheel_radius}</wheel_radius>     <!-- Adjust to your wheel radius (meters) -->
-        <topic>cmd_vel</topic>
-        <odom_topic>odom_wheel</odom_topic>   <!-- wheel encoder odom — drifts on ramp/slip -->
-        <!-- Publish odom→base_footprint TF — must match Nav2 robot_base_frame.
-             Ignition namespaces these as diy_robot/odom→diy_robot/base_footprint.
-             SIM only: on real robot EKF1/EKF2 publish this transform instead. -->
-        <odom_frame>odom</odom_frame>
-        <robot_base_frame>base_footprint</robot_base_frame>
-        <tf_topic>/tf</tf_topic>
-        <robot_param_node>/robot_state_publisher</robot_param_node>
-    </plugin>
-  </gazebo>
-  <!-- SIM ONLY: Ground-truth odometry from Gazebo physics engine.
-       Publishes perfect pose to /odom — no wheel slip drift.
-       On real robot: EKF2 fuses wheel + IMU + NDT into /odometry/filtered instead. -->
-  <gazebo>
-    <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
-        <odom_frame>odom</odom_frame>
-        <robot_base_frame>base_footprint</robot_base_frame>
-        <odom_topic>/odom</odom_topic>
-        <tf_topic>/tf</tf_topic>
-        <odom_publish_frequency>50</odom_publish_frequency>
-    </plugin>
-  </gazebo>
-  <gazebo>
-    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-        <topic>joint_states</topic> <joint_name>drivewhl_l_joint</joint_name>
-        <joint_name>drivewhl_r_joint</joint_name>
-        <joint_name>rearwhl_l_joint</joint_name>
-        <joint_name>rearwhl_r_joint</joint_name>
-    </plugin>
-  </gazebo>
-   <!-- INSERT GROUND TRUTH POSE PUBLISHER HERE -->
-  <gazebo>
-    <plugin filename="libignition-gazebo-pose-publisher-system.so"
-          name="ignition::gazebo::systems::PosePublisher">
-      <publish_link_pose>false</publish_link_pose>
-      <publish_visual_pose>false</publish_visual_pose>
-      <publish_nested_model_pose>true</publish_nested_model_pose>
-      <use_pose_vector_msg>true</use_pose_vector_msg>
-      <static_publisher>false</static_publisher>
-      <publish_model_pose>true</publish_model_pose>
-    </plugin>
-  </gazebo>
+  <xacro:if value="$(arg sim)">
+    <gazebo>
+      <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+          <left_joint>drivewhl_l_joint</left_joint>
+          <right_joint>drivewhl_r_joint</right_joint>
+          <wheel_separation>${base_width+2*wheel_ygap}</wheel_separation> <!-- Adjust to your robot's width (meters) -->
+          <wheel_radius>${wheel_radius}</wheel_radius>     <!-- Adjust to your wheel radius (meters) -->
+          <topic>cmd_vel</topic>
+          <odom_topic>odom_wheel</odom_topic>   <!-- wheel encoder odom — drifts on ramp/slip -->
+          <!-- Publish odom→base_footprint TF — must match Nav2 robot_base_frame.
+               Ignition namespaces these as diy_robot/odom→diy_robot/base_footprint.
+               SIM only: on real robot EKF1/EKF2 publish this transform instead. -->
+          <odom_frame>odom</odom_frame>
+          <robot_base_frame>base_footprint</robot_base_frame>
+          <tf_topic>/tf</tf_topic>
+          <robot_param_node>/robot_state_publisher</robot_param_node>
+      </plugin>
+    </gazebo>
+    <!-- SIM ONLY: Ground-truth odometry from Gazebo physics engine.
+         Publishes perfect pose to /odom — no wheel slip drift.
+         On real robot: EKF2 fuses wheel + IMU + NDT into /odometry/filtered instead. -->
+    <gazebo>
+      <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+          <odom_frame>odom</odom_frame>
+          <robot_base_frame>base_footprint</robot_base_frame>
+          <odom_topic>/odom</odom_topic>
+          <tf_topic>/tf</tf_topic>
+          <odom_publish_frequency>50</odom_publish_frequency>
+      </plugin>
+    </gazebo>
+    <gazebo>
+      <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+          <topic>joint_states</topic> 
+          <joint_name>drivewhl_l_joint</joint_name>
+          <joint_name>drivewhl_r_joint</joint_name>
+          <joint_name>rearwhl_l_joint</joint_name>
+          <joint_name>rearwhl_r_joint</joint_name>
+      </plugin>
+    </gazebo>
+     <!-- INSERT GROUND TRUTH POSE PUBLISHER HERE -->
+    <gazebo>
+      <plugin filename="libignition-gazebo-pose-publisher-system.so"
+            name="ignition::gazebo::systems::PosePublisher">
+        <publish_link_pose>false</publish_link_pose>
+        <publish_visual_pose>false</publish_visual_pose>
+        <publish_nested_model_pose>true</publish_nested_model_pose>
+        <use_pose_vector_msg>true</use_pose_vector_msg>
+        <static_publisher>false</static_publisher>
+        <publish_model_pose>true</publish_model_pose>
+      </plugin>
+    </gazebo>
+  </xacro:if>
 
 <!--
   <link name="wheel_1">
