@@ -32,7 +32,12 @@ def generate_launch_description():
     
     bridge_config_file = os.path.join(pkg_sim, 'config', 'bridge_config.yaml')
     
-    script_path = './src/lidar_patch_script.py'
+    # Resolve workspace root from install/<pkg>/share/<pkg> so launch works from any cwd.
+    workspace_root = os.path.abspath(
+        os.path.join(pkg_challenge_bringup, '..', '..', '..', '..')
+    )
+    script_path = os.path.join(workspace_root, 'src', 'lidar_patch_script.py')
+
     
     # Define the process execution
     run_python_script = ExecuteProcess(

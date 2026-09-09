@@ -52,3 +52,8 @@ imu_calib_data/
 *.pgm
 # but keep the static_map.yaml placeholder
 !src/challenge_bringup/maps/static_map.yaml
+
+#__ Ignore auto generated vscode folders________________________________________
+
+.vscode/*
+.venv/*
