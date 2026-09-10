@@ -54,6 +54,20 @@ COMMON RECIPES
   # Walls too thin (bad costmap inflation):
     --wall-thickness 12
 
+  # Inner wall / loop comes out broken or missing (real scan gaps):
+    --close-kernel 18   (default 13; watch the "KEPT" component log —
+                          if two real walls suddenly merge into one, back off)
+
+  # Inner wall/loop still broken, or shows as a "double line" (an open
+  # horseshoe instead of a closed ring — the gap wasn't fully bridged):
+    --inner-close-kernel 35   (default 20; only touches non-outer walls,
+                                so it's safe to raise a lot)
+
+  # A wall has a small fake spike or dent poking out of it (a stray scan
+  # point got welded onto the wall by the gap-bridging step):
+    --denoise-area 40   (default 20; raises the native-px size cutoff for
+                          what counts as "just noise" before any blur runs)
+
   # Headless / SSH (no display):
     --no-display
 
@@ -67,6 +81,9 @@ ARGUMENTS AT A GLANCE
   --no-smooth       Skip smoothing — blob filter + flood fill only
   --smooth-sigma    Gaussian sigma on contour path             (default: 6.0)
   --wall-thickness  Wall draw thickness at 4x scale            (default: 8)
+  --close-kernel    Gap-bridging kernel (px) before wall selection (default: 13)
+  --inner-close-kernel  2nd gap-bridging pass, non-outer walls only (default: 20)
+  --denoise-area    Drop noise specks (native px area) at native res  (default: 20)
   --preview-only    Save diff PNG, do NOT write PGM or yaml
   --no-display      Headless mode (no matplotlib window)
 
@@ -86,14 +103,17 @@ ALGORITHM (smooth mode)
 ──────────────────────
     1. Upscale 4x (INTER_NEAREST) for smoothing headroom
     2. Gaussian-blur binary occupied mask to soften jagged edges
-    3. Connected components → find all black pixel blobs
-    4. Keep only the N largest (--keep-walls) — these are the real walls
-    5. Extract outer contour of each wall blob; Gaussian-smooth the
+    3. Morphologically close (--close-kernel) to bridge real scan gaps
+       (doorway shadows, missed sweeps) so a broken wall loop is one
+       connected component, not several small fragments
+    4. Connected components → find all black pixel blobs
+    5. Keep only the N largest (--keep-walls) — these are the real walls
+    6. Extract outer contour of each wall blob; Gaussian-smooth the
        contour x/y path as a 1D periodic signal (removes pixel steps)
-    6. Draw smooth closed contour at configurable wall thickness
-    7. Flood-fill from all 4 image borders → marks exterior (grey)
-    8. Everything not wall and not exterior → free space (white)
-    9. Downsample 2x → 0.025 m/px output
+    7. Draw smooth closed contour at configurable wall thickness
+    8. Flood-fill from all 4 image borders → marks exterior (grey)
+    9. Everything not wall and not exterior → free space (white)
+   10. Downsample 2x → 0.025 m/px output
 """
 
 import argparse
@@ -124,28 +144,89 @@ def load_pgm(path):
 # ─── Smooth pipeline ──────────────────────────────────────────────────────────
 
 def smooth_pipeline(orig, occupied_thresh, keep_walls, min_area,
-                    smooth_sigma, wall_thickness):
+                    smooth_sigma, wall_thickness, close_kernel, inner_close_kernel,
+                    denoise_area):
     """
-    Upscale 4x -> Gaussian blur binary mask -> connected components ->
-    smooth contour extraction -> draw closed walls -> flood-fill ->
-    downsample 2x.
+    Drop noise specks (native res) -> upscale 4x -> Gaussian blur binary
+    mask -> bridge scan gaps -> connected components -> smooth contour
+    extraction -> draw closed walls -> flood-fill -> downsample 2x.
 
     Returns final map at 2x input resolution.
     """
     SCALE = 4
 
-    big = cv2.resize(orig, (orig.shape[1]*SCALE, orig.shape[0]*SCALE),
+    # Drop stray noise specks (a handful of isolated scan points, not a
+    # real wall) FIRST, at native resolution, before any blur/upscale. If
+    # left in, they are almost touching a real wall by just a few native
+    # pixels; the moment the mask is blurred, that tiny gap gets bridged
+    # by the blur itself, permanently fusing the speck onto the wall. From
+    # that point on no area filter can tell them apart anymore, and
+    # --close-kernel/--inner-close-kernel will happily "bridge" through
+    # them too, producing a lumpy fake bump/jump in an otherwise clean
+    # wall. Real wall arcs are comfortably bigger than scan noise even at
+    # native resolution, so filtering here (before blur can merge
+    # anything) cleanly tells them apart.
+    occ_native = (orig < occupied_thresh).astype(np.uint8)
+    if denoise_area > 0:
+        n0, labels0, stats0, _ = cv2.connectedComponentsWithStats(occ_native, connectivity=8)
+        for i in range(1, n0):
+            if stats0[i, cv2.CC_STAT_AREA] < denoise_area:
+                occ_native[labels0 == i] = 0
+
+    big = cv2.resize(occ_native * 255, (orig.shape[1]*SCALE, orig.shape[0]*SCALE),
                      interpolation=cv2.INTER_NEAREST)
 
     # Soften the jagged pixel edges
-    occ_f = (big < occupied_thresh).astype(np.float32)
+    occ_f = (big > 0).astype(np.float32)
     occ_f = gaussian_filter1d(gaussian_filter1d(occ_f, sigma=2.5, axis=0),
                                sigma=2.5, axis=1)
     occ_bin = (occ_f > 0.3).astype(np.uint8)
 
+    # Bridge real gaps in a scanned wall (doorway shadows, single missed
+    # sweeps, etc.) BEFORE labeling. Without this, a wall that is broken
+    # into several separate arcs gets split into several small components,
+    # and only the single largest arc survives --keep-walls filtering —
+    # the rest of that same wall (e.g. most of an inner loop) is discarded
+    # as "noise" even though it belongs to a real, larger wall.
+    if close_kernel > 0:
+        k_gap = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (close_kernel * SCALE, close_kernel * SCALE))
+        occ_bin = cv2.morphologyEx(occ_bin, cv2.MORPH_CLOSE, k_gap)
+
     # Connected components on smooth mask
     n, labels, stats, _ = cv2.connectedComponentsWithStats(occ_bin, connectivity=8)
     areas = sorted([(stats[i, cv2.CC_STAT_AREA], i) for i in range(1, n)], reverse=True)
+
+    # --- Stage 2: bridge the *remaining* gaps in the inner wall(s) -----------
+    # The outer wall is almost always one clean loop already (it's the
+    # single largest component). An inner wall/island is usually the one
+    # still broken into several arcs, because the real gaps between those
+    # arcs (e.g. an actual doorway, or a bigger scan shadow) can be WIDER
+    # than the outer<->inner clearance — so a single global --close-kernel
+    # can never bridge them without also welding the inner wall to the
+    # outer one. Fix: peel the biggest ("outer") component off the mask
+    # first, then close what's left with a bigger, independent kernel —
+    # it has nothing to accidentally merge into anymore.
+    if inner_close_kernel > 0 and len(areas) > 1:
+        outer_id = areas[0][1]
+        rest_mask = ((labels > 0) & (labels != outer_id)).astype(np.uint8)
+        k_inner = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (inner_close_kernel * SCALE, inner_close_kernel * SCALE))
+        rest_mask = cv2.morphologyEx(rest_mask, cv2.MORPH_CLOSE, k_inner)
+
+        n2, labels2, stats2, _ = cv2.connectedComponentsWithStats(rest_mask, connectivity=8)
+        # Re-assemble: outer wall keeps its own label; everything else is
+        # relabeled (offset) from the re-merged "rest" pass.
+        merged_labels = np.zeros_like(labels)
+        merged_labels[labels == outer_id] = outer_id
+        offset = int(labels.max()) + 1
+        areas = [(stats[outer_id, cv2.CC_STAT_AREA], outer_id)]
+        for i in range(1, n2):
+            new_id = offset + i
+            merged_labels[labels2 == i] = new_id
+            areas.append((stats2[i, cv2.CC_STAT_AREA], new_id))
+        areas.sort(reverse=True)
+        labels = merged_labels
 
     if keep_walls > 0:
         kept_ids  = {i for _, i in areas[:keep_walls]}
@@ -163,10 +244,20 @@ def smooth_pipeline(orig, occupied_thresh, keep_walls, min_area,
         if comp_id not in kept_ids:
             continue
         comp_mask = (labels == comp_id).astype(np.uint8) * 255
-        # Morphological closing to seal hairline gaps before contour extraction
-        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        # Morphological closing to seal hairline gaps before contour extraction.
+        # Safe to use a generous kernel here: each component mask is fully
+        # isolated at this point (stage 2 already merged/separated wall
+        # groups), so this can only round off/seal *this* wall's own gaps —
+        # it cannot bridge into a different wall.
+        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
         comp_mask = cv2.morphologyEx(comp_mask, cv2.MORPH_CLOSE, k)
-        # Outer contour only — naturally drops dangling artifact extensions
+        # Outer contour only — naturally drops dangling artifact extensions.
+        # If the component is now a true closed ring (has an enclosed hole),
+        # RETR_EXTERNAL returns just its outer edge as ONE line. If it is
+        # still an open horseshoe (a real, unbridged gap remains), the
+        # "outer contour" instead has to trace both sides of the stroke and
+        # back, which is what causes a "double line" look — a sign the gap
+        # needs a bigger --inner-close-kernel, not a smoothing issue.
         contours, _ = cv2.findContours(comp_mask, cv2.RETR_EXTERNAL,
                                         cv2.CHAIN_APPROX_NONE)
         contours = sorted(contours, key=lambda c: len(c), reverse=True)
@@ -190,11 +281,18 @@ def smooth_pipeline(orig, occupied_thresh, keep_walls, min_area,
 
 # ─── Simple pipeline (--no-smooth) ───────────────────────────────────────────
 
-def simple_pipeline(orig, occupied_thresh, keep_walls, min_area):
+def simple_pipeline(orig, occupied_thresh, keep_walls, min_area, close_kernel):
     """
     Connected component filter only, no smoothing, original resolution.
     """
     occupied = (orig < occupied_thresh).astype(np.uint8)
+
+    # Bridge real scan gaps before labeling — see comment in smooth_pipeline.
+    if close_kernel > 0:
+        k_gap = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (close_kernel, close_kernel))
+        occupied = cv2.morphologyEx(occupied, cv2.MORPH_CLOSE, k_gap)
+
     n, labels, stats, _ = cv2.connectedComponentsWithStats(occupied, connectivity=8)
     areas = sorted([(stats[i, cv2.CC_STAT_AREA], i) for i in range(1, n)], reverse=True)
 
@@ -301,6 +399,31 @@ def parse_args():
                    help='Gaussian sigma for contour path smoothing (default 6)')
     p.add_argument('--wall-thickness',   type=int, default=8,
                    help='Wall thickness in pixels at 4x scale (default 8 = ~0.05m real)')
+    p.add_argument('--close-kernel',     type=int, default=13,
+                   help='Gap-bridging closing kernel, in original-image px '
+                        '(default 13). Bridges small real scan gaps BEFORE '
+                        'wall selection so a barely-broken wall loop counts '
+                        'as one component. Keep this modest — too high '
+                        'welds separate walls (e.g. inner + outer) together.')
+    p.add_argument('--inner-close-kernel', type=int, default=20,
+                   help='Second, independent gap-bridging pass (px, default '
+                        '20) applied ONLY to whatever is left after the '
+                        'single largest ("outer") wall is set aside. Fixes '
+                        'inner walls/islands whose real gaps are wider than '
+                        'the outer<->inner clearance, without risking a '
+                        'merge with the outer wall. Raise this if an inner '
+                        'loop is still broken or shows as a "double line" '
+                        '(a sign the loop isn\'t fully closed yet). Set 0 '
+                        'to disable.')
+    p.add_argument('--denoise-area',     type=int, default=20,
+                   help='Drop isolated scan-noise specks smaller than this '
+                        '(native px area, default 20) at native resolution, '
+                        'before any blur/upscale — so --close-kernel/'
+                        '--inner-close-kernel can\'t weld a stray point onto '
+                        'a real wall and create a fake spike/bump/jump. '
+                        'Lower it if a real thin wall fragment is being '
+                        'dropped; raise it if small spikes/bumps still show '
+                        'up on the final wall. Set 0 to disable.')
     p.add_argument('--no-display',       action='store_true')
     p.add_argument('--preview-only',     action='store_true',
                    help='Save diff PNG but do not write PGM/yaml')
@@ -328,14 +451,17 @@ def main():
     if args.no_smooth:
         print("\nMode: simple blob filter (no smoothing)")
         final = simple_pipeline(original, args.occupied_thresh,
-                                args.keep_walls, args.min_area)
+                                args.keep_walls, args.min_area,
+                                args.close_kernel)
         new_res = None
     else:
         print(f"\nMode: smooth contour reconstruction  "
               f"(sigma={args.smooth_sigma}, wall_thickness={args.wall_thickness})")
         final = smooth_pipeline(original, args.occupied_thresh,
                                 args.keep_walls, args.min_area,
-                                args.smooth_sigma, args.wall_thickness)
+                                args.smooth_sigma, args.wall_thickness,
+                                args.close_kernel, args.inner_close_kernel,
+                                args.denoise_area)
         new_res = 0.025
 
     print(f"\n  Output size: {final.shape[1]}x{final.shape[0]} px")
@@ -364,6 +490,11 @@ def main():
     print(f"  Walls too smooth    -> lower --smooth-sigma (currently {args.smooth_sigma})")
     print(f"  Walls too jagged    -> raise --smooth-sigma")
     print(f"  Walls too thin/fat  -> adjust --wall-thickness (currently {args.wall_thickness})")
+    print(f"  Inner wall broken   -> raise --close-kernel (currently {args.close_kernel})")
+    print(f"  Separate walls merged -> lower --close-kernel (currently {args.close_kernel})")
+    print(f"  Inner loop still broken / double-lined -> raise --inner-close-kernel "
+          f"(currently {args.inner_close_kernel})")
+    print(f"  Fake spike/dent on a wall -> raise --denoise-area (currently {args.denoise_area})")
 
 
 if __name__ == '__main__':
