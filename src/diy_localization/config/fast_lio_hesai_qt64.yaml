@@ -1,63 +1,237 @@
 # FAST-LIO2 configuration for Hesai QT64 — DIY Challenge 2026
 # ═══════════════════════════════════════════════════════════════
-# CALIB NOTES:
-#   mapping.acc_cov, gyr_cov, b_acc_cov, b_gyr_cov  ← fill from imu_utils
-#     Allan variance output after 2–3 hr static recording.
-#   mapping.extrinsic_T, extrinsic_R                 ← fill from lidar_imu_calib
-#     after figure-8 calibration run.  Use result exactly — a 1° rotation
-#     error causes ~2 cm/m positional drift.
-#   common.time_offset_lidar_to_imu                  ← verify via timestamp
-#     spin test (see scripts/calibrate_extrinsics.sh). Target < 1 ms.
+# Synced verbatim (2026-09-04) from teammate repo LIO_Localization,
+# branch `develop` (src/FAST_LIO_Hesai_ROS2/config/qt64.yaml) — this is the
+# real, site-calibrated config the team has actually run on the robot
+# (extrinsic_T below was derived from a live accelerometer reading, not a
+# guess). Earlier versions of this file in this repo were sourced from
+# LIO_Localization's `main` branch, which is stale — `develop` is current.
+#
+# OPEN ITEMS found while syncing (not resolved here — need an on-robot
+# decision, not a guess):
+#
+#   1. [RESOLVED 2026-09-04] common.imu_gyr_unit was "deg", now set to "rad".
+#      imu_can_interface (vendored at src/imu_can_interface, from
+#      ACEINNA_IMU_ROS2 develop) applies a DEG2RAD scale factor before
+#      publishing (see imu_node.cpp), so /imu/data angular_velocity is
+#      already rad/s by REP-103 — matching this analysis, a teammate with
+#      direct hands-on experience with this IMU confirmed the raw data is
+#      rad/s and changed the setting accordingly (not from an on-robot spin
+#      test — see scripts/verify_imu_gyr_unit.py if a future sensor/firmware
+#      change ever calls this into question again).
+#      NOTE: ACEINNA_IMU_ROS2's develop branch also fixed an ~8x CAN
+#      angular-rate scale-factor bug (was decoding the wrong PGN's bit
+#      width/scale) — if any of this repo's prior FAST-LIO2 tuning was done
+#      against the old, buggy driver output, it may need redoing regardless
+#      of the deg/rad question.
+#
+#   2. mapping.extrinsic_R below has determinant -1.0 (a reflection, not a
+#      valid rotation — confirmed by running
+#      tools/check_config.py --config config/fast_lio_hesai_qt64.yaml, which
+#      FAILs this exact matrix). The file's own comments derive a different,
+#      determinant +1 matrix (Rx(-90°)) from a live accelerometer test just
+#      above it, but the active `extrinsic_R:` value doesn't match either
+#      that derivation or the "previous version" the comments call a
+#      transcription bug — it looks like a third, still-unresolved value.
+#      Needs a decision from whoever owns the IMU/LiDAR extrinsic
+#      calibration before this is trusted for autonomous nav.
+#      NOTE: the premise behind this comment block — that the IMU driver's
+#      own extrinsic rotation is "disabled" — is now CONFIRMED true:
+#      ACEINNA_IMU_ROS2's develop branch removed extrinsic handling from
+#      the driver entirely (imu_params.yaml's `extrinsic:` block and all
+#      matching imu_node.cpp/hpp code are gone), so /imu/data is
+#      unconditionally in the raw sensor frame. That part of the reasoning
+#      is sound; it's specifically the det-(-1) matrix below that still
+#      needs re-deriving.
+#
+#   3. [RESOLVED 2026-09-04] preprocess.scan_line = 32 below is intentional,
+#      not a bug or a stale checker: confirmed by a teammate as one half of
+#      a deliberate H-FOV/V-FOV reduction plan (64→32 channels, paired with
+#      mapping.fov_degree 360°→180° below) to shrink point-cloud volume for
+#      faster/more-robust preprocessing on Jetson. `tools/check_config.py`
+#      still hardcodes `QT64_SPEC = {"scan_line": 64}` and will keep FAILing
+#      this on every run — that's the checker being stale for this robot's
+#      chosen configuration, not a real problem; ignore that specific FAIL.
+#
+#   4. common.lid_topic = "/lidar_points" below, but challenge_bringup's
+#      BLOCK 6 (challenge_master.launch.py) and profiles/*.env assume a
+#      `hesai_ros_driver` node publishing "/hesai/points". `hesai_ros_driver`
+#      itself is NOT missing — per docs/installation_setup.html it's a
+#      separate overlay workspace that already lives directly on the Jetson
+#      (~/ros2_ws/src/Betsybot-Software/src/HesaiLidar_ROS_2.0, already
+#      built/configured there, outside all 4 git repos and outside this
+#      repo's third_party_ws by design). The remaining gap is purely the
+#      TOPIC NAME: does the real driver on the Jetson actually publish
+#      "/hesai/points" (as challenge_bringup assumes) or "/lidar_points" (as
+#      this tested FAST-LIO2 config assumes)? Since "/lidar_points" is what
+#      fast_lio_ros2 has actually been tested against, treat that as ground
+#      truth for now; either remap hesai_ros_driver's real output to
+#      "/lidar_points" on the Jetson, or update this file to "/hesai/points"
+#      once the real topic name is confirmed there.
+#
+#   5. mapping.map_file_path below is an absolute path on the original dev's
+#      machine (/home/juggernauts/...) — doesn't exist on other machines.
+#      tools/check_config.py WARNs on this. Left as-is (matches upstream);
+#      override per-machine via a launch argument if this needs to differ.
+#
+# Re-validate after any edit:
+#   python3 src/fast_lio_ros2/tools/check_config.py \
+#     --config src/diy_localization/config/fast_lio_hesai_qt64.yaml
 
 /**:
     ros__parameters:
-        feature_extract_enable: false   # iEKF mode — no feature extraction
-        point_filter_num: 3
-        max_iteration: 3
-        filter_size_surf: 0.3           # smaller than mid360 default suits QT64
-        filter_size_map: 0.3
-        cube_side_length: 1000.0
-        runtime_pos_log_enable: false   # set true when profiling performance
+        feature_extract_enable: false # Enable or disable feature extraction for FAST-LIO2. If disabled, all points are used for mapping and if enabled, only edge and ground points are used for mapping.
+        point_filter_num: 1            # Number of points to filter out for each scan. If set to 1, all points are used. If set to 2, every other point is used, and so on.
+        # FAST-LIO2 frontend parameters
+
+        # The frontend uses an iterated EKF to fit the current scan to the map.
+        # Raised from 3: more iterated-EKF passes per scan improve plane-fit
+        # convergence during fast rotation, at a small CPU cost.
+        max_iteration: 7                     #5 and 10 working good/best
+        filter_size_surf: 0.1                #0.3                # Voxel filter size for surf points
+        filter_size_map:  0.1                #0.3                # Voxel filter size for the map points
+        cube_side_length: 500.0               # Side length of the cube used for voxel grid filtering, units in meters. This is used to limit the size of the map and reduce memory usage.
+
+        # Enable or disable runtime position logging. If enabled, the position will be logged to a file in the PCD directory. This is useful for debugging and analysis, but may slow down the system. If disabled, the position will not be logged to a file.
+        runtime_pos_log_enable: false
 
         common:
-            lid_topic:  "/hesai/points"
+            lid_topic:  "/lidar_points"
+            # QT64 is a mechanical spinning LiDAR with no built-in IMU.
+            # Point this at your external IMU driver's topic.
             imu_topic:  "/imu/data"
-            time_sync_en: false         # use hardware sync if available
-            # CALIB: set from timestamp spin test — target < 0.001 s
-            time_offset_lidar_to_imu: 0.0
+            time_sync_en: false                 # Enable if your LiDAR and IMU are time-synchronized (requires accurate timestamps)
+            time_offset_lidar_to_imu: 0.0       # Time offset from LiDAR to IMU in seconds
+            # Verify your IMU driver's angular_velocity units before running:
+            # treating deg/s data as rad/s (or vice versa) causes large
+            # stationary drift (a ~57x scale error).
+            imu_gyr_unit: "rad"          # "rad" or "deg"
 
         preprocess:
-            lidar_type: 2               # 2 = Velodyne-style PointCloud2 (QT64 driver)
-            scan_line:  64              # Hesai QT64 = 64 channels
-            blind: 0.3                  # ignore returns < 0.3 m (body occlusion)
-            timestamp_unit: 3           # microseconds
-            scan_rate: 20               # QT64 runs at 20 Hz
+            lidar_type: 3                # 3: Hesai QT64
+            scan_line: 32
+            timestamp_unit: 0            # 0-second, 1-millisecond, 2-microsecond, 3-nanosecond
+            scan_rate: 10                # Hz
+            blind: 0.3                   # Blind zone of the LiDAR in meters (QT64 has a blind zone of ~1 m)
 
         mapping:
-            # ── CALIB: replace with imu_utils Allan variance output ──
-            acc_cov:   0.1              # accelerometer noise density (m/s²/√Hz)
-            gyr_cov:   0.1              # gyroscope noise density (rad/s/√Hz)
-            b_acc_cov: 0.0001           # accelerometer bias instability
-            b_gyr_cov: 0.0001           # gyroscope bias instability
-            fov_degree:    360.0
-            det_range:     80.0         # QT64 effective range (use 80 m to be safe)
-            extrinsic_est_en: true      # online extrinsic estimation is fine until
-                                        # lidar_imu_calib run completes; then disable
-            # ── CALIB: replace T with lidar_imu_calib extrinsic_T output ──
-            extrinsic_T: [ 0.0, 0.0, 0.0 ]
-            # ── CALIB: replace R with lidar_imu_calib extrinsic_R output (row-major) ──
-            extrinsic_R: [ 1.0, 0.0, 0.0,
-                           0.0, 1.0, 0.0,
-                           0.0, 0.0, 1.0 ]
+            acc_cov: 0.1
+            # gyr_cov is the gyro measurement/process-noise variance in
+            # (rad/s)^2: how much the EKF trusts gyro-driven propagation
+            # between LiDAR corrections. 0.1 is the standard FAST-LIO default.
+            # A much smaller value makes the
+            # filter over-trust raw gyro integration, so small real angular
+            # noise/wiggle (or any residual imu_gyr_unit mismatch) gets
+            # corrected more slowly by the LiDAR and shows up as the map/path
+            # swinging even while the platform is stationary.
+            gyr_cov: 0.1
+            b_acc_cov: 0.0001
+            b_gyr_cov: 0.0001
+            fov_degree: 180.0   # Field of view of the LiDAR in degrees — reduced from
+                                # 360 (full spin) to 180 as part of an intentional
+                                # H-FOV/V-FOV reduction (see preprocess.scan_line: 32
+                                # below, the paired V-FOV half of the same plan):
+                                # limiting both FOV axes trims point-cloud volume for
+                                # faster, more robust preprocessing on Jetson.
+            det_range: 5.0      #30.0   # Detection range of the LiDAR in meters (QT64 is a short-range LiDAR, ~30 m max)
+            # Online LiDAR-IMU extrinsic estimation needs rich 6-DOF excitation
+            # (rotation about all axes). Motion that is mostly translational
+            # (e.g. back-and-forth driving) cannot observe the rotational
+            # extrinsic; a diverging estimate corrupts the point-to-world
+            # transform and can cascade into "No Effective Points" / pure-IMU
+            # drift. Keep this false and provide a good initial extrinsic
+            # below unless your platform will undergo rich 6-DOF motion.
+            extrinsic_est_en: false
+            extrinsic_T: [0.0, 0.0298, -0.13795]
+            # extrinsic_T: [0.0, 0.0, 0.0]
+            # Rotation from the LiDAR frame to the (raw) IMU frame (row-major).
+            # FAST-LIO applies this as: p_imu = extrinsic_R * p_lidar + extrinsic_T
+            # (see offset_R_L_I / offset_T_L_I in laserMapping.cpp), so both
+            # extrinsic_R and extrinsic_T must be expressed in the raw IMU frame.
+            #
+            # Derived from the IMU driver's own extrinsic calibration
+            # (rotation_rpy: [90deg, 0, 0] about X, i.e. transform_matrix
+            # [[1,0,0],[0,0,-1],[0,1,0]] mapping raw IMU -> base_link), which
+            # is currently disabled ("enabled: false") in that driver's
+            # config -- so /imu/data and /imu/data_raw are published in the
+            # raw, uncorrected IMU sensor frame. This extrinsic_R is that
+            # same rotation applied in the opposite direction (LiDAR ->
+            # raw IMU frame == Rx(-90deg)), so FAST-LIO compensates for it
+            # itself. Confirmed two independent ways:
+            #  1) Live accelerometer: raw (0.05, 9.78, -0.05) means raw +Y
+            #     reads ~+g, i.e. raw +Y is physically "up" == LiDAR +Z.
+            #     Applying the driver's own transform_matrix gives
+            #     (0.05, 0.05, 9.78) -- gravity on Z, as expected for the
+            #     LiDAR's Z-up convention.
+            #  2) Physical mounting: LiDAR +X and raw IMU +X point the same
+            #     way. Combined with (1) (LiDAR +Z == raw IMU +Y) and both
+            #     frames being right-handed, this fixes raw IMU +Z ==
+            #     LiDAR -Y. That gives Rx(-90deg):
+            #       x_imu =  x_lidar
+            #       y_imu =  z_lidar
+            #       z_imu = -y_lidar
+            #     NOTE: a previous version of this matrix used
+            #     [1,0,0; 0,-1,0; 0,0,-1] (Rx(180deg)) -- that does NOT
+            #     match Rx(-90deg) above and was a transcription bug.
+            # NOTE: if the IMU driver's "extrinsic.enabled" is later turned
+            # on instead, /imu/data will already be base_link-aligned and
+            # this should be reverted to identity (do not apply both).
+            #
+            # OPEN ITEM (see file header #2 and #4-in-the-driver): the
+            # ACEINNA_IMU_ROS2 (main branch) imu_params.yaml this comment
+            # refers to actually has extrinsic.enabled: true right now, not
+            # false as assumed here -- and the active matrix below (det=-1,
+            # a reflection) matches neither the "old" nor the Rx(-90°)
+            # derivation in the comments above. Re-derive/re-verify before
+            # trusting this for autonomous nav.
+            # extrinsic_R: [1.0, 0.0, 0.0,
+            #               0.0, 0.0, 1.0,
+            #               0.0, -1.0, 0.0]
+
+            # Old values
+            extrinsic_R: [1.0, 0.0, 0.0,
+                          0.0, 1.0, 0.0,
+                          0.0, 0.0, -1.0]
+
 
         publish:
-            path_en:             true
-            effect_map_en:       false
-            map_en:              true
-            scan_publish_en:     true
-            dense_publish_en:    false  # keep false on Jetson — saves bandwidth
+            path_en: true
+            map_en: true   # Enable or disable map publishing
+            effect_map_en: false # Enable or disable effective map publishing
+            scan_publish_en: true
+            dense_publish_en: true
             scan_bodyframe_pub_en: true
 
         pcd_save:
-            pcd_save_en: false          # set true during offline LIO-SAM sessions
+            pcd_save_en: true
             interval: -1
+
+        # Frontend scan-quality gate: keeps a shock-corrupted or feature-starved scan
+        # out of the persistent ikd-tree map and off the published clouds (so loop_pgo/
+        # map_localizer never see it), while odometry/TF keep publishing for continuity.
+        frontend:
+            reject_low_quality_scans: true
+            # Leave the gate enabled, but keep it realistic for a moving vehicle.
+            # A 4.0 m/s^2 threshold is too strict for normal acceleration during
+            # turns / starts / stops, which causes false shock detections and scan
+            # rejection even when the cloud itself is valid.
+            min_effective_features: 10                # 10
+            max_mean_residual:  1.0                  # 1.0
+            shock_accel_deviation_threshold: 8.0    # 8.0 m/s^2 deviation from gravity; raise to avoid false positives
+            shock_process_noise_scale: 25.0           # 25.0 temporary IMU process-noise multiplier during a shock
+            max_imu_gap: 0.05                        # seconds; reject if IMU coverage has a gap this large
+            # Keep rejecting scans from map insertion for this long (seconds) after a
+            # shock clears. Without this, the very next scan that individually looks
+            # clean gets trusted immediately even though the pose (esp. Z/pitch) may
+            # not have fully reconverged yet -- that's what was causing the duplicated
+            # floor/wall layer right at bumps.
+            shock_cooldown: 0.3
+
+        # Absolute path for the final full-map PCD save (on shutdown or /map_save
+        # service call). Used as-is since it starts with "/". Leave empty ("") to
+        # fall back to <ROOT_DIR>/PCD/scans.pcd.
+        # OPEN ITEM: this path is specific to the original dev's machine
+        # (/home/juggernauts/...) and won't exist elsewhere -- override with a
+        # per-machine launch argument once diy_localization exposes one, or set
+        # to "" to use the package-relative default.
+        map_file_path: "/home/juggernauts/localizer/src/map/fast_lio_map.pcd"

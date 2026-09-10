@@ -50,10 +50,10 @@ REQUIRED_TOPICS=(
     /hesai/points                  # 3-D lidar (raw scans for SLAM replay)
     /imu/data                      # IMU after calibration / FAST-LIO2 input
     /gps/fix                       # RTK GPS fix
-    /camera/color/image_raw        # RealSense colour (obstacle classification)
-    /camera/infra1/image_rect_raw  # Stereo IR left (VSLAM input)
-    /camera/infra2/image_rect_raw  # Stereo IR right
-    /camera/imu                    # RealSense D435i IMU
+    /zed/zed_node/rgb/image_rect_color   # ZED2i colour (obstacle classification)
+    /zed/zed_node/left/image_rect_color  # Left rectified (VSLAM input)
+    /zed/zed_node/right/image_rect_color # Right rectified (VSLAM input)
+    /zed/zed_node/imu/data               # ZED2i IMU
     /tf                            # Full TF tree
     /tf_static                     # Static TF tree
     /odometry/filtered             # EKF1 output (replayed via rosbag_to_csv)

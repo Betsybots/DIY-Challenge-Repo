@@ -1,7 +1,3 @@
-[submodule "third_party_ws/src/FAST_LIO"]
-	path = third_party_ws/src/FAST_LIO
-	url = https://github.com/hku-mars/FAST_LIO.git
-	branch = ROS2
 [submodule "third_party_ws/src/LIO-SAM"]
 	path = third_party_ws/src/LIO-SAM
 	url = https://github.com/TixiaoShan/LIO-SAM.git
@@ -14,11 +10,6 @@
 	path = third_party_ws/src/lidar_imu_calib
 	url = https://github.com/KnightSnape/lidar_imu_calib.git
 	branch = main
-	ignore = dirty
-[submodule "third_party_ws/src/livox_ros_driver2"]
-	path = third_party_ws/src/livox_ros_driver2
-	url = https://github.com/Livox-SDK/livox_ros_driver2.git
-	branch = master
 	ignore = dirty
 [submodule "third_party_ws/src/ndt_omp_ros2"]
 	path = third_party_ws/src/ndt_omp_ros2

@@ -1,0 +1,74 @@
+digraph DIY_Challenge_Pipeline {
+  rankdir=TB;
+  fontname="Helvetica";
+  labelloc="t";
+  label=<<b>DIY Challenge Robot — Current Pipeline State (2026-09-04)</b><br/><font point-size="11">Green = tested working on hardware &#160;&#160; Yellow = wired in code, never run end-to-end &#160;&#160; Red = known-broken / unresolved &#160;&#160; Dashed = not yet integrated / external</font>>;
+  node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled"];
+  edge [fontname="Helvetica" fontsize=9];
+
+  // ===================== RASPBERRY PI =====================
+  subgraph cluster_raspi {
+    label="Raspberry Pi  (profiles/raspi.env)";
+    style=filled; color="#dbe9f4"; fontsize=13; fontcolor="#1a3a5c";
+
+    joy       [label="Joystick\n(gamepad)"      fillcolor="#c8e6c9"];
+    driveStackTeleop [label="driveStack\nteleop + differential-drive\n(TESTED on robot)" fillcolor="#a5d6a7"];
+    motors_manual [label="Motors\n(TalonFX / Phoenix6 CAN)\nsame physical motors,\nreached by whichever\npath is active" fillcolor="#a5d6a7"];
+
+    imu_can   [label="imu_can_interface\n(ACEINNA IMU, CAN)\nlaunched independently on this\ndevice, outside this repo\n(own script/process, not vendored)" fillcolor="#c8e6c9" style="rounded,filled,dashed"];
+
+    cmd_vel_mux [label="diy_cmd_vel_mux\ncmd_vel_mux_node\n(single-owner: RPi)" fillcolor="#fff59d"];
+    motor_auto  [label="diy_motor_control_legacy\n(autonomy path)\n⚠ different pkg than\ndriveStack's tested one" fillcolor="#ef9a9a"];
+    estop_ctrl  [label="diy_estop_controller\n(DISABLED — no STM32)" fillcolor="#e0e0e0" style="rounded,filled,dashed"];
+    rjbreak     [label="RJ45 break-loop\n(REAL hardware e-stop,\nfail-safe, rule 1.2.7)" shape=hexagon fillcolor="#a5d6a7"];
+
+    joy -> driveStackTeleop -> motors_manual;
+    rjbreak -> motors_manual [label="cuts power\n(independent of ROS)" color="#2e7d32" fontcolor="#2e7d32"];
+
+    cmd_vel_mux -> motor_auto [label="/cmd_vel_safe\n(arbitrated: nav OR zone-nav OR joy,\nper mux_mode)" color="#1565c0" fontcolor="#1565c0" penwidth=2];
+    motor_auto -> motors_manual [label="CAN\n⚠ can1 (legacy) vs can0\n(driveStack) — only one\npkg can be built at a time"
+                                  color="#1565c0" fontcolor="#1565c0" penwidth=2];
+    motor_auto -> zenoh [label="/wheel_odom (driveStack)\nor /wheel_cmd_vel (legacy)?\nsame package-identity ambiguity\nas the CAN edge above" style=dashed];
+  }
+
+  // ===================== JETSON =====================
+  subgraph cluster_jetson {
+    label="Jetson Orin Nano  (profiles/jetson.env)";
+    style=filled; color="#f4e9db"; fontsize=13; fontcolor="#5c3a1a";
+
+    hesai   [label="hesai_ros_driver\n(external, on Jetson)\n⚠ topic name unconfirmed:\n/hesai/points vs /lidar_points" fillcolor="#ef9a9a"];
+    zed     [label="ZED2i camera\n(zed_wrapper — CONFIRMED:\nstereolabs/zed-ros2-wrapper)\nnever run end-to-end yet" fillcolor="#fff59d" style="rounded,filled"];
+
+    fastlio [label="fast_lio_ros2\nfastlio_mapping\n(TESTED — generated\na real map/PCD)" fillcolor="#a5d6a7"];
+    ekf     [label="Single EKF\n(ekf_odom.yaml)\nwheel+IMU(rate)+lidar, 50Hz\n→ odom→base_link TF\n⚠ YAML type bug fixed but never\nrun end-to-end on real hardware" fillcolor="#fff59d"];
+    ndtomp  [label="NDT-OMP\nmap→odom TF\n⚠ extrinsic_R fix pending,\n⚠ expects GlobalMap.pcd\n(repo has refined_map.pcd) —\nCONFIRMED crashes on start" fillcolor="#ef9a9a"];
+
+    nav2    [label="Nav2\n(planner + MPPI/RPP)\nNEVER RUN end-to-end" fillcolor="#e0e0e0" style="rounded,filled,dashed"];
+    zonenav [label="diy_zone_nav\nstate machine\nNEVER RUN end-to-end" fillcolor="#e0e0e0" style="rounded,filled,dashed"];
+
+    robot_desc [label="robot_state_publisher\n⚠ URDF missing lidar_link/\nimu_link/camera_link/gps_link" fillcolor="#ef9a9a"];
+
+    hesai -> fastlio [label="/hesai/points\nor /lidar_points?"];
+    hesai -> ndtomp;
+    fastlio -> ekf [label="/lidar_odometry_gated\n(position+yaw+velocity)"];
+    ekf -> nav2 [label="/odometry/filtered"];
+    ndtomp -> nav2 [label="map→odom TF"];
+    nav2 -> zonenav [label="costmap/\ncontroller services"];
+    robot_desc -> fastlio [style=dashed label="TF (incomplete)"];
+    robot_desc -> nav2 [style=dashed label="TF (incomplete)"];
+  }
+
+  // ===================== CROSS-MACHINE =====================
+  zenoh [label="Zenoh Bridge\n(external to this repo,\nmanual restart both sides)" shape=hexagon fillcolor="#fff59d"];
+
+  imu_can -> zenoh [label="/imu/data"];
+  zenoh -> fastlio [label="/imu/data\n(FAST-LIO2's own internal\nEKF fuses this directly)"];
+  zenoh -> ekf [label="/imu/data\n(angular-rate fields only —\nnot the full 6-DOF IMU)"];
+  nav2 -> zenoh [label="/cmd_vel_nav" color="#1565c0" fontcolor="#1565c0" penwidth=2];
+  zonenav -> zenoh [label="/cmd_vel_zone_nav" color="#1565c0" fontcolor="#1565c0" penwidth=2];
+  joy -> zenoh [style=dashed label="/cmd_vel_joy\n(BLOCK 9 joy_node, separate\nfrom driveStack's own teleop)"];
+  zenoh -> cmd_vel_mux [label="/cmd_vel_nav (AUTONOMOUS mode),\n/cmd_vel_zone_nav (BLIND_DRIVE mode),\n/cmd_vel_joy (JOYSTICK mode)" color="#1565c0" fontcolor="#1565c0" penwidth=2];
+
+  // ===================== FRONTIER MARKER =====================
+  frontier [label="⬤  CURRENT TESTED FRONTIER\n(everything left/above of red X\nhas real hardware confirmation)" shape=plaintext fontcolor="#c62828" fontsize=12];
+}

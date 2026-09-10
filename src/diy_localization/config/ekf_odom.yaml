@@ -1,0 +1,142 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ekf_odom.yaml  —  Single EKF: wheel + IMU (angular rate) + FAST-LIO2  (50 Hz)
+# ─────────────────────────────────────────────────────────────────────────────
+# PURPOSE:
+#   Produces /odometry/filtered — the smooth, drift-corrected odom-frame
+#   estimate consumed by Nav2's controller.
+#
+# REPLACES the old dual-EKF design (ekf_wimu.yaml EKF1 -> ekf_local.yaml
+# EKF2). That design fed /imu/data into EKF1, whose output (/wimu_odom) was
+# then fed into EKF2 alongside /lidar_odometry_gated — but FAST-LIO2 already
+# runs its own internal iterated EKF that fuses /imu/data itself. Chaining a
+# second, independent robot_localization EKF fusion of the same physical IMU
+# on top of that double-counts the IMU's contribution to the state estimate
+# (the two filters aren't aware of each other and both assume conditionally
+# independent inputs), without actually adding new information. Collapsing
+# to one EKF removes that redundancy and the extra node/hop.
+#
+# IMU IS STILL A DIRECT INPUT HERE (not dropped entirely): angular velocity
+# only (vroll/vpitch/vyaw) — no linear acceleration, no absolute orientation.
+# This robot's course includes wheel-slip-prone zones (gravel, pothole,
+# bumps) where wheel-only yaw prediction between FAST-LIO2's ~10 Hz lidar
+# corrections would degrade; direct IMU angular-rate fusion keeps this EKF's
+# own predict step accurate in those gaps, independent of FAST-LIO2.
+#
+# INPUTS:
+#   /wheel_odom             — dead-wheel encoder odometry (velocity only —
+#                              position discarded, wheel slip on this course
+#                              makes it untrustworthy; see driveStack's
+#                              differential-drive node)
+#   /imu/data                — ACEINNA IMU, angular velocity only
+#   /lidar_odometry_gated    — FAST-LIO2 lidar-inertial odometry (gated by
+#                              lidar_odom_gate_node — blocked during BLIND_DRIVE)
+#
+# OUTPUT:
+#   /odometry/filtered — fused odom-frame estimate for Nav2 (50 Hz)
+#   TF: odom → base_link — maintained by this node
+#
+# CALIB NOTES:
+#   process_noise_covariance  ← tune with AprilTag calibration sessions
+#   initial_estimate_covariance ← tighten once FAST-LIO2 is validated
+#   See docs/diy-sad.html §6.3 for the Innovation-based EKF tuning procedure.
+#
+# Fused state: [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+#               0  1  2    3     4     5   6   7   8    9      10     11   12  13  14
+# ─────────────────────────────────────────────────────────────────────────────
+
+ekf_filter_node_odom:
+    ros__parameters:
+        frequency: 50.0             # 50 Hz output — smooth enough for Nav2's controller
+        sensor_timeout: 0.1
+        two_d_mode: true            # outdoor ground robot — flatten to 2D
+        transform_time_offset: 0.0
+        transform_timeout: 0.0
+        print_diagnostics: true
+        debug: false
+
+        map_frame:       map
+        odom_frame:      odom
+        base_link_frame: base_link
+        world_frame:     odom       # this EKF operates in odom frame
+
+        publish_tf: true            # publishes odom → base_link TF for Nav2
+        publish_acceleration: false
+
+        # ── Input 0: wheel encoder odometry ──────────────────────────────────
+        # We use velocity only — position from wheels drifts (especially on
+        # gravel/pothole/bumps where wheels slip); lidar corrects position.
+        odom0: /wheel_odom
+        odom0_config: [false, false, false,   # x  y  z   — don't trust wheel position
+                       false, false, false,   # roll pitch yaw
+                       true,  true,  false,   # vx vy vz   — trust wheel velocity
+                       false, false, true,    # vroll vpitch vyaw
+                       false, false, false]   # ax ay az
+        odom0_queue_size: 10
+        odom0_nodelay: true
+        odom0_differential: false
+        odom0_relative: false
+
+        # ── Input 1: IMU — angular velocity only ─────────────────────────────
+        # Deliberately NOT using linear acceleration or absolute orientation
+        # here (FAST-LIO2 already fuses the full IMU internally for its own
+        # state estimate) — this is purely to keep this EKF's own predict
+        # step accurate on wheel-slip terrain between lidar corrections.
+        imu0: /imu/data
+        imu0_config: [false, false, false,   # x  y  z
+                      false, false, false,   # roll pitch yaw — don't use IMU absolute heading
+                      false, false, false,   # vx vy vz
+                      true,  true,  true,    # vroll vpitch vyaw — gyro angular rates
+                      false, false, false]   # ax ay az — NOT used (angular rate only)
+        imu0_queue_size: 10
+        imu0_nodelay: true
+        imu0_differential: false
+        imu0_relative: false
+
+        # ── Input 2: FAST-LIO2 lidar odometry ────────────────────────────────
+        # Accurate pose from lidar-inertial odometry (~10 Hz).
+        # Used for x, y, yaw (full pose) — this is the drift correction source.
+        # Velocities also used as they are well-estimated by FAST-LIO2.
+        odom1: /lidar_odometry_gated   # gated by lidar_odom_gate_node — blocked during BLIND_DRIVE
+        odom1_config: [true,  true,  false,   # x  y  z   — use lidar position
+                       false, false, true,    # roll pitch yaw — use lidar heading
+                       true,  true,  false,   # vx vy vz   — use lidar velocity
+                       false, false, true,    # vroll vpitch vyaw
+                       false, false, false]   # ax ay az
+        odom1_queue_size: 10
+        odom1_nodelay: false
+        odom1_differential: false
+        odom1_relative: false
+
+        # ── Process noise (Q) — CALIB: tune via AprilTag sessions ──
+        # [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+        process_noise_covariance: [0.05, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.05, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.06, 0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.03, 0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.03, 0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.06, 0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.025, 0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.025, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.04, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.01, 0.0,    0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.01, 0.0,    0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.02, 0.0,    0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.01, 0.0,    0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.01, 0.0,
+                                   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.015]
+
+        initial_estimate_covariance: [1e-9, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    1e-9, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    1e-9, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    1e-9, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    1e-9, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    1e-9, 0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9, 0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9, 0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9, 0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,  0.0,     0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1e-9,  0.0,     0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     1e-9,  0.0,    0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     1e-9, 0.0,    0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    1e-9, 0.0,
+                                      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    1e-9]

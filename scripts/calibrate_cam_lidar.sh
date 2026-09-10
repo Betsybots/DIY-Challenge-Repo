@@ -2,6 +2,11 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # scripts/calibrate_cam_lidar.sh — Camera ↔ LiDAR extrinsic calibration
 # ══════════════════════════════════════════════════════════════════════════════
+# NEEDS UPDATE FOR ZED2i: this script still hardcodes RealSense-specific
+# topics/launch calls below (/camera/color/image_raw, `ros2 launch
+# realsense2_camera rs_launch.py`) — not yet updated to this robot's actual
+# camera (ZED2i, package zed_wrapper). Not fixed in this pass.
+#
 # Records a ROS 2 bag containing both camera image frames and lidar point clouds
 # for offline camera-to-lidar extrinsic calibration with Kalibr or similar tools.
 #
@@ -15,7 +20,7 @@
 #   3. Verify with RViz2 (see guide Section 4.3)
 #
 # Prerequisites:
-#   • RealSense D435i publishing /camera/color/image_raw
+#   • ZED2i publishing /zed/zed_node/rgb/image_rect_color
 #   • Hesai QT64 publishing /hesai/points
 #   • A calibration target visible to both sensors simultaneously:
 #       - Recommended: flat board with AprilTags + reflective/matte checkerboard

@@ -67,11 +67,12 @@ echo "[replay_bag] Starting software stack (no hardware drivers)..."
 ros2 launch challenge_bringup challenge_master.launch.py \
     use_joystick:=false \
     use_nav2:="${USE_NAV2}" \
-    use_realsense:=false \
+    use_zed:=false \
     use_motor_driver:=false \
     use_hesai:=false \
     use_micro_ros:=false \
     use_localization:="${DIY_USE_LOCALIZATION}" \
+    use_cmd_vel_mux:=true \
     mux_mode:="${DIY_MUX_MODE}" \
     fastlio_config:="${DIY_FASTLIO_CONFIG:-fast_lio_hesai_qt64.yaml}" \
     use_rviz:=true &

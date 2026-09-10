@@ -46,7 +46,15 @@ source ~/ros2_ws/src/DIY-Challenge-Repo/install/setup.bash</pre>
   <p>From the repo root:</p>
   <pre>cd ~/ros2_ws/src/DIY-Challenge-Repo
 source /opt/ros/humble/setup.bash
-colcon build --symlink-install</pre>
+colcon build --symlink-install --base-paths src</pre>
+  <p class="muted"><strong>Always pass <code>--base-paths src</code> here.</strong> Without it, colcon
+  also discovers packages under <code>third_party_ws/src/</code> and can build a second,
+  separately-installed copy of a third-party package (e.g. <code>ndt_omp_ros2</code>) straight
+  into this repo's own <code>./install</code> — bypassing whatever patches/build fixes were
+  applied when <code>third_party_ws</code> was built properly via §4.2 below. That stray copy
+  can then shadow the correct one for anything that finds it via
+  <code>CMAKE_PREFIX_PATH</code> (e.g. <code>diy_ndt_localization</code>), causing confusing
+  link failures that look unrelated to this cause.</p>
 
   <h3>4.2 Build third-party packages</h3>
   <p>From the repository-local third-party workspace:</p>

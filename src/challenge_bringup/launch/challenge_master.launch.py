@@ -24,27 +24,49 @@ CLI overrides are also supported without editing this file:
 STARTUP ORDER
 ─────────────
    1. diy_robot_description  — publishes URDF / TF tree  (MUST be first)
-   2. micro_ros_agent        — opens STM32 serial link (before estop reads topics)
+   2. micro_ros_agent        — STM32 serial link (disabled by default — see BLOCK 4)
    3. estop_controller_node  — reads STM32 state, publishes /estop_active
-   4. cmd_vel_mux_node       — velocity arbitration; reads /estop_active for gating
+   4. cmd_vel_mux_node       — velocity arbitration (single-owner device — see BLOCK 5)
    5. hesai_ros_driver       — lidar driver feeding FAST-LIO2
-   6. realsense2_camera      — RGB-D + stereo IR + IMU
-   7. localization stack     — FAST-LIO2 + EKF1 + navsat_transform + EKF2
+   6. zed_wrapper (zed2i)    — RGB-D + stereo + IMU
+   7. localization stack     — FAST-LIO2 + single EKF (ekf_odom.yaml) + NDT-OMP
    8. joystick_drive         — conditionally enabled
    9. differential_drive     — motor driver subscribing /cmd_vel_safe (mux output)
   10. nav2 bringup           — conditionally enabled
   11. zone_nav               — zone-aware state machine; requires use_nav2=true
   12. rviz2                  — conditionally enabled (off by default to save resources)
 
+NOTE ON THE ACEINNA IMU:
+────────────────────────
+The IMU driver (imu_can_interface) is launched INDEPENDENTLY on the RPi,
+outside this repo entirely — it is not vendored here and not part of this
+launch file. FAST-LIO2 and the localization EKF (both on the Jetson) still
+consume /imu/data as an external input over the Zenoh bridge; this file has
+no responsibility for starting that driver.
+
 Launch arguments (all correspond to DIY_* profile variables):
   use_joystick       bool  Enable joystick teleop              (default false)
   use_nav2           bool  Enable Nav2 autonomous stack         (default false)
   use_zone_nav       bool  Enable zone-aware nav state machine  (default false)
-  use_realsense      bool  Enable RealSense D435i driver        (default true)
+  use_zed            bool  Enable ZED2i camera driver           (default true)
   use_motor_driver   bool  Enable differential-drive node       (default true)
   use_hesai          bool  Enable Hesai QT64 lidar driver       (default true)
-  use_micro_ros      bool  Enable micro-ROS agent (STM32)       (default true)
+  use_micro_ros      bool  Enable micro-ROS agent + STM32 estop (default false)
+                           mirror (diy_estop_controller). This robot has no
+                           STM32 — the real hardware e-stop is an RJ45
+                           break-loop wired directly into the motor power
+                           path (fail-safe, satisfies competition rule 1.2.7
+                           independent of any software). Only set true if an
+                           STM32 + micro-ROS bridge is actually present —
+                           otherwise estop_controller_node's fail-safe design
+                           (heartbeat never received -> permanent E-stop)
+                           locks cmd_vel_mux into ESTOP_LOCK from tick one.
   use_localization   bool  Enable FAST-LIO2 + EKF stack         (default true)
+  use_cmd_vel_mux    bool  Enable cmd_vel_mux node              (default true)
+                           Single-owner across a multi-machine robot — see
+                           BLOCK 5. Set true on exactly one device (this
+                           robot: the RPi, co-located with the motor driver
+                           and e-stop wiring); false on every other device.
   use_rviz           bool  Launch RViz2                         (default false)
   mux_mode           str   cmd_vel_mux startup mode             (default AUTONOMOUS)
   fastlio_config     str   FAST-LIO2 config filename            (see diy_localization/config/)
@@ -86,7 +108,7 @@ def _zone_nav_launch(context, use_zone_nav_lc, waypoints_file_lc):
         launch_args['waypoints_file'] = wp_file
 
     # Tell zone_nav.launch.py NOT to start another gate node — master launches
-    # it unconditionally under IfCondition(use_localization) so EKF2 always
+    # it unconditionally under IfCondition(use_localization) so the EKF always
     # has a /lidar_odometry_gated input, even when use_zone_nav=false.
     launch_args['launch_gate'] = 'false'
 
@@ -94,6 +116,44 @@ def _zone_nav_launch(context, use_zone_nav_lc, waypoints_file_lc):
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(zone_nav_launch),
             launch_arguments=launch_args.items(),
+        )
+    ]
+
+
+def _zed_launch(context, use_zed_lc):
+    """
+    OpaqueFunction that conditionally includes zed_wrapper's zed_camera.launch.py.
+
+    Same reasoning as _zone_nav_launch above: get_package_share_directory()
+    must not run at all when the camera is disabled, since zed_wrapper is
+    only installed on the Jetson (not in this repo, not in dev/laptop
+    environments) — a plain IncludeLaunchDescription+IfCondition would still
+    call get_package_share_directory('zed_wrapper') unconditionally while
+    building the launch description, raising PackageNotFoundError and
+    crashing the whole master launch on any machine without it installed.
+    """
+    if context.perform_substitution(use_zed_lc).lower() != 'true':
+        return []
+
+    zed_pkg = get_package_share_directory('zed_wrapper')
+    zed_launch = os.path.join(zed_pkg, 'launch', 'zed_camera.launch.py')
+
+    return [
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(zed_launch),
+            launch_arguments={
+                'camera_model':   'zed2i',
+                # All three default true in zed_wrapper. Forced false here:
+                # this stack's TF tree is already fully owned elsewhere —
+                # diy_robot_description publishes the static camera_link
+                # transform, and FAST-LIO2 + the localization EKF + NDT-OMP own the dynamic
+                # odom->base_link and map->odom transforms. Leaving these at
+                # their defaults would start a second, competing
+                # robot_state_publisher + TF broadcaster for the same frames.
+                'publish_urdf':   'false',
+                'publish_tf':     'false',
+                'publish_map_tf': 'false',
+            }.items(),
         )
     ]
 
@@ -112,11 +172,12 @@ def generate_launch_description():
     use_joystick     = LaunchConfiguration('use_joystick')
     use_nav2         = LaunchConfiguration('use_nav2')
     use_zone_nav     = LaunchConfiguration('use_zone_nav')
-    use_realsense    = LaunchConfiguration('use_realsense')
+    use_zed          = LaunchConfiguration('use_zed')
     use_motor_driver = LaunchConfiguration('use_motor_driver')
     use_hesai        = LaunchConfiguration('use_hesai')
     use_micro_ros    = LaunchConfiguration('use_micro_ros')
     use_localization = LaunchConfiguration('use_localization')
+    use_cmd_vel_mux  = LaunchConfiguration('use_cmd_vel_mux')
     use_rviz         = LaunchConfiguration('use_rviz')
     mux_mode         = LaunchConfiguration('mux_mode')
     fastlio_config   = LaunchConfiguration('fastlio_config')
@@ -131,11 +192,12 @@ def generate_launch_description():
         DeclareLaunchArgument('use_joystick',     default_value='false'),
         DeclareLaunchArgument('use_nav2',         default_value='false'),
         DeclareLaunchArgument('use_zone_nav',     default_value='false'),
-        DeclareLaunchArgument('use_realsense',    default_value='true'),
+        DeclareLaunchArgument('use_zed',           default_value='true'),
         DeclareLaunchArgument('use_motor_driver', default_value='true'),
         DeclareLaunchArgument('use_hesai',        default_value='true'),
-        DeclareLaunchArgument('use_micro_ros',    default_value='true'),
+        DeclareLaunchArgument('use_micro_ros',    default_value='false'),
         DeclareLaunchArgument('use_localization', default_value='true'),
+        DeclareLaunchArgument('use_cmd_vel_mux',  default_value='true'),
         DeclareLaunchArgument('use_rviz',         default_value='false'),
         DeclareLaunchArgument('mux_mode',         default_value='AUTONOMOUS'),
         DeclareLaunchArgument(
@@ -190,14 +252,28 @@ def generate_launch_description():
         # (watchdog), then publishes /estop_active (Bool, latched QoS).
         # The mux (BLOCK 5) reads /estop_active and zeroes all velocity output.
         #
-        # Always launched (no condition guard) — on a watchdog timeout (no
-        # heartbeat for >0.5 s) it automatically sets estop=true so the robot
-        # stops safely even if the STM32 or micro-ROS agent crashes mid-run.
+        # This robot has no STM32. The real hardware e-stop is an RJ45
+        # break-loop wired directly into the motor power path (fail-safe:
+        # loop open -> motors de-energized, independent of software/firmware
+        # -- this is what satisfies competition rule 1.2.7's "must fail safe
+        # within 1 second" requirement, not this node).
+        #
+        # Gated on use_micro_ros (same as BLOCK 3): this node's fail-safe
+        # design (see diy_estop_controller's module docstring) treats
+        # "/stm32/heartbeat never received" as a permanent E-stop condition,
+        # clearable only once a heartbeat arrives -- so on a robot with no
+        # STM32, running it unconditionally would permanently latch
+        # /estop_active=True and lock cmd_vel_mux's ESTOP_LOCK forever.
+        # Gating it means cmd_vel_mux simply never receives an /estop_active
+        # message at all, which is safe: it defaults _estop_active=False and
+        # only sets it True on an actual received message (see
+        # cmd_vel_mux_node.py) -- no message means no false-positive lock.
         Node(
             package='diy_estop_controller',
             executable='estop_controller_node',
             name='estop_controller_node',
             output='screen',
+            condition=IfCondition(use_micro_ros),
         ),
 
         # ── BLOCK 5: cmd_vel multiplexer  (velocity source arbitration) ───────
@@ -208,11 +284,19 @@ def generate_launch_description():
         #   JOYSTICK   — forward /cmd_vel_joy  (manual driving / testing)
         #   ESTOP_LOCK — zero velocity regardless of any inputs
         # Switch mode at runtime:  ros2 param set /cmd_vel_mux_node mode JOYSTICK
+        #
+        # Single-owner on a multi-machine robot: exactly one device should run
+        # this node. Unlike robot_state_publisher (safe to duplicate — static,
+        # idempotent TF), two instances here would both independently publish
+        # /cmd_vel_safe, racing to drive the motors. This robot runs it on the
+        # RPi (co-located with the motor driver and e-stop wiring) — set
+        # use_cmd_vel_mux=false on any other device.
         Node(
             package='diy_cmd_vel_mux',
             executable='cmd_vel_mux_node',
             name='cmd_vel_mux_node',
             output='screen',
+            condition=IfCondition(use_cmd_vel_mux),
             parameters=[{'mode': mux_mode}],
         ),
 
@@ -234,36 +318,39 @@ def generate_launch_description():
             }],
         ),
 
-        # ── BLOCK 7: RealSense D435i  (RGB-D + stereo IR + IMU) ───────────────
-        # Publishes:
-        #   /camera/color/image_raw         — RGB (recording / visual tasks)
-        #   /camera/depth/image_rect_raw    — depth map
-        #   /camera/infra1/image_rect_raw   — left rectified IR  (VSLAM input)
-        #   /camera/infra2/image_rect_raw   — right rectified IR (VSLAM input)
-        #   /camera/imu                     — 6-DOF IMU @ 200 Hz
-        # IR emitter MUST be disabled — with it on the projected dot pattern
-        # corrupts passive stereo feature matching in both IR cameras.
-        Node(
-            package='realsense2_camera',
-            executable='realsense2_camera_node',
-            name='realsense2_camera',
-            output='screen',
-            condition=IfCondition(use_realsense),
-            parameters=[{
-                'enable_color':         True,
-                'enable_depth':         True,
-                'enable_infra1':        True,
-                'enable_infra2':        True,
-                'enable_gyro':          True,
-                'enable_accel':         True,
-                'enable_infra_emitter': False,  # MUST be off for stereo VSLAM
-            }],
-        ),
+        # NOTE: the ACEINNA IMU driver (imu_can_interface) is launched
+        # INDEPENDENTLY on the RPi, outside this repo — not vendored here,
+        # not part of this launch file. FAST-LIO2's internal EKF and the
+        # localization EKF (BLOCK 8 below, on the Jetson) still consume
+        # /imu/data as an external input over the Zenoh bridge.
 
-        # ── BLOCK 8: Localisation stack  (FAST-LIO2 + EKF1 + EKF2 + navsat) ──
+        # ── BLOCK 7: ZED2i camera  (RGB-D + stereo + IMU) ──────────────────────
+        # Requires the zed_wrapper package (Stereolabs ZED SDK +
+        # zed-ros2-wrapper: https://github.com/stereolabs/zed-ros2-wrapper),
+        # installed directly on the Jetson (same pattern as hesai_ros_driver —
+        # not vendored in this repo). CONFIRMED this is the actual driver in
+        # use on the real robot. Still not yet run end-to-end in this repo's
+        # launch — confirm topics with `ros2 topic list` on first real run.
+        #
+        # Publishes (default camera_name/namespace "zed", node_name "zed_node"):
+        #   /zed/zed_node/rgb/image_rect_color   — RGB (recording / visual tasks)
+        #   /zed/zed_node/depth/depth_registered — depth map
+        #   /zed/zed_node/left/image_rect_color  — left rectified  (VSLAM input)
+        #   /zed/zed_node/right/image_rect_color — right rectified (VSLAM input)
+        #   /zed/zed_node/imu/data               — 6-DOF IMU
+        #
+        # See _zed_launch() above for why this is an OpaqueFunction and why
+        # publish_urdf/publish_tf/publish_map_tf are forced false.
+        OpaqueFunction(function=_zed_launch, args=[use_zed]),
+
+        # ── BLOCK 8: Localisation stack  (FAST-LIO2 + single EKF + NDT-OMP) ──
         # Delegates to localization.launch.py with fixed runtime arguments.
         # use_rviz is suppressed here — BLOCK 12 manages the single shared
         # RViz instance to avoid duplicate visualisation windows on screen.
+        # NOTE: localization.launch.py no longer takes a use_gps argument —
+        # map->odom is now provided by NDT-OMP matching against the offline
+        # LIO-SAM map (GPS/navsat_transform was dropped; see the launch
+        # file's module docstring for why).
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(
@@ -275,7 +362,6 @@ def generate_launch_description():
             condition=IfCondition(use_localization),
             launch_arguments={
                 'mode':        'runtime',
-                'use_gps':     'true',
                 'config_file': fastlio_config,
                 'use_rviz':    'false',    # master owns the single RViz instance
             }.items(),
@@ -354,9 +440,10 @@ def generate_launch_description():
 
         # ── BLOCK 12b: Lidar odometry gate ─────────────────────────────────────
         # MUST run whenever localization is active — NOT only when zone_nav is on.
-        # EKF2 (ekf_local.yaml odom1_topic) subscribes to /lidar_odometry_gated.
-        # Without this node, EKF2 receives no lidar odometry and degrades to
-        # wheel-encoder + IMU fusion only, causing significant drift outdoors.
+        # The localization EKF (ekf_odom.yaml, odom1) subscribes to
+        # /lidar_odometry_gated. Without this node the EKF receives no lidar
+        # odometry input and degrades to wheel + IMU-angular-rate fusion only
+        # (dead reckoning), causing significant drift outdoors.
         # Default nav_mode is "INIT" which leaves the gate open (pass-through),
         # so localization accuracy is unaffected when zone_nav is disabled.
         Node(

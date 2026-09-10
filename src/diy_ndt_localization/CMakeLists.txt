@@ -22,8 +22,13 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(ndt_omp_ros2 REQUIRED)
-find_package(OpenMP REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common io filters registration)
+# ndt_omp_ros2's libndt_omp.a is compiled with -fopenmp (see its own
+# CMakeLists.txt), so anything linking that static archive needs OpenMP
+# symbols resolved at final-executable link time too — without this,
+# linking fails with "undefined reference to GOMP_loop_..." even though
+# find_package(ndt_omp_ros2) itself succeeds.
+find_package(OpenMP REQUIRED)
 
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})

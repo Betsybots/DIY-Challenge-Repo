@@ -38,10 +38,11 @@ ros2 launch challenge_bringup challenge_master.launch.py \
     use_joystick:="${DIY_USE_JOYSTICK:-false}" \
     use_nav2:="${DIY_USE_NAV2}" \
     use_zone_nav:="${DIY_USE_ZONE_NAV:-false}" \
-    use_realsense:="${DIY_USE_REALSENSE}" \
+    use_zed:="${DIY_USE_ZED}" \
     use_motor_driver:="${DIY_USE_MOTOR_DRIVER}" \
     use_hesai:="${DIY_USE_HESAI}" \
     use_micro_ros:="${DIY_USE_MICRO_ROS}" \
     use_localization:="${DIY_USE_LOCALIZATION}" \
+    use_cmd_vel_mux:="${DIY_USE_CMD_VEL_MUX:-true}" \
     mux_mode:="${DIY_MUX_MODE}" \
     fastlio_config:="${DIY_FASTLIO_CONFIG:-fast_lio_hesai_qt64.yaml}"

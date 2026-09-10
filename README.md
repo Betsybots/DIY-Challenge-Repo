@@ -41,17 +41,16 @@ DIY-Challenge-Repo/
 │   ├── challenge_bringup/      ← Top-level launch, Nav2 config, maps, RViz configs
 │   ├── diy_cmd_vel_mux/        ← Priority-based velocity multiplexer (joy / nav / e-stop)
 │   ├── diy_estop_controller/   ← STM32 heartbeat watchdog / e-stop
-│   ├── diy_localization/       ← FAST-LIO2 + dual EKF fusion (wheel+IMU → lidar)
+│   ├── diy_localization/       ← FAST-LIO2 + single EKF fusion (wheel+IMU rate+lidar → /odometry/filtered)
 │   ├── diy_motor_control_legacy/ ← Differential drive motor controller (wheel odometry)
 │   ├── diy_robot_description/  ← URDF / robot_state_publisher
 │   ├── diy_sim/                ← Gazebo simulation world and plugins
+│   ├── fast_lio_ros2/          ← FAST-LIO2, Hesai QT64 fork (vendored from teammate repo LIO_Localization)
 │   └── plan_b/                 ← Autonomous motion plan executor (waypoint sequencer)
 ├── third_party_ws/src/         ← Git submodules (auto-cloned)
-│   ├── FAST_LIO/               ← Lidar-inertial odometry (runtime localization)
 │   ├── LIO-SAM/                ← Offline mapping with loop closure (prior map generation)
 │   ├── imu_utils_ros2_humble/  ← IMU Allan variance calibration
 │   ├── lidar_imu_calib/        ← Lidar↔IMU extrinsic calibration
-│   ├── livox_ros_driver2/      ← Hesai QT64 lidar driver
 │   └── ndt_omp_ros2/           ← NDT-OMP scan matching (map-based localization)
 ├── scripts/                    ← Operational and test shell scripts
 ├── profiles/                   ← Device environment files
@@ -59,6 +58,18 @@ DIY-Challenge-Repo/
 ├── docs/                       ← PDF guides + source generators
 └── setup.sh                    ← One-command first-time setup
 ```
+
+> `fast_lio_ros2` replaces the old generic `third_party_ws/src/FAST_LIO` submodule
+> (hku-mars/FAST_LIO) as the runtime odometry source — see
+> [docs/reuse_plan_step1.md](docs/reuse_plan_step1.md) for why.
+>
+> The Hesai QT64 lidar driver (`hesai_ros_driver`) is NOT vendored anywhere in
+> this repo — it's a separate overlay workspace that already lives directly on
+> the Jetson (see §5 below and `docs/installation_setup.html`). The
+> `third_party_ws/src/livox_ros_driver2` submodule (for Livox-brand lidars —
+> different hardware) that used to be here was unused dead weight (zero real
+> code/build dependencies anywhere in this repo) and has been removed.
+
 
 ---
 
@@ -68,7 +79,7 @@ DIY-Challenge-Repo/
 |-----------|------|
 | Compute | NVIDIA Jetson Orin Nano (8 GB, JetPack 6.x) |
 | Lidar | Hesai QT64 (64-beam, 10 Hz, Ethernet) |
-| Camera / IMU | Intel RealSense D435i |
+| Camera / IMU | Stereolabs ZED2i |
 | Motor controller | STM32 via micro-ROS (USB serial) |
 | Encoders | Dead-wheel encoders (non-driven, slip-free odometry) |
 
@@ -111,6 +122,8 @@ The **[DIY_Challenge_Robot_Guide.pdf](docs/DIY_Challenge_Robot_Guide.pdf)** is t
 
 ## Scripts Overview
 
+> **Full usage guide:** [docs/testing_guide.md](docs/testing_guide.md) — detailed, living reference for every script/launch file/profile: when to run what, on which device, and current known caveats. Update it as issues are found during testing.
+
 | Script | Purpose |
 |--------|---------|
 | `setup.sh [PROFILE]` | First-time setup: submodules → patches → rosdep → build |
@@ -127,6 +140,8 @@ The **[DIY_Challenge_Robot_Guide.pdf](docs/DIY_Challenge_Robot_Guide.pdf)** is t
 | `scripts/test_step2_fused_odom.sh [--viz rviz\|foxglove] [PROFILE]` | Test wheel odom + IMU EKF fusion |
 | `scripts/test_step3_fastlio.sh [--viz rviz\|foxglove] [PROFILE]` | Test FAST-LIO2 lidar odometry |
 | `scripts/test_step4_motion_plan.sh [--viz rviz\|foxglove] [fastlio\|fused] [PROFILE]` | Autonomous motion plan demo |
+| `scripts/generate_course_pgm.py` | Generate a Nav2 map + zone waypoints from the official course diagram |
+| `scripts/register_zones_to_map.py` | Re-project diagram-derived zone waypoints onto a real, LIO-SAM-generated map (once available from an arena practice/mapping pass) |
 
 ---
 
@@ -145,18 +160,20 @@ source scripts/env.sh raspi    # Raspberry Pi — lightweight subset
 
 ## Third-Party Packages
 
-These are managed as **git submodules** — they are not committed inline to keep the repo small. `setup.sh` initialises them and applies three build-fix patches automatically.
+These are managed as **git submodules** — they are not committed inline to keep the repo small. `setup.sh` initialises them and applies two build-fix patches automatically.
 
 | Package | Purpose | Branch |
 |---------|---------|--------|
-| [FAST_LIO](https://github.com/hku-mars/FAST_LIO) | Lidar-inertial odometry (primary SLAM) | `ROS2` |
 | [LIO-SAM](https://github.com/TixiaoShan/LIO-SAM) | Offline mapping with loop closure | `ros2` |
 | [imu_utils_ros2_humble](https://github.com/HYD-PG/imu_utils_ros2_humble) | IMU noise calibration | `main` |
 | [lidar_imu_calib](https://github.com/KnightSnape/lidar_imu_calib) | Lidar↔IMU extrinsic calibration | `main` |
-| [livox_ros_driver2](https://github.com/Livox-SDK/livox_ros_driver2) | Hesai QT64 lidar driver | `master` |
 | [ndt_omp_ros2](https://github.com/rsasaki0109/ndt_omp_ros2) | NDT-OMP scan matching | `humble` |
 
-Build-fix patches for `lidar_imu_calib`, `livox_ros_driver2`, and `ndt_omp_ros2` live in `patches/` and are applied by `setup.sh`.
+Build-fix patches for `lidar_imu_calib` and `ndt_omp_ros2` live in `patches/` and are applied by `setup.sh`.
+
+> The old `FAST_LIO` submodule (hku-mars/FAST_LIO, generic) was removed —
+> runtime odometry now comes from `src/fast_lio_ros2/`, a Hesai QT64-specific
+> fork vendored directly from the teammate repo `LIO_Localization`.
 
 ---
 

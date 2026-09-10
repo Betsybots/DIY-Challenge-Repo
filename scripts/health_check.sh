@@ -62,9 +62,9 @@ echo ""
 echo "── Required Nodes ──"
 REQUIRED_NODES=()
 [[ "${DIY_USE_HESAI}" == "true" ]]    && REQUIRED_NODES+=("/hesai_ros_driver")
-[[ "${DIY_USE_MICRO_ROS}" == "true" ]] && REQUIRED_NODES+=("/micro_ros_agent")
+[[ "${DIY_USE_MICRO_ROS}" == "true" ]] && REQUIRED_NODES+=("/micro_ros_agent" "/estop_controller_node")
 [[ "${DIY_USE_LOCALIZATION}" == "true" ]] && REQUIRED_NODES+=("/fastlio_mapping" "/ekf_filter_node_odom")
-REQUIRED_NODES+=("/cmd_vel_mux_node" "/estop_controller_node")
+[[ "${DIY_USE_CMD_VEL_MUX:-true}" == "true" ]] && REQUIRED_NODES+=("/cmd_vel_mux_node")
 
 LIVE_NODES=$(ros2 node list 2>/dev/null || echo "")
 for node in "${REQUIRED_NODES[@]}"; do
@@ -103,13 +103,24 @@ echo ""
 
 # ── 5. E-stop state ───────────────────────────────────────────────────────────
 echo "── E-Stop State ──"
-ESTOP_MSG=$(timeout 2 ros2 topic echo --once /estop_active 2>/dev/null || echo "")
-if echo "${ESTOP_MSG}" | grep -q "data: false"; then
-    _pass "E-stop is INACTIVE (safe to proceed)"
-elif echo "${ESTOP_MSG}" | grep -q "data: true"; then
-    _fail "E-stop is ACTIVE — resolve before launch!"
+if [[ "${DIY_USE_MICRO_ROS}" == "true" ]]; then
+    ESTOP_MSG=$(timeout 2 ros2 topic echo --once /estop_active 2>/dev/null || echo "")
+    if echo "${ESTOP_MSG}" | grep -q "data: false"; then
+        _pass "E-stop is INACTIVE (safe to proceed)"
+    elif echo "${ESTOP_MSG}" | grep -q "data: true"; then
+        _fail "E-stop is ACTIVE — resolve before launch!"
+    else
+        _fail "E-stop topic /estop_active not responding"
+    fi
 else
-    _fail "E-stop topic /estop_active not responding"
+    # No STM32 on this robot (DIY_USE_MICRO_ROS=false) — diy_estop_controller
+    # is not launched, so /estop_active is never published (this is expected
+    # and safe; cmd_vel_mux defaults _estop_active=False and only latches
+    # True on an actual received message — see cmd_vel_mux_node.py). The real
+    # hardware e-stop here is an RJ45 break-loop wired directly into motor
+    # power, independent of ROS entirely — this script cannot check that.
+    _warn "No STM32 on this robot — /estop_active is not published by design."
+    _warn "Verify the RJ45 break-loop e-stop hardware manually before running."
 fi
 echo ""
 

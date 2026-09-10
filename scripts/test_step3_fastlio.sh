@@ -46,10 +46,14 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-# Node 1: FAST-LIO2 (localization launch in runtime mode, no EKF, no GPS)
+# Node 1: localization stack (mode:=runtime launches FAST-LIO2 + the merged
+# EKF + NDT-OMP together — see localization.launch.py's docstring; there is
+# no "FAST-LIO2 only" mode). NDT-OMP will fail to load its map until
+# GlobalMap.pcd exists at the path configured in ndt_localizer.yaml (known,
+# pre-existing issue — see docs/pipeline_diagram for status); this does not
+# block FAST-LIO2 or the EKF, which run in separate processes.
 ros2 launch diy_localization localization.launch.py \
     mode:=runtime \
-    use_gps:=false \
     use_rviz:=false &
 PID_FASTLIO=$!
 

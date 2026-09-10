@@ -25,6 +25,4 @@ ros2 launch challenge_bringup challenge_master.launch.py use_nav2:=true use_joys
 
 ## Pending (Next Step)
 
-- Add `diy_cmd_vel_mux` to combine `/cmd_vel_joy` and `/cmd_vel_nav`
-- Add E-stop lockout path from STM32
 - Add RTK + EKF stack from SAD

@@ -78,7 +78,6 @@ apply_patch() {
 }
 
 apply_patch lidar_imu_calib
-apply_patch livox_ros_driver2
 apply_patch ndt_omp_ros2
 
 # ── 3. Install ROS dependencies ───────────────────────────────────────────────
@@ -102,14 +101,28 @@ source scripts/env.sh "$PROFILE"
 # Go up to the enclosing ros2_ws if this repo is inside one
 ROS2_WS="$(cd "$REPO_ROOT/../.." && pwd)"
 if [[ -f "$ROS2_WS/src/$(basename "$REPO_ROOT")/src/challenge_bringup/package.xml" ]]; then
-  # We're inside ~/ros2_ws/src/DIY-Challenge-Repo — build from the ws root
+  # We're inside ~/ros2_ws/src/DIY-Challenge-Repo — build from the ws root.
+  # No --base-paths restriction here: the enclosing workspace legitimately
+  # may contain sibling repos/packages under ws/src that should be
+  # discoverable too.
   cd "$ROS2_WS"
+  BASE_PATHS_ARGS=()
 else
-  # Standalone clone — build from repo root
+  # Standalone clone — build from repo root.
+  # IMPORTANT: restrict discovery to src/ only. Without --base-paths, a
+  # plain `colcon build` from the repo root also (re)discovers everything
+  # under third_party_ws/src/ and can silently build a second, separately
+  # -installed copy of a third-party package (e.g. ndt_omp_ros2) straight
+  # into ./install — bypassing whatever patches/build fixes were applied
+  # when third_party_ws was built properly via its own
+  # `cd third_party_ws && colcon build`. That stray copy can then shadow
+  # the correct one for anything (e.g. diy_ndt_localization) that finds it
+  # via CMAKE_PREFIX_PATH, causing confusing link failures.
   cd "$REPO_ROOT"
+  BASE_PATHS_ARGS=(--base-paths src)
 fi
 
-colcon build --symlink-install \
+colcon build --symlink-install "${BASE_PATHS_ARGS[@]}" \
   --packages-select \
     challenge_bringup \
     diy_cmd_vel_mux \

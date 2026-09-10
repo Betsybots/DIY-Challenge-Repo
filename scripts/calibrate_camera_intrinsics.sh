@@ -2,6 +2,13 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # scripts/calibrate_camera_intrinsics.sh — RealSense D435i intrinsic calibration
 # ══════════════════════════════════════════════════════════════════════════════
+# NEEDS UPDATE FOR ZED2i: this script still targets an Intel RealSense D435i
+# (hardcoded topics, `ros2 launch realsense2_camera rs_launch.py`). This
+# robot's actual camera is a ZED2i, which normally uses Stereolabs' own ZED
+# SDK calibration tools rather than this checkerboard/camera_calibration
+# flow — needs a team decision on approach, not just a topic-name swap. Not
+# fixed in this pass.
+#
 # Guides you through a checkerboard-based intrinsic calibration of the D435i
 # colour or IR camera using the ROS 2 camera_calibration package.
 #

@@ -2,15 +2,17 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # scripts/test_step4_motion_plan.sh — Step 4: Autonomous motion plan demo
 # ══════════════════════════════════════════════════════════════════════════════
-# Runs the motion plan executor against either FAST-LIO2 or fused odometry.
+# Runs the motion plan executor against either FAST-LIO2-only or fused odometry.
 # Demonstrates the Aug 14 requirement: forward → 90° turn → forward.
 #
 # Usage:
 #   ./scripts/test_step4_motion_plan.sh [odom_source] [profile]
 #
-#   odom_source:
-#     fastlio  — use /lidar_odometry  (FAST-LIO2 only, no EKF)  [default]
-#     fused    — use /odometry/filtered (FAST-LIO2 + IMU EKF)
+#   odom_source (selects which pose topic feeds the motion plan executor —
+#   both FAST-LIO2 and the fused EKF are ALWAYS running either way, since
+#   localization.launch.py's runtime mode starts the full stack together):
+#     fastlio  — use /lidar_odometry  (raw FAST-LIO2 output)  [default]
+#     fused    — use /odometry/filtered (wheel+IMU+lidar EKF output)
 #
 # Examples:
 #   ./scripts/test_step4_motion_plan.sh fastlio jetson
@@ -77,22 +79,26 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-# Node 1: FAST-LIO2 (always needed for lidar odometry)
+# Node 1: localization stack — always needed for lidar odometry.
+# mode:=runtime launches FAST-LIO2 + the merged EKF (ekf_odom.yaml) +
+# NDT-OMP together (see localization.launch.py's docstring: there is no
+# "FAST-LIO2 only" mode). 'fastlio' vs 'fused' below just selects which of
+# the two pose topics this already-running stack produces feeds the motion
+# plan executor. NDT-OMP will fail to load its map until GlobalMap.pcd
+# exists (known, pre-existing issue) — this does not block FAST-LIO2/EKF.
 ros2 launch diy_localization localization.launch.py \
     mode:=runtime \
-    use_gps:=false \
     use_rviz:=false &
 PID_FASTLIO=$!
 
-# Node 2: EKF (only needed for fused mode)
-if [[ "${ODOM_SOURCE}" == "fused" ]]; then
-    EKF_CONFIG="${REPO_ROOT}/src/diy_localization/config/ekf_local.yaml"
-    ros2 run robot_localization ekf_node \
-        --ros-args \
-        --params-file "${EKF_CONFIG}" &
-    PID_EKF=$!
-    echo "[test_step4] EKF started (PID=${PID_EKF})"
-fi
+# Node 2: EKF — provided automatically by localization.launch.py above
+# (mode:=runtime always includes the single merged EKF from ekf_odom.yaml
+# fusing wheel+IMU+lidar, publishing /odometry/filtered — see
+# diy_localization/config/ekf_odom.yaml's header for the architecture).
+# No separate ekf_node launch needed here: manually launching a second one
+# under the same node name (ekf_filter_node_odom) as localization.launch.py's
+# built-in EKF would collide. 'fused' vs 'fastlio' just selects which pose
+# topic feeds the motion plan executor below.
 
 # Node 3: Motor controller
 ros2 run diy_motor_control_legacy diff-drive-main &
