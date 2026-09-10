@@ -8,7 +8,8 @@ DATA FLOW (runtime):
 ──────────────────────────────────────────────────────────────────────────────
   /hesai/points  ──╮
   /imu/data      ──╰─ FAST-LIO2  ──→  /lidar_odometry ──╮
-                                                          │
+                                       /cloud_registered_body │
+                                                         │
   /wheel_odom    ──────────────────────────────────────╮ │
   /imu/data (angular rate only) ────────────────────────╮│ │
                                                          EKF (ekf_odom.yaml, 50 Hz)
@@ -23,16 +24,25 @@ DATA FLOW (runtime):
   predict step stays accurate on wheel-slip terrain (gravel/pothole/bumps
   zones) between FAST-LIO2's ~10 Hz lidar corrections.
 
-  /hesai/points  ──── NDT-OMP (ndt_localizer_node) ──→  map → odom TF
-                      (matches scan against GlobalMap.pcd)
-                      →  /ndt_pose             [for optional EKF3 / monitoring]
+  /lidar_odometry ──╮
+  /cloud_registered_body ──╯── map_localizer (VGICP) ──→  map → odom TF
+                       (matches scan against a saved map, e.g. maps/refined_map.pcd;
+                        map must be loaded via trigger_map_relocalize.py's
+                        one-shot /relocalize call at startup — no auto-load)
+
+  Replaces the old NDT-OMP (diy_ndt_localization) approach — see
+  diy_localization/config/map_localizer.yaml's header for the full
+  rationale (NDT-OMP had a real TF-composition bug: it broadcast the raw
+  scan-matched map→base_link pose directly as "map→odom", without ever
+  composing against the actual odom→base_link transform).
 
 WHY THIS REPLACES GPS:
 ──────────────────────
   GPS (navsat_transform) was used to anchor the map→odom TF.
   On our outdoor course GPS is unreliable (multipath, no RTK fix guarantee).
-  NDT-OMP gives us cm-accurate map→odom from our own LIO-SAM point cloud map —
-  no GPS dependency, works through the entire course including near metal structures.
+  map_localizer gives us cm-accurate map→odom from our own LIO-SAM/map_hba
+  point cloud map — no GPS dependency, works through the entire course
+  including near metal structures.
 
 WHY OpaqueFunction:
 ───────────────────
@@ -44,6 +54,10 @@ Arguments:
   mode           runtime | mapping   (default: runtime)
   config_file    FAST-LIO2 YAML name (default: fast_lio_hesai_qt64.yaml)
   use_rviz       true | false        (default: false)
+  map_pcd_path   Absolute path to the saved map .pcd for map_localizer
+                 (default: $DIY_ROS_WS/src/DIY-Challenge-Repo/maps/refined_map.pcd)
+  initial_x/y/z/yaw/pitch/roll   Initial pose guess for map_localizer's
+                 first relocalize call (default: 0.0, i.e. map origin)
 """
 
 import os
@@ -52,10 +66,8 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
-    IncludeLaunchDescription,
     OpaqueFunction,
 )
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch.conditions import IfCondition
@@ -123,24 +135,61 @@ def launch_setup(context, *args, **kwargs):
         ))
 
     # ─────────────────────────────────────────────────────────────────────────
-    # BLOCK 3 — NDT-OMP localization  (map → odom TF)
+    # BLOCK 3 — map_localizer  (map → odom TF via VGICP against a saved map)
     # ─────────────────────────────────────────────────────────────────────────
-    # Replaces the old GPS/navsat_transform/EKF2 approach.
-    # Loads GlobalMap.pcd and matches each Hesai scan to produce map→odom TF.
-    # This is the global position anchor — without it Nav2 cannot plan globally.
+    # Replaces the old NDT-OMP (diy_ndt_localization) approach — see
+    # diy_localization/config/map_localizer.yaml's header for the full
+    # rationale. Short version: NDT-OMP's publishTF() had a real TF-
+    # composition bug (broadcast raw map→base_link as if it were map→odom,
+    # with no odom→base_link lookup/composition at all — verified by
+    # reading the code, no tf2_ros::Buffer/TransformListener existed in
+    # that class despite the headers being included). map_localizer's own
+    # TF math was checked term-by-term and is correct: it composes
+    # map→odom = (map→body, from VGICP against the saved map) ×
+    # inverse(odom→body, from FAST-LIO2's own /Odometry) — the same pattern
+    # AMCL/every real localization node uses. diy_ndt_localization is kept
+    # in the repo (unused by this launch file) in case of rollback — see
+    # its own package header for the deprecation note.
     #
-    # Included as a separate launch file to keep concerns separated.
-    # The NDT node's config (map path, resolution, etc.) lives in
-    # diy_ndt_localization/config/ndt_localizer.yaml.
+    # map_localizer does NOT auto-load a map at startup: it only loads a PCD
+    # (and sets the initial pose guess) in response to a /relocalize service
+    # call — trigger_map_relocalize.py makes that call once, waiting for the
+    # service to come up first. Without it, map_localizer runs but silently
+    # never produces any output (no error, no crash — just permanently idle).
     if mode == "runtime":
-        ndt_launch_path = os.path.join(
-            get_package_share_directory("diy_ndt_localization"),
-            "launch",
-            "ndt_localization.launch.py",
-        )
-        nodes.append(IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(ndt_launch_path),
-            launch_arguments={"use_rviz": "false"}.items(),
+        map_pcd_path = LaunchConfiguration("map_pcd_path").perform(context)
+
+        nodes.append(Node(
+            package="map_localizer",
+            executable="map_localizer_node",
+            name="map_localizer_node",
+            output="screen",
+            parameters=[{"config_path": os.path.join(config_dir, "map_localizer.yaml")}],
+        ))
+
+        nodes.append(Node(
+            package="diy_localization",
+            executable="trigger_map_relocalize.py",
+            name="trigger_map_relocalize",
+            output="screen",
+            parameters=[{
+                "pcd_path": map_pcd_path,
+                # Robot assumed to start at map origin (start line) — same
+                # assumption diy_ndt_localization documented; override via
+                # this launch file's initial_x/y/z/yaw/pitch/roll args if
+                # the robot is ever started elsewhere on the map.
+                # NOTE: LaunchConfiguration.perform() always returns a str —
+                # must cast to float here, since trigger_map_relocalize.py
+                # declares these as double parameters. Passing the raw
+                # string raises rclpy.exceptions.InvalidParameterTypeException
+                # at node startup (confirmed by actually launching this).
+                "initial_x": float(LaunchConfiguration("initial_x").perform(context)),
+                "initial_y": float(LaunchConfiguration("initial_y").perform(context)),
+                "initial_z": float(LaunchConfiguration("initial_z").perform(context)),
+                "initial_yaw": float(LaunchConfiguration("initial_yaw").perform(context)),
+                "initial_pitch": float(LaunchConfiguration("initial_pitch").perform(context)),
+                "initial_roll": float(LaunchConfiguration("initial_roll").perform(context)),
+            }],
         ))
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -182,6 +231,29 @@ def generate_launch_description():
             default_value="false",
             description="Launch RViz with localization displays",
         ),
+        DeclareLaunchArgument(
+            "map_pcd_path",
+            default_value=(
+                os.path.join(
+                    os.environ.get("DIY_ROS_WS", ""),
+                    "src", "DIY-Challenge-Repo", "maps", "refined_map.pcd",
+                )
+                if os.environ.get("DIY_ROS_WS") else ""
+            ),
+            description=(
+                "Absolute path to the saved map .pcd for map_localizer "
+                "(produced by LIO_Localization's map_hba offline refinement). "
+                "Defaults to $DIY_ROS_WS/src/DIY-Challenge-Repo/maps/refined_map.pcd "
+                "when DIY_ROS_WS is set (see profiles/*.env) — override "
+                "explicitly if that doesn't match your checkout layout."
+            ),
+        ),
+        DeclareLaunchArgument("initial_x", default_value="0.0"),
+        DeclareLaunchArgument("initial_y", default_value="0.0"),
+        DeclareLaunchArgument("initial_z", default_value="0.0"),
+        DeclareLaunchArgument("initial_yaw", default_value="0.0"),
+        DeclareLaunchArgument("initial_pitch", default_value="0.0"),
+        DeclareLaunchArgument("initial_roll", default_value="0.0"),
         # All node construction deferred to launch_setup() for Python-level branching
         OpaqueFunction(function=launch_setup),
     ]

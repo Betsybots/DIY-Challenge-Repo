@@ -1,0 +1,61 @@
+# map_localizer.yaml — DIY Challenge 2026 (active runtime config)
+# ═══════════════════════════════════════════════════════════════
+# Vendored 2026-09-09 from teammate repo LIO_Localization, branch
+# `localizer_v2.2` (commit 7ffaab0), src/map_localizer/config/map_localizer.yaml
+# — see src/map_localizer/config/map_localizer.yaml (in this repo) for the
+# untouched, faithful mirror kept for future upstream diffing.
+#
+# WHY THIS REPLACES diy_ndt_localization (NDT-OMP) AS THE map→odom SOURCE:
+# The old NDT-OMP node (src/diy_ndt_localization) had a real bug: its
+# publishTF() broadcast the raw scan-matched map→base_link pose directly as
+# "map→odom" TF, without composing against the actual odom→base_link
+# transform (there was no tf2_ros::Buffer/TransformListener in that class at
+# all, despite the headers being included). Since odom→base_link is ALSO
+# published separately (by the EKF), that would double-apply the odom
+# offset the moment NDT-OMP was actually run — it never has been, because
+# it also can't even start yet (hardcoded GlobalMap.pcd path that doesn't
+# exist in this repo; see docs/reuse_plan_step1.md Step 6/8/10 for the full
+# history). map_localizer's own TF math was checked line-by-line and is
+# correct: it computes
+#   map→odom = (map→body, from ICP against the saved map)
+#              × inverse(odom→body, from FAST-LIO2's own /Odometry)
+# — the textbook-correct composition (same pattern AMCL/every real
+# localization node uses), so the resulting map→odom TF is trustworthy for
+# ANY downstream consumer (Nav2 or a custom controller — TF lookup doesn't
+# care who's asking) once a real map is loaded.
+#
+# odom_topic CHANGED from the vendored default "/Odometry" to
+# "/lidar_odometry": diy_localization/launch/localization.launch.py remaps
+# FAST-LIO2's hardcoded /Odometry topic to /lidar_odometry for consistent
+# naming across this repo. Since map_localizer syncs cloud+odom via
+# message_filters::ApproximateTime (both topics required before its
+# callback ever fires), leaving this at the vendored default would mean
+# map_localizer silently never processes a single scan — no error, just
+# permanently zero output. Re-check this if the remap in
+# localization.launch.py ever changes.
+cloud_topic: /cloud_registered_body
+odom_topic: /lidar_odometry
+map_frame: map
+local_frame: odom
+update_hz: 1.0
+
+rough_scan_resolution: 0.25
+rough_map_resolution: 0.25
+rough_max_iteration: 5
+rough_score_thresh: 0.2
+# VGICP's internal voxel covariance grid size (meters), separate from the
+# scan/map downsample resolution above.
+rough_vgicp_resolution: 1.0
+num_threads: 4
+
+refine_scan_resolution: 0.1
+refine_map_resolution: 0.1
+refine_max_iteration: 10
+refine_score_thresh: 0.1
+refine_vgicp_resolution: 0.5
+
+# CALIB: all resolution/iteration/threshold values above are the teammate's
+# own tuned defaults from LIO_Localization — not yet re-validated against
+# this course's specific map density/geometry. Revisit once a real
+# refined_map.pcd exists for THIS course (maps/refined_map.pcd currently in
+# this repo — confirm it's actually for this course, not a bench/test map).

@@ -3,6 +3,18 @@
   <name>diy_ndt_localization</name>
   <version>0.1.0</version>
   <description>
+    [DEPRECATED 2026-09-09 — kept for reference/rollback, not launched by
+    localization.launch.py or challenge_master.launch.py. Replaced by
+    map_localizer (see src/map_localizer, src/diy_localization/config/
+    map_localizer.yaml) after a real bug was found in this package's
+    publishTF(): it broadcast the raw scan-matched map-&gt;base_link pose
+    directly as "map-&gt;odom" TF, with no odom-&gt;base_link lookup/composition
+    at all (no tf2_ros::Buffer/TransformListener existed in the class
+    despite the headers being included) -- since odom-&gt;base_link is ALSO
+    published separately by the EKF, this would have double-applied the
+    odom offset the moment this node was actually run (it also could never
+    start anyway -- see the GlobalMap.pcd path issue below). See
+    docs/reuse_plan_step1.md Step 11 for the full writeup.]
     NDT-OMP based map-matching localization for the DIY Robot Challenge 2026.
     Loads GlobalMap.pcd produced by LIO-SAM, matches each incoming Hesai lidar
     scan, and publishes the map->odom transform consumed by Nav2.

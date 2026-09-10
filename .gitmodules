@@ -16,3 +16,7 @@
 	url = https://github.com/rsasaki0109/ndt_omp_ros2.git
 	branch = humble
 	ignore = dirty
+[submodule "third_party_ws/src/fast_gicp"]
+	path = third_party_ws/src/fast_gicp
+	url = https://github.com/SMRT-AIST/fast_gicp.git
+	branch = master

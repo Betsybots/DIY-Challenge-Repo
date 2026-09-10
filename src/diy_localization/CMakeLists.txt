@@ -8,4 +8,9 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(
+  PROGRAMS scripts/trigger_map_relocalize.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()

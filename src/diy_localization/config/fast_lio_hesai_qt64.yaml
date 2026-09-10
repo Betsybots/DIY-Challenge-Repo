@@ -11,38 +11,31 @@
 # decision, not a guess):
 #
 #   1. [RESOLVED 2026-09-04] common.imu_gyr_unit was "deg", now set to "rad".
-#      imu_can_interface (vendored at src/imu_can_interface, from
-#      ACEINNA_IMU_ROS2 develop) applies a DEG2RAD scale factor before
-#      publishing (see imu_node.cpp), so /imu/data angular_velocity is
-#      already rad/s by REP-103 — matching this analysis, a teammate with
-#      direct hands-on experience with this IMU confirmed the raw data is
-#      rad/s and changed the setting accordingly (not from an on-robot spin
-#      test — see scripts/verify_imu_gyr_unit.py if a future sensor/firmware
-#      change ever calls this into question again).
+#      The ACEINNA IMU driver (imu_can_interface, launched independently on
+#      the RPi — not vendored in this repo; see ACEINNA_IMU_ROS2 develop
+#      branch) applies a DEG2RAD scale factor before publishing, so
+#      /imu/data angular_velocity is already rad/s by REP-103 — matching
+#      this analysis, a teammate with direct hands-on experience with this
+#      IMU confirmed the raw data is rad/s and changed the setting
+#      accordingly (not from an on-robot spin test — see
+#      scripts/verify_imu_gyr_unit.py if a future sensor/firmware change
+#      ever calls this into question again).
 #      NOTE: ACEINNA_IMU_ROS2's develop branch also fixed an ~8x CAN
 #      angular-rate scale-factor bug (was decoding the wrong PGN's bit
 #      width/scale) — if any of this repo's prior FAST-LIO2 tuning was done
 #      against the old, buggy driver output, it may need redoing regardless
 #      of the deg/rad question.
 #
-#   2. mapping.extrinsic_R below has determinant -1.0 (a reflection, not a
-#      valid rotation — confirmed by running
-#      tools/check_config.py --config config/fast_lio_hesai_qt64.yaml, which
-#      FAILs this exact matrix). The file's own comments derive a different,
-#      determinant +1 matrix (Rx(-90°)) from a live accelerometer test just
-#      above it, but the active `extrinsic_R:` value doesn't match either
-#      that derivation or the "previous version" the comments call a
-#      transcription bug — it looks like a third, still-unresolved value.
-#      Needs a decision from whoever owns the IMU/LiDAR extrinsic
-#      calibration before this is trusted for autonomous nav.
-#      NOTE: the premise behind this comment block — that the IMU driver's
-#      own extrinsic rotation is "disabled" — is now CONFIRMED true:
-#      ACEINNA_IMU_ROS2's develop branch removed extrinsic handling from
-#      the driver entirely (imu_params.yaml's `extrinsic:` block and all
-#      matching imu_node.cpp/hpp code are gone), so /imu/data is
-#      unconditionally in the raw sensor frame. That part of the reasoning
-#      is sound; it's specifically the det-(-1) matrix below that still
-#      needs re-deriving.
+#   2. [RESOLVED 2026-09-09] mapping.extrinsic_R previously had determinant
+#      -1.0 (a reflection, not a valid rotation — confirmed by running
+#      tools/check_config.py --config config/fast_lio_hesai_qt64.yaml,
+#      which FAILed this exact matrix). Fixed by pulling the real, teammate-
+#      committed value from LIO_Localization branch `localizer_v2.2`
+#      (commit 7ffaab0), which changed this same matrix to plain identity
+#      (determinant +1) — see the inline comment right above the
+#      `extrinsic_R:` value below for the full note, including the
+#      remaining discrepancy with this file's own in-comment Rx(-90°)
+#      derivation that's worth re-verifying on hardware.
 #
 #   3. [RESOLVED 2026-09-04] preprocess.scan_line = 32 below is intentional,
 #      not a bug or a stale checker: confirmed by a teammate as one half of
@@ -112,7 +105,7 @@
             scan_line: 32
             timestamp_unit: 0            # 0-second, 1-millisecond, 2-microsecond, 3-nanosecond
             scan_rate: 10                # Hz
-            blind: 0.3                   # Blind zone of the LiDAR in meters (QT64 has a blind zone of ~1 m)
+            blind: 0.5                   # Blind zone of the LiDAR in meters (QT64 has a blind zone of ~1 m)
 
         mapping:
             acc_cov: 0.1
@@ -188,10 +181,28 @@
             #               0.0, 0.0, 1.0,
             #               0.0, -1.0, 0.0]
 
-            # Old values
+            # [RESOLVED 2026-09-09] Pulled from teammate's LIO_Localization
+            # branch `localizer_v2.2` (commit 7ffaab0), which fixed the old
+            # det=-1 matrix to plain identity below. This is a real,
+            # committed teammate fix (same branch that also added
+            # VGICP-based map_localizer improvements and IMU-callback
+            # threading fixes to laserMapping.cpp — see
+            # docs/reuse_plan_step1.md Step 10), so treat it as more
+            # authoritative than this file's own from-scratch Rx(-90°)
+            # derivation above.
+            # STILL FLAGGING: identity does NOT match the Rx(-90°) this
+            # file derives from the live-accelerometer/physical-mounting
+            # analysis above -- if that derivation's premises are still
+            # accurate (mounting unchanged since), an identity extrinsic_R
+            # would be wrong. Possible explanations: the physical IMU
+            # mounting was corrected since that derivation was written, or
+            # the driver-side extrinsic handling changed again. Re-verify
+            # with a live accelerometer reading (same method as the
+            # derivation above) before fully trusting this for autonomous
+            # nav — don't just take either value on faith.
             extrinsic_R: [1.0, 0.0, 0.0,
                           0.0, 1.0, 0.0,
-                          0.0, 0.0, -1.0]
+                          0.0, 0.0, 1.0]
 
 
         publish:

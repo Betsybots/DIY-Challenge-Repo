@@ -1,6 +1,25 @@
 /**
  * ndt_localizer_node.cpp
  * ─────────────────────────────────────────────────────────────────────────────
+ * ⚠ DEPRECATED 2026-09-09 — NOT launched by localization.launch.py or
+ * challenge_master.launch.py anymore. Kept in the repo for reference/
+ * rollback only. Replaced by map_localizer (src/map_localizer) after a
+ * real bug was found in publishTF() below: it broadcasts the raw scan-
+ * matched map→base_link pose (current_pose_matrix_, from NDT alignment)
+ * directly as the "map→odom" TF, with NO lookup/composition against the
+ * actual odom→base_link transform at all — there is no
+ * tf2_ros::Buffer/TransformListener anywhere in this class, despite the
+ * headers being included (tf2_ros/buffer.h, tf2_ros/transform_listener.h,
+ * both unused). Since odom→base_link is ALSO published separately by the
+ * EKF (see diy_localization/config/ekf_odom.yaml), running this node as-is
+ * would double-apply the odom offset onto the TF tree the moment it
+ * actually ran — it also could never start anyway due to the
+ * map_path below being a hardcoded machine-specific path that doesn't
+ * exist in this repo. map_localizer's TF composition
+ * (map→odom = map→body × inverse(odom→body)) was checked term-by-term and
+ * is correct — see docs/reuse_plan_step1.md Step 11 for the full writeup
+ * and the verification performed.
+ * ─────────────────────────────────────────────────────────────────────────────
  * NDT-OMP based map-matching localization node for Team Juggernauts 2026.
  *
  * WHAT THIS DOES:

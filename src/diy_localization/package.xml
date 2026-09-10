@@ -5,9 +5,11 @@
   <version>0.1.0</version>
   <description>
     Localization stack for DIY Challenge 2026.
-    Wraps FAST-LIO2 (LiDAR-inertial odometry) and robot_localization
-    (EKF1 local + EKF2 global with RTK GNSS) into a single launch file.
-    Also provides the LIO-SAM offline mapping launch for prior map generation.
+    Wraps FAST-LIO2 (LiDAR-inertial odometry), a single robot_localization EKF
+    (wheel + IMU angular-rate + gated lidar odometry -&gt; /odometry/filtered),
+    and map_localizer (VGICP relocalization against a saved map -&gt; map-&gt;odom
+    TF) into a single launch file. Also provides the LIO-SAM offline mapping
+    launch for prior map generation.
   </description>
   <maintainer email="team@example.com">DIY Challenge Team</maintainer>
   <license>Apache-2.0</license>
@@ -17,6 +19,9 @@
   <exec_depend>fast_lio_ros2</exec_depend>
   <exec_depend>lio_sam</exec_depend>
   <exec_depend>robot_localization</exec_depend>
+  <exec_depend>map_localizer</exec_depend>
+  <exec_depend>slam_interfaces</exec_depend>
+  <exec_depend>rclpy</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

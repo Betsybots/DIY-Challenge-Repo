@@ -1026,8 +1026,16 @@ public:
             cout << "~~~~"<<ROOT_DIR<<" doesn't exist" << endl;
 
         /*** ROS subscribe initialization ***/
-        sub_pcl_pc_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(lid_topic, rclcpp::SensorDataQoS(), standard_pcl_cbk);
-        sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, 10, imu_cbk);
+        // Sensor callbacks get their own (reentrant) group + a deeper IMU queue so the
+        // ~100-450ms scan-processing timer_callback (ICP/map_incremental, same executor)
+        // can never starve imu_cbk long enough to lose samples -- that starvation, not
+        // real IMU dropouts, was the actual cause of the max_imu_gap scan rejections
+        // (shared buffers are already mtx_buffer-protected, so concurrent callbacks are safe).
+        sensor_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+        rclcpp::SubscriptionOptions sensor_sub_opts;
+        sensor_sub_opts.callback_group = sensor_cb_group_;
+        sub_pcl_pc_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(lid_topic, rclcpp::SensorDataQoS(), standard_pcl_cbk, sensor_sub_opts);
+        sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, rclcpp::QoS(200), imu_cbk, sensor_sub_opts);
         pubLaserCloudFull_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
         pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
         pubLaserCloudEffect_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
@@ -1287,6 +1295,7 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pubPath_;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_pcl_pc_;
+    rclcpp::CallbackGroup::SharedPtr sensor_cb_group_;
 
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::TimerBase::SharedPtr timer_;
@@ -1308,7 +1317,13 @@ int main(int argc, char** argv)
 {
     rclcpp::init(argc, argv);
 
-    rclcpp::spin(std::make_shared<LaserMappingNode>());
+    // Multi-threaded so the sensor callback group (imu_cbk/standard_pcl_cbk) can keep
+    // draining IMU/LiDAR messages while the default group's timer_callback is busy
+    // doing ICP/map_incremental for the current scan (see callback group setup above).
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
+    auto node = std::make_shared<LaserMappingNode>();
+    executor.add_node(node);
+    executor.spin();
 
     if (rclcpp::ok())
         rclcpp::shutdown();

@@ -98,6 +98,15 @@ info "Step 5/5 — Building DIY packages..."
 cd "$REPO_ROOT"
 source scripts/env.sh "$PROFILE"
 
+# This list must include every repo-local package that challenge_master.launch.py
+# (or anything it includes, like localization.launch.py) references at runtime
+# via Node(package=...)/get_package_share_directory(...) — NOT just the ones
+# with compiled C++. A package missing here builds fine (setup.sh reports
+# success) but then fails at `ros2 launch` time with "package not found",
+# since colcon --packages-select does not auto-include exec_depend packages.
+# diy_zone_nav, fast_lio_ros2, slam_interfaces, map_localizer were all found
+# missing from this list this way — confirmed by actually removing their
+# install/ dirs and re-running the build, then launching for real.
 # Go up to the enclosing ros2_ws if this repo is inside one
 ROS2_WS="$(cd "$REPO_ROOT/../.." && pwd)"
 if [[ -f "$ROS2_WS/src/$(basename "$REPO_ROOT")/src/challenge_bringup/package.xml" ]]; then
@@ -128,6 +137,10 @@ colcon build --symlink-install "${BASE_PATHS_ARGS[@]}" \
     diy_cmd_vel_mux \
     diy_estop_controller \
     diy_robot_description \
+    diy_zone_nav \
+    fast_lio_ros2 \
+    slam_interfaces \
+    map_localizer \
     diy_localization 2>&1 | tail -20
 
 info ""
