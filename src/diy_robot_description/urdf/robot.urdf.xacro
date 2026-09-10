@@ -3,19 +3,25 @@
   DIY Challenge 2026 — Robot Description
   ========================================
   Frame conventions follow REP-103 and REP-105.
-  All extrinsics below are PLACEHOLDER values.
   Replace every "CALIB:" comment with measured/calibrated values
   before running autonomous navigation.
 
-  Frame tree (required by Nav2 & FAST-LIO2):
+  Frame tree (required by FAST-LIO2 + map_localizer):
     map
-     └── odom            (published by navsat_transform / EKF2)
-          └── base_footprint  (published by EKF2 via /odometry/filtered)
+     └── odom            (published by map_localizer — VGICP against a saved map)
+          └── base_footprint  (published by the single EKF via /odometry/filtered)
                └──base_link  (published by URDF via robot_state_publisher)
-                    ├── lidar_link   <- fixed, from lidar_imu_calib
-                    ├── imu_link     <- fixed, from lidar_imu_calib
-                    ├── camera_link  <- fixed, from cam_lidar_calib
-                    └── gps_link     <- fixed, measured lever arm
+                    ├── lidar_link   <- REAL, measured offset (see lidar.urdf.xacro)
+                    ├── imu_link     <- REAL, measured offset (see imu.urdf.xacro)
+                    ├── camera_link  <- NOT YET DEFINED in this file — see
+                    │                  docs/reuse_plan_step1.md open item.
+                    │                  Camera is ZED2i, not RealSense.
+                    │                  zed_wrapper's own publish_tf is
+                    │                  currently disabled assuming this file
+                    │                  covers camera_link — it doesn't, so
+                    │                  base_link→camera_link has NO
+                    │                  publisher at all right now.
+                    └── (no gps_link — this robot has no GPS hardware)
 
   Robot body: 406 mm L × 406 mm W × 406 mm H (16" × 16" × 16")
   All dimensions in metres, angles in radians.

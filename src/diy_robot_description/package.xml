@@ -5,10 +5,13 @@
   <version>0.1.0</version>
   <description>
     Robot URDF and static TF tree for DIY Challenge 2026.
-    Defines base_link, lidar_link (Hesai QT64), imu_link (dedicated IMU),
-    camera_link (RealSense D435i), and gps_link (RTK antenna).
-    Extrinsic transforms are PLACEHOLDER — replace with calibration results
-    from lidar_imu_calib and cam_lidar_calib before autonomous operation.
+    Defines base_link, lidar_link (Hesai QT64, real measured offset),
+    imu_link (dedicated IMU, real measured offset). camera_link (ZED2i,
+    NOT RealSense) is not yet defined in the active robot.urdf.xacro —
+    see docs/reuse_plan_step1.md for the open item. No gps_link — this
+    robot has no GPS hardware at all.
+    Extrinsic transforms for lidar/imu are real measured values; anything
+    still marked CALIB: in the xacro is still a placeholder.
   </description>
   <maintainer email="team@example.com">DIY Challenge Team</maintainer>
   <license>Apache-2.0</license>
