@@ -40,7 +40,24 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'map_yaml',
-            description='Absolute path to the saved map YAML file.',
+            default_value=(
+                os.environ.get('DIY_MAP_YAML')
+                or (
+                    os.path.join(
+                        os.environ.get('DIY_ROS_WS', ''),
+                        'src', 'DIY-Challenge-Repo', 'maps', 'global_map_2_smooth.yaml',
+                    )
+                    if os.environ.get('DIY_ROS_WS') else ''
+                )
+            ),
+            description=(
+                'Absolute path to the saved map YAML file (nav2_map_server format). '
+                'Defaults to $DIY_MAP_YAML if set, else '
+                '$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/global_map_2_smooth.yaml '
+                '(see profiles/*.env for DIY_ROS_WS) — this changes often as course '
+                'maps evolve, so override with map_yaml:=... or export DIY_MAP_YAML '
+                'rather than editing this default.'
+            ),
         ),
         DeclareLaunchArgument(
             'use_sim_time', default_value='false',
@@ -59,8 +76,12 @@ def generate_launch_description():
             description='Minimum static-obstacle clearance for A* in meters.',
         ),
         DeclareLaunchArgument(
-            'cmd_vel_topic', default_value='/cmd_vel',
-            description='Use /cmd_vel in simulation and /cmd_vel_nav on hardware.',
+            'cmd_vel_topic', default_value='/cmd_vel_nav',
+            description=(
+                'Defaults to /cmd_vel_nav (hardware — read by cmd_vel_mux_node '
+                'for AUTONOMOUS mode), matching base_frame/use_sim_time above. '
+                'Override to /cmd_vel for simulation.'
+            ),
         ),
         DeclareLaunchArgument(
             'lookahead_distance', default_value='0.2',

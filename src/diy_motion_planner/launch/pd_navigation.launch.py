@@ -85,7 +85,24 @@ def generate_launch_description():
 
         DeclareLaunchArgument(
             'map_yaml',
-            description='Absolute path to the saved map YAML file.'
+            default_value=(
+                os.environ.get('DIY_MAP_YAML')
+                or (
+                    os.path.join(
+                        os.environ.get('DIY_ROS_WS', ''),
+                        'src', 'DIY-Challenge-Repo', 'maps', 'global_map_2_smooth.yaml',
+                    )
+                    if os.environ.get('DIY_ROS_WS') else ''
+                )
+            ),
+            description=(
+                'Absolute path to the saved map YAML file (nav2_map_server format). '
+                'Defaults to $DIY_MAP_YAML if set, else '
+                '$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/global_map_2_smooth.yaml '
+                '(see profiles/*.env for DIY_ROS_WS) — this changes often as course '
+                'maps evolve, so override with map_yaml:=... or export DIY_MAP_YAML '
+                'rather than editing this default.'
+            ),
         ),
 
         # --------------------------------------------------------
@@ -137,13 +154,15 @@ def generate_launch_description():
 
         DeclareLaunchArgument(
             'cmd_vel_topic',
-            default_value='/cmd_vel',
+                    default_value='/cmd_vel_nav',
             description=(
-                'PD velocity output topic. '
-                'Use /cmd_vel in simulation and '
-                '/cmd_vel_nav on hardware.'
-            )
-        ),
+                        'PD velocity output topic. Defaults to /cmd_vel_nav '
+                        '(hardware — this is what cmd_vel_mux_node reads for '
+                        'AUTONOMOUS mode), matching base_frame/use_sim_time above '
+                        'which also default to their hardware values. '
+                        'Override to /cmd_vel for simulation.'
+                    )
+                ),
 
         # --------------------------------------------------------
         # PD gains

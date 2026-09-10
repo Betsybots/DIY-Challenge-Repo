@@ -29,6 +29,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Path
 from rclpy.node import Node
+from std_msgs.msg import Bool
 from visualization_msgs.msg import Marker
 
 from tf2_ros import Buffer, TransformListener
@@ -175,6 +176,17 @@ class PDMotionPlanner(Node):
         self.lookahead_marker_pub = self.create_publisher(
             Marker,
             '/pd/lookahead_marker',
+            10
+        )
+
+        # Published once, exactly when goal_distance <= goal_tolerance below.
+        # Added so an external waypoint sequencer (or anything else) can
+        # detect "goal reached" without polling logs or re-deriving distance
+        # itself — previously this was a log-only event with no ROS signal
+        # at all, meaning nothing could react to it.
+        self.goal_reached_pub = self.create_publisher(
+            Bool,
+            '/pd/goal_reached',
             10
         )
 
@@ -348,6 +360,8 @@ class PDMotionPlanner(Node):
                 f'Goal reached! '
                 f'Distance = {goal_distance:.3f} m'
             )
+
+            self.goal_reached_pub.publish(Bool(data=True))
 
             # Explicit zero command.
             self.stop_robot()

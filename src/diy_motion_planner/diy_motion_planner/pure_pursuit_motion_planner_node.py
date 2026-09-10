@@ -9,6 +9,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Path
 from rclpy.node import Node
+from std_msgs.msg import Bool
 from tf2_ros import Buffer, TransformListener
 from visualization_msgs.msg import Marker
 
@@ -67,6 +68,13 @@ class PurePursuitMotionPlanner(Node):
         self.lookahead_marker_pub = self.create_publisher(
             Marker, '/pd/lookahead_marker', 10
         )
+        # See pd_motion_planner_node.py's matching publisher for why this
+        # exists — lets an external waypoint sequencer react to "goal
+        # reached" without polling; previously this event had no ROS signal
+        # at all in either controller.
+        self.goal_reached_pub = self.create_publisher(
+            Bool, '/pd/goal_reached', 10
+        )
         self.global_plan = None
         self.timer = self.create_timer(0.1, self.control_loop)
 
@@ -106,6 +114,7 @@ class PurePursuitMotionPlanner(Node):
 
         if math.hypot(final_pose.pose.position.x - robot_x,
                       final_pose.pose.position.y - robot_y) <= self.goal_tolerance:
+            self.goal_reached_pub.publish(Bool(data=True))
             self.stop_robot()
             self.global_plan = None
             return

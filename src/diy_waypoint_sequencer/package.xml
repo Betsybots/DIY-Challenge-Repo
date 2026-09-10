@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>diy_waypoint_sequencer</name>
+  <version>0.1.0</version>
+  <description>
+    Standalone, optional automated goal-pose sequencer for the custom
+    A* + PD/pure-pursuit navigation stack (diy_planning / diy_motion_planner).
+    Publishes /goal_pose in sequence from a simple waypoints YAML, advancing
+    on /pd/goal_reached. Deliberately has ZERO dependency on diy_zone_nav —
+    if this node isn't run, /goal_pose can still be published manually
+    (RViz "2D Goal Pose", or ros2 topic pub) with no code changes anywhere
+    else in the stack. See docs/reuse_plan_step1.md for the design rationale.
+  </description>
+  <maintainer email="team@example.com">DIY Challenge Team</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf_transformations</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
