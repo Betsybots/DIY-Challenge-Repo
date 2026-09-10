@@ -5,6 +5,8 @@ ROS 2 Humble · Jetson Orin Nano · Hesai QT64 · FAST-LIO2 · LIO-SAM · Nav2
 Autonomous robot software stack for the DIY Robot Challenge 2026.  
 Full documentation: **[docs/DIY_Challenge_Robot_Guide.pdf](docs/DIY_Challenge_Robot_Guide.pdf)**  
 GPU / CUDA guide: **[docs/Jetson_GPU_Guide.pdf](docs/Jetson_GPU_Guide.pdf)**
+Fresh-clone-to-running-localization walkthrough: **[docs/Jetson_Bringup_Guide.pdf](docs/Jetson_Bringup_Guide.pdf)** (source: [docs/jetson_bringup_guide.md](docs/jetson_bringup_guide.md))
+Custom nav stack design & zone_nav decoupling: **[docs/Custom_Nav_Stack_Design.pdf](docs/Custom_Nav_Stack_Design.pdf)** (source: [docs/custom_nav_stack_design.md](docs/custom_nav_stack_design.md))
 
 ---
 

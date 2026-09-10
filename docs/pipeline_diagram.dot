@@ -2,7 +2,7 @@ digraph DIY_Challenge_Pipeline {
   rankdir=TB;
   fontname="Helvetica";
   labelloc="t";
-  label=<<b>DIY Challenge Robot — Current Pipeline State (2026-09-04)</b><br/><font point-size="11">Green = tested working on hardware &#160;&#160; Yellow = wired in code, never run end-to-end &#160;&#160; Red = known-broken / unresolved &#160;&#160; Dashed = not yet integrated / external</font>>;
+  label=<<b>DIY Challenge Robot — Current Pipeline State (2026-09-10)</b><br/><font point-size="11">Green = tested working on hardware &#160;&#160; Yellow = wired in code, never run end-to-end &#160;&#160; Red = known-broken / unresolved &#160;&#160; Dashed = not yet integrated / external</font>>;
   node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled"];
   edge [fontname="Helvetica" fontsize=9];
 
@@ -37,25 +37,36 @@ digraph DIY_Challenge_Pipeline {
     style=filled; color="#f4e9db"; fontsize=13; fontcolor="#5c3a1a";
 
     hesai   [label="hesai_ros_driver\n(external, on Jetson)\n⚠ topic name unconfirmed:\n/hesai/points vs /lidar_points" fillcolor="#ef9a9a"];
-    zed     [label="ZED2i camera\n(zed_wrapper — CONFIRMED:\nstereolabs/zed-ros2-wrapper)\nnever run end-to-end yet" fillcolor="#fff59d" style="rounded,filled"];
+    zed     [label="ZED2i camera\n(zed_wrapper — CONFIRMED:\nstereolabs/zed-ros2-wrapper)\nnever run end-to-end yet\n⚠ its own publish_tf was disabled\nassuming URDF publishes camera_link\n— it doesn't (see robot_desc) —\nbase_link→camera_link has NO publisher" fillcolor="#ef9a9a"];
 
-    fastlio [label="fast_lio_ros2\nfastlio_mapping\n(TESTED — generated\na real map/PCD)" fillcolor="#a5d6a7"];
+    fastlio [label="fast_lio_ros2\nfastlio_mapping\n(TESTED — generated\na real map/PCD)\nextrinsic_R fixed (det=1.0,\nfrom localizer_v2.2) — new\nvalue not yet re-tested on robot" fillcolor="#a5d6a7"];
     ekf     [label="Single EKF\n(ekf_odom.yaml)\nwheel+IMU(rate)+lidar, 50Hz\n→ odom→base_link TF\n⚠ YAML type bug fixed but never\nrun end-to-end on real hardware" fillcolor="#fff59d"];
-    ndtomp  [label="NDT-OMP\nmap→odom TF\n⚠ extrinsic_R fix pending,\n⚠ expects GlobalMap.pcd\n(repo has refined_map.pcd) —\nCONFIRMED crashes on start" fillcolor="#ef9a9a"];
+    maplocalizer [label="map_localizer (VGICP)\nmap→odom TF — replaces NDT-OMP\n(diy_ndt_localization, DEPRECATED:\nhad a real TF-composition bug,\nnever composed against odom→base_link)\n⚠ needs a real refined_map.pcd for\nTHIS course; end-to-end TF verified\nonly with synthetic sensor data so far" fillcolor="#fff59d"];
+    reloc_trigger [label="trigger_map_relocalize.py\n(one-shot /relocalize call\nat startup, then exits)" shape=hexagon fillcolor="#fff59d"];
 
-    nav2    [label="Nav2\n(planner + MPPI/RPP)\nNEVER RUN end-to-end" fillcolor="#e0e0e0" style="rounded,filled,dashed"];
-    zonenav [label="diy_zone_nav\nstate machine\nNEVER RUN end-to-end" fillcolor="#e0e0e0" style="rounded,filled,dashed"];
+    map_server [label="nav2_map_server +\nnav2_lifecycle_manager\n(ONLY Nav2 piece used —\nnot the full nav stack)\n→ /map" fillcolor="#fff59d"];
+    a_star     [label="diy_planning\na_star_planner_node\n(idles safely with no\n/goal_pose — verified in code)" fillcolor="#fff59d"];
+    pd_ctrl    [label="diy_motion_planner\npd / pure_pursuit\nmotion_planner_node\n→ /cmd_vel_nav, /pd/goal_reached" fillcolor="#fff59d"];
+    wp_seq     [label="diy_waypoint_sequencer\n(NEW — optional, standalone)\nauto-publishes /goal_pose in\nsequence; if not run, /goal_pose\nstill settable manually (RViz)" fillcolor="#fff59d" style="rounded,filled,dashed"];
 
-    robot_desc [label="robot_state_publisher\n⚠ URDF missing lidar_link/\nimu_link/camera_link/gps_link" fillcolor="#ef9a9a"];
+    zonenav [label="diy_zone_nav\nstate machine\n⚠ ORPHANED in this architecture —\nits costmap/speed_limit/controller\nSetParameters calls target full-Nav2\nservices that don't exist here;\nfails gracefully (service_is_ready()\nchecked) but nothing consumes its\noutputs — safe to not run at all" fillcolor="#e0e0e0" style="rounded,filled,dashed"];
+
+    robot_desc [label="robot_state_publisher\n✓ lidar_link/imu_link now real\n(measured offsets, from teammate's\nrecent xacro rebuild)\n⚠ camera_link STILL missing —\nzed_wrapper's own publish_tf was disabled\nassuming URDF covers camera_link (it doesn't) —\nbase_link→camera_link has NO publisher at all\n(no gps_link needed — no GPS hardware at all)" fillcolor="#ef9a9a"];
 
     hesai -> fastlio [label="/hesai/points\nor /lidar_points?"];
-    hesai -> ndtomp;
     fastlio -> ekf [label="/lidar_odometry_gated\n(position+yaw+velocity)"];
-    ekf -> nav2 [label="/odometry/filtered"];
-    ndtomp -> nav2 [label="map→odom TF"];
-    nav2 -> zonenav [label="costmap/\ncontroller services"];
-    robot_desc -> fastlio [style=dashed label="TF (incomplete)"];
-    robot_desc -> nav2 [style=dashed label="TF (incomplete)"];
+    fastlio -> maplocalizer [label="/lidar_odometry (odom_topic)\n/cloud_registered_body (cloud_topic)"];
+    reloc_trigger -> maplocalizer [label="/relocalize service\n(pcd_path + initial pose)"];
+
+    map_server -> a_star [label="/map"];
+    maplocalizer -> a_star [label="TF: map→base_link\n(via map→odom + EKF's\nodom→base_link)" color="#1565c0" fontcolor="#1565c0" penwidth=2];
+    wp_seq -> a_star [label="/goal_pose\n(or manual RViz\n\"2D Goal Pose\")" style=dashed];
+    a_star -> pd_ctrl [label="/a_star/path"];
+    ekf -> pd_ctrl [label="TF: odom→base_link" color="#1565c0" fontcolor="#1565c0" penwidth=2];
+    ekf -> pd_ctrl [label="/odometry/filtered\n(controller may use\ndirectly instead of TF)" style=dashed];
+    pd_ctrl -> zonenav [style=dashed label="/pd/goal_reached\n(zone_nav ignores this —\nshown only to prove no\ncoupling exists either way)"];
+    robot_desc -> fastlio [style=dashed label="TF (partial — lidar_link/imu_link\nnow real; camera_link/gps_link\nstill missing)"];
+    robot_desc -> map_server [style=dashed label="TF (partial — see robot_desc note)"];
   }
 
   // ===================== CROSS-MACHINE =====================
@@ -64,8 +75,8 @@ digraph DIY_Challenge_Pipeline {
   imu_can -> zenoh [label="/imu/data"];
   zenoh -> fastlio [label="/imu/data\n(FAST-LIO2's own internal\nEKF fuses this directly)"];
   zenoh -> ekf [label="/imu/data\n(angular-rate fields only —\nnot the full 6-DOF IMU)"];
-  nav2 -> zenoh [label="/cmd_vel_nav" color="#1565c0" fontcolor="#1565c0" penwidth=2];
-  zonenav -> zenoh [label="/cmd_vel_zone_nav" color="#1565c0" fontcolor="#1565c0" penwidth=2];
+  pd_ctrl -> zenoh [label="/cmd_vel_nav\n(same topic name cmd_vel_mux\nalready reads — no mux changes\nneeded for the custom controller)" color="#1565c0" fontcolor="#1565c0" penwidth=2];
+  zonenav -> zenoh [style=dashed label="/cmd_vel_zone_nav\n(only reaches the mux if\nzone_nav is run AND explicitly\nswitches mux mode — neither\nhappens in this architecture)"];
   joy -> zenoh [style=dashed label="/cmd_vel_joy\n(BLOCK 9 joy_node, separate\nfrom driveStack's own teleop)"];
   zenoh -> cmd_vel_mux [label="/cmd_vel_nav (AUTONOMOUS mode),\n/cmd_vel_zone_nav (BLIND_DRIVE mode),\n/cmd_vel_joy (JOYSTICK mode)" color="#1565c0" fontcolor="#1565c0" penwidth=2];
 

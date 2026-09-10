@@ -609,6 +609,28 @@ real topic/param names, wire a gated block into
 run it alongside or instead of `diy_ndt_localization`, and update
 `docs/pipeline_diagram.dot` once done.
 
+**Update: a newer branch exists — `localizer_v2.2` (superseding `develop`
+for this evaluation).** User switched `LIO_Localization`'s local checkout
+to `origin/localizer_v2.2` (latest commit `7ffaab0` — "updated
+maplocaliser with VGICP and Tuen IMU timesyncs"). Diffed against `develop`
+and confirmed real, relevant improvements to the exact `map_localizer`
+package flagged above:
+- **ICP algorithm swap**: `pcl::IterativeClosestPoint` → `fast_gicp::FastVGICP`
+  (voxelized generalized ICP) for both the rough and refine passes in
+  `icp_localizer.h`/`.cpp` — generally more robust than plain point-to-point
+  ICP, especially on sparse/structured lidar returns. New `fast_gicp`
+  dependency, **already vendored** at `LIO_Localization/src/third_party/fast_gicp`
+  (self-contained, not an extra external fetch needed).
+- New tunable params in `map_localizer.yaml`: `rough_vgicp_resolution: 1.0`,
+  `refine_vgicp_resolution: 0.5`, `num_threads: 4`.
+- IMU timestamp-sync tuning also touched in `FAST_LIO_Hesai_ROS2` on this
+  branch (per the commit message) — not yet individually diffed/verified.
+
+**Still deferred, not implemented** — but if/when this backlog item is
+picked up, vendor from `localizer_v2.2` instead of `develop`, and note the
+extra `fast_gicp` dependency needs pulling in alongside `map_localizer` +
+`slam_interfaces`.
+
 ## Reuse Plan Step 9 — REVERTED: ACEINNA IMU is launched independently, not integrated into this repo
 
 User decision (reversing Step 2/Step 6's IMU vendoring/wiring): the
@@ -658,3 +680,567 @@ back out of this repo. Verified: `colcon build --symlink-install
 --base-paths src --packages-skip differential-drive` → 10 packages (was
 11), clean; `ros2 launch challenge_bringup challenge_master.launch.py
 --show-args` no longer lists `use_imu`.
+
+## Reuse Plan Step 10 — Pulled real FAST-LIO2 fixes from LIO_Localization `localizer_v2.2`
+
+User asked to integrate `localizer_v2.2`'s changes into our vendored
+`fast_lio_ros2`. Diffed `develop` (what was originally vendored) against
+`localizer_v2.2` (commit `7ffaab0`) scoped to `src/FAST_LIO_Hesai_ROS2` —
+exactly 2 files changed, both applied here:
+
+**1. `extrinsic_R` fix (config/qt64.yaml)** — resolves the long-flagged
+determinant -1 (invalid rotation) bug. Teammate's committed fix changes the
+matrix to plain identity:
+```
+[1,0,0; 0,1,0; 0,0,-1]  →  [1,0,0; 0,1,0; 0,0,1]
+```
+Verified with `python3 -c "import numpy as np; ..."`: old det=-1.0 (a
+reflection), new det=+1.0 (a valid rotation). Also confirmed via the
+vendored checker: `python3 src/fast_lio_ros2/tools/check_config.py --config
+src/diy_localization/config/fast_lio_hesai_qt64.yaml` — extrinsic_R line
+flips from FAIL to `[PASS] mapping.extrinsic_R valid rotation (det=1.0000)`.
+**Important open caveat, documented inline in the YAML and in
+testing_guide.md caveat #4**: this new value is plain IDENTITY, which does
+NOT match the Rx(-90°) this same file derives in its own comments from a
+live accelerometer + physical-mounting analysis. Applied the teammate's
+real, committed value anyway (more authoritative than our own from-scratch
+derivation), but flagged clearly that this discrepancy needs on-robot
+re-verification (live accelerometer reading) before fully trusting it for
+autonomous nav — not blindly trusted just because it's a valid rotation.
+- Applied to both the actively-used
+  `src/diy_localization/config/fast_lio_hesai_qt64.yaml` and the vendored
+  reference copy `src/fast_lio_ros2/config/qt64.yaml` (kept in sync, per
+  this repo's existing convention of treating the latter as a faithful
+  vendored mirror).
+
+**2. `blind: 0.3 → 0.5`** (config/qt64.yaml) — LiDAR blind-zone distance
+tuning from the same teammate branch. Applied to both config copies.
+
+**3. Threading/callback-group fix (src/laserMapping.cpp)** — real,
+well-motivated fix, not a cosmetic change. Previously `sub_pcl_pc_`/
+`sub_imu_` shared the node's single default callback group with the scan-
+processing `timer_callback` (~100-450ms per scan doing ICP/map_incremental),
+and `rclcpp::spin()` ran everything on one thread — so a long-running scan
+callback could starve `imu_cbk` long enough to trip the `frontend.
+max_imu_gap` shock-detection gate already active in our own config (`0.05s`
+— see `fast_lio_hesai_qt64.yaml`'s `frontend:` block), causing false scan
+rejections that looked like real IMU dropouts but weren't. Fixed by:
+  - Giving both sensor subscriptions their own `Reentrant` callback group
+    (shared buffers are already `mtx_buffer`-protected, so concurrent
+    callbacks are safe).
+  - Deepening the IMU subscription queue from `10` to `rclcpp::QoS(200)`.
+  - Switching `main()` from single-threaded `rclcpp::spin()` to a
+    `MultiThreadedExecutor` with 2 threads.
+  Applied verbatim to `src/fast_lio_ros2/src/laserMapping.cpp` (our vendored
+  copy needed the actual C++ patch, not just a config sync, since this is
+  compiled code).
+
+**Verification performed** (real tooling, not inspection-only):
+- `python3 src/fast_lio_ros2/tools/check_config.py --config
+  src/diy_localization/config/fast_lio_hesai_qt64.yaml` — extrinsic_R now
+  PASSes (det=1.0000); pre-existing scan_line=32 FAIL and map_file_path WARN
+  unchanged (both already-documented, intentional/known items, not
+  regressions from this change).
+- `colcon build --symlink-install --base-paths src --packages-select
+  fast_lio_ros2` — clean rebuild, no new warnings/errors from the threading
+  change.
+- `colcon build --symlink-install --base-paths src --packages-skip
+  differential-drive` — full 12-package workspace rebuild, clean.
+- `ros2 run fast_lio_ros2 fastlio_mapping --params-file
+  fast_lio_hesai_qt64.yaml` — starts cleanly, no crashes, clean shutdown on
+  SIGTERM (smoke test only — no real lidar/IMU hardware in this sandbox, so
+  this does not confirm the threading fix's actual runtime behavior under
+  load; that needs the real robot).
+
+**Docs updated:** `docs/testing_guide.md` caveat #4 rewritten (was "may
+still be wrong, teammate says a fix exists but may need pulling" → now
+describes the applied fix and the still-open identity-vs-Rx(-90°)
+discrepancy). `docs/pipeline_diagram.dot`/`.png`/`.svg`: `fast_lio_ros2`
+node annotated with the fix + "not yet re-tested on robot" caveat; also
+fixed a pre-existing mislabel where the NDT-OMP node incorrectly carried an
+"extrinsic_R fix pending" note (NDT-OMP's own config has no `extrinsic_R`
+parameter at all — that flag belonged on the FAST-LIO2 node, not NDT-OMP).
+
+**Not brought in from `localizer_v2.2`** (out of scope for this pass, per
+Step 8's backlog decision): the `map_localizer`/VGICP/`fast_gicp` changes —
+still deferred as documented in Step 8, since that's a net-new package
+vendoring decision, not a patch to an already-vendored one like this
+FAST-LIO2 update was.
+
+**Still open:** the identity-vs-Rx(-90°) extrinsic_R discrepancy (needs a
+live accelerometer re-verification on the real robot); everything else
+already flagged as open from earlier steps (`/hesai/points` vs
+`/lidar_points`, ZED2i live-topic confirmation, `differential-drive`
+package identity, URDF TF links, `GlobalMap.pcd` path).
+
+## Reuse Plan Step 11 — Replaced NDT-OMP with map_localizer (VGICP) for map→odom TF
+
+User asked what NDT-OMP needs to provide `map→odom` TF to a downstream
+controller (noting the controller may not be Nav2 — a teammate is working
+on a different one), then separately asked whether `map_localizer` could
+provide this more easily. Investigated both by reading the actual TF-
+publishing code in each, not by inspection/assumption.
+
+**Real, previously-undiscovered bug found in `diy_ndt_localization`
+(NDT-OMP):** its `publishTF()` broadcasts the raw NDT scan-matched pose
+(`current_pose_matrix_`, which is actually `map→base_link` — where the
+robot IS right now) directly as `map→odom` TF:
+```cpp
+tf_msg.header.frame_id = map_frame_;   // "map"
+tf_msg.child_frame_id = odom_frame_;   // "odom"
+tf_msg.transform = /* pose_matrix, straight from NDT scan-matching */
+```
+There is no `tf2_ros::Buffer`/`TransformListener` anywhere in the class —
+confirmed by grepping the whole file — despite both headers being
+included (dead code, likely started and never finished). Since
+`odom→base_link` is ALSO published separately by the EKF
+(`ekf_odom.yaml`), composing `map→odom→base_link` via this bug would
+double-apply the odom offset, corrupting the robot's true position in the
+map — worse the more `odom` drifts. The function's own comment even
+states the correct intended semantics ("the transform represents: odom
+origin's pose in map frame") but the code doesn't compute that at all.
+This bug has never manifested in practice because the node also can't even
+start yet (hardcoded `GlobalMap.pcd` path issue, confirmed broken back in
+Step 6/8's verification runs) — but it needed fixing regardless of the
+controller question, since a real map→odom TF has to be composed
+correctly no matter who consumes it downstream.
+
+**Verified `map_localizer`'s TF math is correct, term-by-term:**
+```cpp
+// current_local_r/t = odom→body pose, from FAST-LIO2's own /Odometry
+// map_body_r/t = map→body pose, from ICP-aligning the scan against the map
+m_state.last_offset_r = map_body_r * current_local_r.transpose();
+m_state.last_offset_t = -map_body_r * current_local_r.transpose() * current_local_t + map_body_t;
+```
+Worked through the rotation/translation algebra and confirmed this is
+exactly `map→odom = map→body × inverse(odom→body)` — the textbook-correct
+composition (same pattern AMCL/every real localization node uses).
+
+**Answer given for the "different controller" question:** `map→odom` TF
+is fully consumer-agnostic — once broadcast correctly, ANY node (Nav2 or a
+custom controller) reads it the same standard way via
+`tf2_ros::Buffer`/`TransformListener::lookupTransform("map", "base_link",
+...)`. No Nav2-specific plumbing needed regardless of which node publishes
+it or who's downstream.
+
+**User decision: switch to `map_localizer` now** (bringing Step 8's
+backlog item off the shelf). Full integration performed:
+
+1. **Vendored** `src/map_localizer` and `src/slam_interfaces` (plain copy,
+   matching the `fast_lio_ros2` vendoring pattern) from `LIO_Localization`
+   branch `localizer_v2.2` (commit `7ffaab0`).
+2. **Added `fast_gicp`** (the VGICP dependency `map_localizer` needs) as a
+   REAL git submodule at `third_party_ws/src/fast_gicp`, pointing to the
+   actual public upstream (`https://github.com/SMRT-AIST/fast_gicp.git`,
+   `master`) rather than copying LIO_Localization's local snapshot —
+   confirmed via diff that LIO_Localization's copy only differs in a
+   CUDA-specific Jetson compute-capability flag (inside an
+   `if(BUILD_VGICP_CUDA)` block, OFF by default), so pointing at public
+   upstream is equivalent for our CPU-only build and matches this repo's
+   existing submodule convention (`ndt_omp_ros2`, `lidar_imu_calib`, etc.).
+   Confirmed `BUILD_VGICP_CUDA` defaults OFF and the CUDA/nvbio/Eigen
+   thirdparty submodule dirs are only referenced inside that CUDA-only
+   CMake block — not needed for our sandbox (no CUDA toolkit here) or
+   likely even on the Jetson unless CUDA acceleration is deliberately
+   enabled later.
+3. **Fixed a real config bug before it could bite**: `map_localizer.yaml`'s
+   vendored default is `odom_topic: /Odometry`, but this repo's
+   `localization.launch.py` remaps FAST-LIO2's `/Odometry` to
+   `/lidar_odometry` for naming consistency. Since `map_localizer` syncs
+   cloud+odom via `message_filters::ApproximateTime` (needs BOTH topics
+   before its callback ever fires), leaving the vendored default would
+   have meant `map_localizer` silently never processed a single scan — no
+   error, just permanently zero output (same failure shape as the EKF
+   node-name-mismatch bug found in Step 6). Fixed by changing
+   `odom_topic` to `/lidar_odometry` in the active runtime config.
+   `/cloud_registered_body` (the other sync input) was confirmed
+   unaffected by any remap.
+4. **Split into vendored-reference vs. active-runtime configs**, matching
+   this repo's established convention (`qt64.yaml` vs
+   `fast_lio_hesai_qt64.yaml`): `src/map_localizer/config/map_localizer.yaml`
+   stays an untouched, faithful mirror of upstream; the real, customized
+   config with all of the above fixes and reasoning lives at
+   `src/diy_localization/config/map_localizer.yaml`.
+5. **Wrote `trigger_map_relocalize.py`** (new,
+   `src/diy_localization/scripts/`): `map_localizer` does NOT auto-load a
+   map at startup — confirmed by reading `localizer_node.cpp`'s
+   constructor — it only loads a `.pcd` (and sets the initial pose guess)
+   in response to a `slam_interfaces/srv/Relocalize` service call. Without
+   something to make that call, `map_localizer` would start, subscribe to
+   its topics, and just never do anything, forever, with no error (same
+   "silently does nothing" shape as several other bugs found this
+   session). This script waits for the `/relocalize` service to become
+   available, then calls it once with a configurable `pcd_path` +
+   initial pose (defaults to map origin, matching NDT-OMP's documented
+   assumption), then exits — it is not a long-lived pipeline node.
+6. **Added a `map_pcd_path` launch argument** to `localization.launch.py`,
+   defaulting to `$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/refined_map.pcd`
+   when `DIY_ROS_WS` is set (reusing the existing profile-level env var
+   convention already established for other machine-specific paths,
+   rather than inventing a new one) — avoids the exact hardcoded-path
+   anti-pattern that broke NDT-OMP's `GlobalMap.pcd` reference.
+7. **Deprecated `diy_ndt_localization`** in place rather than deleting it:
+   added a prominent deprecation header to both `package.xml`'s
+   `<description>` and the top of `ndt_localizer_node.cpp` explaining the
+   TF bug and pointing here. The package still builds (no reason to break
+   it) but is no longer included by `localization.launch.py`.
+
+**Bug found and fixed DURING integration, via actually launching, not just
+building:** the first end-to-end launch attempt crashed —
+`trigger_map_relocalize.py` raised `InvalidParameterTypeException` on
+`initial_x`. Root cause: `LaunchConfiguration(...).perform(context)` always
+returns a Python `str`, but the script declares these as `double`
+parameters — ROS 2 rejects setting a double parameter from a string value
+at the type level. Fixed by wrapping each in `float(...)` in the launch
+file. This is the same general class of type-mismatch bug as the EKF
+YAML int/float issue from Step 6 — caught only by actually running it.
+
+**Verification performed (real tooling throughout):**
+- `fast_gicp`, `slam_interfaces`, `map_localizer` all build clean in this
+  sandbox (`colcon build --packages-select ...`), confirming the CPU-only
+  VGICP path needs no CUDA toolkit.
+- Full workspace rebuild: 14 packages clean (`colcon build --symlink-install
+  --base-paths src --packages-skip differential-drive`).
+- Real end-to-end launch: `ros2 launch diy_localization
+  localization.launch.py mode:=runtime map_pcd_path:=<real path to
+  maps/refined_map.pcd>` — `fastlio_mapping`, `ekf_node`,
+  `map_localizer_node`, and `trigger_map_relocalize.py` all start cleanly;
+  `trigger_map_relocalize.py` logs `/relocalize succeeded: relocalize
+  success` against the real map file, then exits (as designed).
+- Synthetic-data test: manually published fake `/cloud_registered_body`
+  (4-point cloud) + `/lidar_odometry` (Odometry, translation (2,1,0))
+  messages via a throwaway rclpy script, then confirmed with `ros2 run
+  tf2_ros tf2_echo map odom` that a `map→odom` TF is genuinely being
+  broadcast under the correct frame names, continuously. The observed
+  transform was identity/zero (the trivial synthetic cloud couldn't
+  produce a real ICP match against the actual loaded map, so the code
+  correctly held its default fallback rather than crashing) — this
+  confirms the TF *mechanism* end-to-end (service call → map load → sync
+  → align → broadcast, no crashes) but does NOT confirm real alignment
+  accuracy, which needs actual matching lidar scan data (real hardware).
+
+**Found and fixed a second, unrelated regression while investigating:**
+`third_party_ws/COLCON_IGNORE` — a file that blocks `colcon list`/`build`
+from seeing ANYTHING under `third_party_ws` (not just `fast_gicp` — also
+`ndt_omp_ros2`, `lidar_imu_calib`, `LIO-SAM`, `imu_utils_ros2_humble`).
+Confirmed empirically (`colcon list` found 0 packages with it present, all
+6 with it removed). This is a re-introduction of the *exact* bug already
+found and fixed earlier this session (see the "Critical build gotcha" note
+in this doc's technical history) — it came back in via the teammate's
+commit `eb85d42` during the `git pull --rebase` from earlier today, which
+this session's own commits didn't touch either way (nothing removed it,
+their commit added it, so the rebase result kept it). Removed again
+(`git rm`). Verified: `cd third_party_ws && colcon list` now shows all 6
+packages; `colcon build --packages-skip code_utils imu_utils lio_sam`
+succeeds for `ndt_omp_ros2`/`fast_gicp`/`lidar_imu_calib` (the 3 skipped
+packages fail for unrelated, pre-existing reasons — missing system
+packages `elfutils/libdw.h` and `GTSAM`, nothing to do with today's work).
+
+**Docs updated:** `docs/testing_guide.md` (new caveat #8, launch-file
+inventory row for `ndt_localization.launch.py` marked deprecated,
+`map_localizer` references throughout). `docs/pipeline_diagram.dot`/`.png`/
+`.svg`: replaced the `ndtomp` node with `maplocalizer` + a new
+`reloc_trigger` satellite node, corrected edges (map_localizer consumes
+FAST-LIO2's `/lidar_odometry`+`/cloud_registered_body`, not raw
+`/hesai/points`; NDT-OMP's old direct hesai-points edge removed).
+
+**Still open:**
+- Whether `maps/refined_map.pcd` is genuinely the real course map (vs. a
+  bench/test map) — not verified this pass.
+- Real VGICP alignment accuracy against actual lidar data — needs real
+  hardware, impossible to verify further in this sandbox.
+- All previously-flagged open items unaffected by this change:
+  `/hesai/points` vs `/lidar_points`, ZED2i live-topic confirmation,
+  `differential-drive` package identity, URDF TF links, the
+  identity-vs-Rx(-90°) `extrinsic_R` discrepancy from Step 10.
+
+## Reuse Plan Step 12 — setup.sh missing runtime packages (found while writing Jetson quickstart)
+
+While answering "how do I run this on a freshly-cloned Jetson", tested
+`setup.sh`'s documented build step literally (removed `install/` for the
+relevant packages, ran the exact `colcon build --packages-select ...` list
+setup.sh uses) and found it was missing packages needed at runtime:
+
+- **`diy_zone_nav`** — referenced directly by `challenge_master.launch.py`
+  (`Node(package='diy_zone_nav', executable='lidar_odom_gate_node', ...)`,
+  always launched whenever `use_localization=true`, i.e. every normal run)
+  but was never in `setup.sh`'s `--packages-select` list, at any point
+  before today's changes either — a pre-existing gap, not something
+  today's work introduced.
+- **`fast_lio_ros2`, `slam_interfaces`, `map_localizer`** — all needed at
+  runtime by `diy_localization/launch/localization.launch.py` (today's
+  Step 11 changes), same gap: colcon's `--packages-select` does NOT
+  auto-include a package's `exec_depend`s the way `--packages-up-to` does,
+  so listing only `diy_localization` builds its launch/config files fine
+  but never builds what those launch files actually try to run.
+
+Net effect: a fresh `bash setup.sh jetson` followed by `scripts/run_robot.sh
+jetson` (exactly the documented workflow) would have failed at `ros2
+launch` time with "package not found" for whichever of these was missing —
+setup.sh itself would report success, masking the problem until the actual
+launch attempt.
+
+**Fixed:** added all four to `setup.sh`'s explicit `--packages-select`
+list, with a comment explaining why (and how this class of bug is found —
+by removing a package's `install/` dir and actually re-running the
+documented build+launch sequence, not just reading the list and assuming
+it's complete). Verified by literally doing that: removed
+`install/{fast_lio_ros2,slam_interfaces,map_localizer,diy_zone_nav}`, ran
+the corrected package list, confirmed all 9 packages build, then re-ran
+the full `ros2 launch diy_localization localization.launch.py` end-to-end
+test from Step 11 again to confirm nothing broke.
+
+**Also fixed while in this file:** `challenge_bringup/package.xml` still
+declared `<exec_depend>realsense2_camera</exec_depend>` from before the
+ZED2i swap (should be `zed_wrapper`) — stale leftover from the camera
+migration a few steps back that was never updated in the package.xml
+itself (only the launch file was fixed at the time). Also:
+`map_localizer/package.xml` never declared `yaml-cpp`/`eigen`/
+`libpcl-all-dev` as `<depend>`s despite `CMakeLists.txt` hard-requiring
+all three via `find_package(... REQUIRED)` — meaning `rosdep install`
+(what `setup.sh` runs) would never know to install `libyaml-cpp-dev` on a
+genuinely fresh machine that doesn't already have it. Confirmed
+`libyaml-cpp-dev` is the correct resolved package name via `rosdep resolve
+yaml-cpp`; added all three (matching the exact same dependency names
+`fast_gicp`'s own package.xml already uses for `eigen`/`libpcl-all-dev`,
+for consistency). Rebuilt `map_localizer` clean after the fix.
+
+**Still not fixed / flagged for later:** this exposed a broader pattern —
+`challenge_bringup`'s `package.xml` doesn't declare `exec_depend` on ANY
+of the repo-local packages its own launch file `Node()`-launches
+(`diy_cmd_vel_mux`, `diy_estop_controller`, `diy_robot_description`,
+`diy_zone_nav`, `diy_localization`). Switching `setup.sh` to
+`colcon build --packages-up-to challenge_bringup` instead of an explicit
+list would be more robust long-term (confirmed empirically that
+`--packages-up-to` correctly resolves `exec_depend` — that's how this
+pass's fix was verified) — but doing that properly requires first fixing
+every affected package.xml's exec_depend declarations across the whole
+repo, which is a larger, separate cleanup pass than what was in scope
+here. Documented as a known gap; the explicit list in `setup.sh` is
+correct and complete for today's purposes but requires manual updating
+again if a future change adds another new runtime-only package dependency.
+
+## Reuse Plan Step 13 — Decoupled the custom A*/PD controller from diy_zone_nav
+
+User's teammate is building a custom navigation stack (nav2_map_server-only
++ a custom A* planner + PD/pure-pursuit path follower — NOT full Nav2) that
+already exists in this repo via an earlier rebase (`src/diy_planning`,
+`src/diy_motion_planner`) but was never investigated until now. User asked:
+design things so `diy_zone_nav` can be removed entirely with zero impact,
+since the plan is for the controller to consume "info from the zone
+navigator" and they want that dependency to be optional/safe-to-remove
+from day one, not bolted on and only discovered to be load-bearing later.
+
+**Investigated the actual code (not assumed) before designing anything:**
+- Grepped `diy_planning`/`diy_motion_planner` for any reference to
+  `zone_nav`, `/nav_mode`, `/speed_limit`, `SpeedLimit` — **zero hits**.
+  The custom controller already has NO existing coupling to zone_nav at
+  all. `a_star_planner_node`'s `goal_callback` idles gracefully (early
+  return, no crash/hang) whenever `/goal_pose` hasn't been received —
+  confirmed by reading the guard clauses directly.
+- Confirmed `diy_cmd_vel_mux`'s AUTONOMOUS mode reads `/cmd_vel_nav`
+  unconditionally with its own staleness watchdog, completely independent
+  of zone_nav — BLIND_DRIVE mode only activates via an explicit
+  `SetParameters` service call that only `zone_nav_manager_node` makes, so
+  removing zone_nav simply means that mode is never entered; everything
+  else is unaffected. No mux changes needed.
+- Teammate's own diagrams (shared as images) confirm the controller
+  publishes on `/cmd_vel_nav` — the exact topic name `cmd_vel_mux` already
+  reads for AUTONOMOUS mode. Zero wiring changes needed there.
+- Teammate confirmed (via relayed message) they use ONLY `nav2_map_server`
+  + `nav2_lifecycle_manager` (map serving), not the full Nav2 stack (no
+  `planner_server`/`controller_server`/costmap layers). This means
+  `zone_nav`'s `/speed_limit` output (designed to throttle Nav2's
+  `controller_server`) and its costmap-layer `SetParameters` calls have
+  **no service to call at all** in this architecture — confirmed
+  `zone_nav_manager_node.cpp` already checks `service_is_ready()` before
+  every such call and skips gracefully with a warn log if the service
+  isn't there, so this was already safe, just newly-relevant.
+- **Net finding: `diy_zone_nav` is already fully orphaned/optional in this
+  new architecture** — nothing in the custom controller path consumes any
+  of its outputs, and it already fails gracefully when its own targets
+  (Nav2 services) don't exist. No code changes were needed to achieve
+  "can take zone_nav out with no issues" for the EXISTING pipeline — that
+  was already true. Documented this clearly (pipeline diagram, this entry)
+  so it doesn't need re-discovering.
+
+**Two real, separate bugs found and fixed while investigating this stack:**
+1. **`pd_navigation.launch.py` / `pure_pursuit_navigation.launch.py`**:
+   `cmd_vel_topic` launch argument defaulted to `/cmd_vel` (the simulation
+   value) even though its sibling arguments (`base_frame`, `use_sim_time`)
+   already default to their HARDWARE values (`base_link`, `false`) — an
+   inconsistent default mix. A bare hardware launch with no override would
+   have the PD/pure-pursuit controller silently publish into `/cmd_vel`,
+   which `cmd_vel_mux` never subscribes to — robot simply never moves
+   under autonomous test, no error anywhere. Fixed both launch files'
+   `cmd_vel_topic` default to `/cmd_vel_nav`, matching the already-correct
+   hardware-default pattern of the other args.
+2. **Neither `pd_motion_planner_node.py` nor
+   `pure_pursuit_motion_planner_node.py` published any signal when a goal
+   was reached** — only a log line (`get_logger().info('Goal reached!...')`),
+   no ROS topic at all. This blocks any future automated waypoint sequencing
+   (nothing to know "we're done, send the next goal"). Added a
+   `/pd/goal_reached` (`std_msgs/Bool`) publisher to both controller nodes,
+   published at the exact point each already detects goal completion — a
+   minimal, purely additive change (no existing behavior altered).
+
+**New package: `diy_waypoint_sequencer`** — built per the user's explicit
+design ask (an automated `/goal_pose` publisher for competition runs where
+no human clicks RViz goals), designed from the start to be safely
+removable:
+- Deliberately a brand-new, separate, minimal package — NOT added inside
+  `diy_zone_nav` or `diy_planning`/`diy_motion_planner`. This was a real
+  design decision: putting it inside `diy_zone_nav` would re-couple "can I
+  remove zone_nav" with "do I still get automated goal sequencing",
+  exactly the ambiguity this whole task was about avoiding.
+- `waypoint_sequencer_node`: loads a simple waypoints YAML (`label, x, y,
+  yaw` list — deliberately NOT reusing `zone_waypoints.yaml`'s much richer
+  schema, which encodes Nav2-costmap/BLIND_DRIVE concepts this simpler
+  stack doesn't use), waits for `/green_light` (same competition
+  start-trigger topic/convention already established for `zone_nav`),
+  publishes `/goal_pose` for the current waypoint, advances on
+  `/pd/goal_reached`, optionally loops back to the first waypoint at the
+  end (`loop: true` in the YAML or launch arg).
+- If this node is not run: `/goal_pose` is simply never auto-published —
+  a human can still publish it manually (RViz "2D Goal Pose", or `ros2
+  topic pub`) with zero code changes anywhere else, confirmed by design
+  (the A* planner doesn't care who publishes `/goal_pose`).
+
+**Verification performed (real tooling, not just written and assumed
+correct):**
+- `colcon build --packages-select diy_waypoint_sequencer` (and full
+  15-package workspace rebuild) — clean.
+- `ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py
+  --show-args` — confirms all 5 launch arguments resolve correctly,
+  including the default `waypoints_file` path resolving to the installed
+  package share directory.
+- **Real functional test** (not just syntax/build): wrote a throwaway
+  rclpy test harness (`tf_transformations` isn't installed in this sandbox
+  and there's no `sudo` access to add the tiny apt package — stubbed just
+  that one function with equivalent pure-math since `diy_motion_planner`
+  has the exact same pre-existing sandbox dependency gap) that actually
+  ran the node and verified, via real published/subscribed ROS messages:
+  no premature publish before `/green_light`; first waypoint published
+  correctly on green light; `/pd/goal_reached` correctly advances the
+  index; sequence stops cleanly with no extra publish after the last
+  waypoint when `loop:false`; loop correctly wraps back to waypoint 0 when
+  `loop:true`; `wait_for_green_light:false` auto-starts after
+  `start_delay_s` with no green-light message at all; duplicate
+  `/green_light` messages after start are safely ignored (idempotent).
+  All 7 behavioral assertions passed.
+
+**Docs updated:** `docs/pipeline_diagram.dot`/`.png`/`.svg` — replaced the
+generic "Nav2 (never run)" placeholder with the real architecture
+(`nav2_map_server`+`nav2_lifecycle_manager`, `a_star_planner_node`,
+`pd`/`pure_pursuit_motion_planner_node`, the new `waypoint_sequencer`), and
+`diy_zone_nav` re-drawn as explicitly ORPHANED with no consumers, with an
+explanatory label so this doesn't need re-investigating later.
+
+**Still open / not addressed this pass:**
+- The custom controller stack (`diy_planning`, `diy_motion_planner`,
+  `diy_waypoint_sequencer`) is not yet wired into
+  `challenge_master.launch.py` at all — currently only launchable
+  standalone via `pd_navigation.launch.py`/`pure_pursuit_navigation.launch.py`.
+  Master-launch integration (a `use_custom_nav`-style flag, deciding how it
+  coexists with/replaces the `diy_zone_nav`/Nav2 blocks already there) is a
+  separate, larger decision not made in this pass.
+- Whether `diy_zone_nav` should eventually be deleted outright (vs. kept
+  orphaned-but-present) wasn't decided — no urgency since it's already
+  proven harmless to leave in place.
+- `tf_transformations` is not installed in this sandbox (no `sudo`) —
+  affects verifying this AND the pre-existing `diy_motion_planner` package
+  identically; not a new gap introduced by this pass.
+
+## Reuse Plan Step 14 — Re-verified URDF status: lidar/imu genuinely fixed, camera still missing, no GPS at all
+
+User asked whether a recently-updated xacro is "the URDF" and whether it
+resolves the long-flagged "URDF missing lidar_link/imu_link/camera_link/
+gps_link" item. Read `src/diy_robot_description/urdf/robot.urdf.xacro` in
+full (all ~440 lines, not just the header comment) — this is confirmed to
+be the actual active URDF (`description.launch.py` loads it directly).
+
+**Corrected finding — the old flag was too coarse, partially stale:**
+- **`lidar_link`, `imu_link`: genuinely fixed**, not just claimed-fixed in
+  a comment. Real `<xacro:include>` of `lidar.urdf.xacro`/`imu.urdf.xacro`,
+  each defining a real `<link>` + fixed `<joint parent="base_link">`, with
+  real non-zero measured offsets (`sensor_xoff_from_AR = 0.0568325` /
+  2.2375in, `Lidar_base_height_from_AR = 0.149225` / 5.875in,
+  `imu_height_from_AR = 0.0333375` / 1.3125in) — not placeholder zeros.
+  Verified by actually running `xacro robot.urdf.xacro` and confirming
+  `<link name="lidar_link">`/`<link name="imu_link">` appear in the real
+  generated URDF output.
+- **`camera_link`: still genuinely missing** — no include, no macro, no
+  inline definition anywhere in the active file. The header comment's
+  "fixed" claim was false for this one. Confirmed the actual link/joint
+  definitions DO already exist, fully written, in two OTHER files in this
+  repo (`robot.urdf` — a static, non-xacro file not loaded by anything —
+  and the deprecated `robot-old.urdf.xacro`) — they were just never ported
+  into the active `robot.urdf.xacro` when it was reworked. Both existing
+  definitions reference "RealSense D435i" in their comments, which is
+  itself stale (confirmed earlier this session: the real camera is ZED2i).
+- **`gps_link`: user confirmed there is no GPS hardware on this robot at
+  all** — so this was never actually a gap, just a stale assumption
+  carried in multiple docs/configs (see below). Removed from every
+  "required frame" list rather than left as a to-do.
+
+**Real, consequential bug found while re-checking this:**
+`challenge_master.launch.py`'s `_zed_launch()` forces `zed_wrapper`'s own
+`publish_urdf`/`publish_tf`/`publish_map_tf` to `false`, with the
+justification (in-code comment) *"diy_robot_description publishes the
+static camera_link transform"*. That premise is false — confirmed
+`camera_link` doesn't exist in the active URDF at all. **Net effect:
+`base_link→camera_link` currently has NO publisher anywhere in the running
+system** — not the URDF (doesn't define it), not zed_wrapper (deliberately
+disabled). Anything needing that transform (e.g. projecting ZED2i
+image/depth data into the robot frame) would silently fail a TF lookup.
+Not fixed in this pass (fix requires the camera_link port decision below,
+still pending) — but the finding itself is real and now documented in the
+pipeline diagram directly on both the `robot_state_publisher` and `zed`
+nodes so it isn't lost.
+
+**GPS cleanup performed** (real, since the user confirmed no hardware
+exists at all): `DIY_USE_GPS=true` was set on both `profiles/jetson.env`
+and `profiles/raspi.env` — meaning `scripts/health_check.sh` would check
+for a `/gps/fix` topic that can never exist, producing a false pre-flight
+"failure" during actual competition prep. Fixed:
+- `profiles/{jetson,raspi,laptop}.env`: `DIY_USE_GPS=false` everywhere,
+  with a comment explaining there's no GPS hardware at all (was already
+  `false` on laptop.env, just had a slightly misleading comment).
+- `src/diy_robot_description/package.xml`: description no longer claims
+  `camera_link (RealSense D435i)` and `gps_link (RTK antenna)` as defined
+  frames — corrected to describe the real current state (lidar/imu real,
+  camera not yet ported + wrong brand in the old reference copies, no GPS
+  at all).
+- `robot.urdf.xacro`'s header comment: fully rewritten — dropped the
+  stale `navsat_transform / EKF2` reference (map→odom is `map_localizer`
+  now; there's a single EKF, not "EKF2"), corrected the lidar_link/
+  imu_link status to REAL, marked camera_link as not-yet-defined with the
+  ZED2i note, and removed gps_link from the required tree entirely instead
+  of listing it as a to-do.
+- `docs/pipeline_diagram.dot`/`.png`/`.svg`: `robot_state_publisher` node
+  updated to show lidar_link/imu_link as fixed (green check) and only
+  camera_link as the real remaining gap, with GPS explicitly noted as
+  not-applicable rather than missing. `zed` node recolored red (from
+  yellow) and annotated with the base_link→camera_link-has-no-publisher
+  finding, since this is now a confirmed real gap, not just "untested."
+
+**Verification performed:** `xacro src/diy_robot_description/urdf/
+robot.urdf.xacro` (the real xacro processor, not just an XML well-formed
+check) — exits 0, and the generated URDF was grepped to confirm exactly
+`lidar_link`/`imu_link` exist and `camera_link`/`gps_link` do not, matching
+the corrected documentation exactly.
+
+**Still open:**
+- Whether to port `camera_link`/`camera_optical_link` into
+  `robot.urdf.xacro` now (definitions + real ZED2i-corrected comments
+  ready to go from `robot.urdf`) — asked the user, not yet answered/acted
+  on as of this entry.
+- Once `camera_link` exists for real, revisit whether `zed_wrapper`'s
+  `publish_tf`/`publish_urdf` should stay forced `false` (correct, once
+  the URDF really does own that frame) or whether the OpaqueFunction
+  comment just needs updating to stop citing a false premise.
+- All previously-flagged open items unaffected by this pass: `/hesai/
+  points` vs `/lidar_points`, ZED2i live-topic confirmation,
+  `differential-drive` package identity, `extrinsic_R` identity-vs-
+  Rx(-90°) discrepancy, `GlobalMap.pcd`/`refined_map.pcd` naming/course
+  authenticity question.

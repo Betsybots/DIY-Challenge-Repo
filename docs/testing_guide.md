@@ -12,6 +12,17 @@ reference (how things run today). [docs/pipeline_diagram.png](pipeline_diagram.p
 of what's currently connected and how far the pipeline has actually been
 tested — regenerate it (`dot -Tpng pipeline_diagram.dot -o pipeline_diagram.png`)
 whenever the tested/broken status of a subsystem changes.
+[docs/Jetson_Bringup_Guide.pdf](Jetson_Bringup_Guide.pdf) (source markdown:
+[jetson_bringup_guide.md](jetson_bringup_guide.md), regenerate with
+`python3 docs/generate_jetson_bringup_guide.py` after editing) is a focused,
+step-by-step walkthrough for a fresh clone on the Jetson specifically —
+use that first if you're setting up a new device; use this file once
+you're up and running and need the full script/flag reference.
+[docs/Custom_Nav_Stack_Design.pdf](Custom_Nav_Stack_Design.pdf) (source
+markdown: [custom_nav_stack_design.md](custom_nav_stack_design.md),
+regenerate with `python3 docs/generate_custom_nav_stack_design.py` after
+editing) covers the custom A*/PD nav stack and why `diy_zone_nav` is
+already safely decoupled from it — see caveat #9 below for the summary.
 
 ---
 
@@ -42,11 +53,18 @@ first so you don't get tripped up.
    (assumed by `challenge_master.launch.py`) vs `/lidar_points` (what
    `fast_lio_ros2` has actually been tested against). Verify on the Jetson
    with `ros2 topic list` before trusting the lidar leg of any full-stack run.
-4. **FAST-LIO2's `extrinsic_R` may still be wrong** — determinant was -1
-   (invalid) last checked; a teammate says a fix exists but may still need
-   pulling from the Jetson. Run `python3 src/fast_lio_ros2/tools/check_config.py
-   --config src/diy_localization/config/fast_lio_hesai_qt64.yaml` before
-   trusting FAST-LIO2 output.
+4. **FAST-LIO2's `extrinsic_R` fixed, but the new value needs on-robot
+   re-verification.** The old determinant -1 matrix (invalid rotation) was
+   replaced with a real, teammate-committed value pulled from
+   `LIO_Localization` branch `localizer_v2.2` — now a valid rotation
+   (`check_config.py` PASSes, det=1.0). However, the new value is plain
+   identity, which does NOT match this file's own in-comment Rx(-90°)
+   derivation from a live accelerometer/physical-mounting analysis — see
+   the inline note above `extrinsic_R:` in `fast_lio_hesai_qt64.yaml`.
+   Re-verify with a live accelerometer reading before fully trusting this
+   for autonomous nav. Run `python3 src/fast_lio_ros2/tools/check_config.py
+   --config src/diy_localization/config/fast_lio_hesai_qt64.yaml` after any
+   change here.
 5. **Two devices, two roles — do not run the same flags on both.** The RPi
    owns `cmd_vel_mux` + motor driver + the IMU (see caveat #7); the Jetson
    owns lidar/camera/localization/Nav2. Always launch via
@@ -78,6 +96,77 @@ first so you don't get tripped up.
    on-robot: `/imu/data` is visible on the Jetson over the Zenoh bridge, and
    `ros2 node info /ekf_filter_node_odom` shows all three sensor
    subscriptions actually connected (not just declared).
+8. **`diy_ndt_localization` (NDT-OMP) is DEPRECATED — replaced by
+   `map_localizer` (VGICP) for map→odom TF.** Found a real bug reading the
+   NDT-OMP source: its `publishTF()` broadcast the raw scan-matched
+   map→base_link pose directly as "map→odom" TF, with no
+   `tf2_ros::Buffer`/`TransformListener` anywhere in the class to compose
+   against the actual odom→base_link transform — since odom→base_link is
+   ALSO published separately by the EKF, this would have double-applied
+   the odom offset the moment it actually ran (it also could never start
+   anyway — hardcoded `GlobalMap.pcd` path that doesn't exist in this
+   repo). Vendored `map_localizer` + `slam_interfaces` + `fast_gicp` (the
+   VGICP dependency, added as a real git submodule at
+   `third_party_ws/src/fast_gicp`) from `LIO_Localization` branch
+   `localizer_v2.2`; its TF math was checked term-by-term and correctly
+   composes `map→odom = map→body × inverse(odom→body)`.
+   **`map_localizer` does NOT auto-load a map at startup** — unlike
+   NDT-OMP, it only loads a `.pcd` (and sets the initial pose guess) in
+   response to a `/relocalize` service call. `localization.launch.py` now
+   also launches `trigger_map_relocalize.py`, which makes that call once
+   at startup (waiting for the service first) using the `map_pcd_path`
+   launch argument (defaults to
+   `$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/refined_map.pcd`). If that
+   script is ever removed from the launch file, `map_localizer` will run
+   but silently never produce any output — no error.
+   **Verified so far:** full workspace rebuild (14 packages, `fast_gicp`
+   CPU-only/no CUDA needed), a real end-to-end launch
+   (`fastlio_mapping` + `ekf_node` + `map_localizer_node` +
+   `trigger_map_relocalize.py` all start cleanly, `/relocalize succeeded`
+   against the real `maps/refined_map.pcd`), and a synthetic-data test
+   (manually publishing fake `/cloud_registered_body` +
+   `/lidar_odometry` messages) confirming `map→odom` TF is actually
+   broadcast under the correct frame names. **NOT yet verified:** real
+   VGICP alignment quality against actual lidar scans (impossible without
+   real hardware in this sandbox — the synthetic test's trivial cloud
+   couldn't produce a meaningful match, so the TF held at the default
+   identity/zero fallback, which is itself expected/correct behavior for a
+   failed alignment, not a bug). Whether `maps/refined_map.pcd` is even
+   the real course map (vs. a bench/test map) is unconfirmed — see
+   `docs/reuse_plan_step1.md` Step 11.
+   **Also fixed while investigating this:** a `third_party_ws/COLCON_IGNORE`
+   file (reintroduced by a teammate's commit during a `git pull --rebase`,
+   re-triggering a bug already found and fixed earlier this session) was
+   silently blocking `colcon list`/`build` from seeing anything in
+   `third_party_ws` at all — removed again; always verify with
+   `cd third_party_ws && colcon list` if third-party packages ever seem to
+   vanish.
+9. **The custom A* + PD/pure-pursuit controller (`diy_planning`,
+   `diy_motion_planner`) is a SEPARATE navigation stack from Nav2 — it
+   uses only `nav2_map_server`/`nav2_lifecycle_manager` for map serving,
+   not the full Nav2 navigation system.** It publishes `/cmd_vel_nav`
+   (same topic `cmd_vel_mux` already reads for AUTONOMOUS mode — no mux
+   changes needed) and has **zero dependency on `diy_zone_nav`**
+   (confirmed by grepping the actual source — no reference to
+   `/nav_mode`/`/speed_limit` anywhere). `diy_zone_nav` can be run or not
+   run with this stack with zero behavior difference either way — its
+   Nav2-costmap/speed-limit service calls already fail gracefully
+   (`service_is_ready()` checked) since those services don't exist here.
+   **Fixed while confirming this:** `pd_navigation.launch.py`/
+   `pure_pursuit_navigation.launch.py`'s `cmd_vel_topic` argument used to
+   default to `/cmd_vel` (sim value) despite `base_frame`/`use_sim_time`
+   already defaulting to hardware values — a bare hardware launch with no
+   override would silently never move the robot. Now defaults to
+   `/cmd_vel_nav`. Also added a `/pd/goal_reached` (`std_msgs/Bool`)
+   publisher to both controller nodes (previously only a log line, no ROS
+   signal at all) so an external sequencer can react to goal completion.
+   **New, optional package `diy_waypoint_sequencer`** auto-publishes
+   `/goal_pose` in sequence for competition runs — deliberately its own
+   separate package (not inside `diy_zone_nav`) so removing it doesn't
+   entangle with the zone_nav question at all; if not run, `/goal_pose`
+   is simply set manually instead (RViz "2D Goal Pose"). See
+   `docs/reuse_plan_step1.md` Step 13 for the full investigation and a
+   real functional test (7 passing behavioral assertions) of the new node.
 
 ---
 
@@ -107,7 +196,7 @@ every `DIY_*` environment variable the launch file reads:
 
 | Profile | Device | Role |
 |---|---|---|
-| `profiles/jetson.env` | Jetson | Sensors (lidar, ZED2i), localization (FAST-LIO2/EKF/NDT-OMP), Nav2, zone_nav |
+| `profiles/jetson.env` | Jetson | Sensors (lidar, ZED2i), localization (FAST-LIO2/EKF/map_localizer), Nav2, zone_nav |
 | `profiles/raspi.env` | Raspberry Pi | `cmd_vel_mux` (single-owner across the robot), motor driver (CAN), joystick input relay |
 | `profiles/laptop.env` | Laptop | Single-machine debug/replay — owns everything locally, no bridge |
 
@@ -185,7 +274,7 @@ before running any of these on real hardware, or update the scripts to use
 |---|---|---|
 | `scripts/test_step1_wheel_odom.sh [--viz ...] [profile]` | Motor node + mux + joystick | `/wheel_cmd_vel`, `/joint_states` @ ~50 Hz |
 | `scripts/test_step2_fused_odom.sh [--viz ...] [profile]` | + EKF fusing wheel+IMU (`ekf_odom.yaml`; requires the independent RPi IMU driver already running for imu0) | `/odometry/filtered`, `odom→base_link` TF |
-| `scripts/test_step3_fastlio.sh [--viz ...] [profile]` | + Hesai lidar + FAST-LIO2 + EKF + NDT-OMP (`localization.launch.py mode:=runtime` — no FAST-LIO2-only mode) | `/lidar_odometry` @ ~10 Hz |
+| `scripts/test_step3_fastlio.sh [--viz ...] [profile]` | + Hesai lidar + FAST-LIO2 + EKF + map_localizer (`localization.launch.py mode:=runtime` — no FAST-LIO2-only mode) | `/lidar_odometry` @ ~10 Hz |
 | `scripts/test_step4_motion_plan.sh [--viz ...] [fastlio\|fused] [profile]` | + `plan_b` motion executor (forward→90°turn→forward demo). `fastlio`/`fused` only selects which already-running pose topic feeds it. | `/cmd_vel_mux_node` → `AUTONOMOUS`, `/cmd_vel_safe` flowing |
 
 ---
@@ -278,10 +367,13 @@ them directly, but useful to know they exist:
 | File | Included by | Purpose |
 |---|---|---|
 | `src/diy_robot_description/launch/description.launch.py` | `challenge_master.launch.py` (BLOCK 2, always) | `robot_state_publisher` from the URDF — runs independently on both Jetson and RPi (safe to duplicate, see §2) |
-| `src/diy_localization/launch/localization.launch.py` | `challenge_master.launch.py` (BLOCK 8), `test_step3`/`test_step4` | FAST-LIO2 (`fast_lio_ros2`) + single EKF (`ekf_odom.yaml`) + NDT-OMP — `mode:=runtime` always launches all three together, there is no FAST-LIO2-only mode |
+| `src/diy_localization/launch/localization.launch.py` | `challenge_master.launch.py` (BLOCK 8), `test_step3`/`test_step4` | FAST-LIO2 (`fast_lio_ros2`) + single EKF (`ekf_odom.yaml`) + `map_localizer` (VGICP) — `mode:=runtime` always launches all three (plus a one-shot `trigger_map_relocalize.py` to load the map), there is no FAST-LIO2-only mode |
 | `src/diy_localization/launch/offline_mapping.launch.py` | run directly, standalone | LIO-SAM offline prior-map generation from a recorded bag |
-| `src/diy_ndt_localization/launch/ndt_localization.launch.py` | `localization.launch.py` | NDT-OMP map→odom scan matching against a saved `.pcd` map |
-| `src/diy_zone_nav/launch/zone_nav.launch.py` | `challenge_master.launch.py` (BLOCK 12, via `_zone_nav_launch`) | Zone-aware nav state machine |
+| `src/diy_ndt_localization/launch/ndt_localization.launch.py` | **not launched by anything anymore** — DEPRECATED | NDT-OMP map→odom scan matching; replaced by `map_localizer` after a real TF-composition bug was found (see caveat #4/reuse_plan_step1.md Step 11) — kept in the repo for reference/rollback only |
+| `src/diy_zone_nav/launch/zone_nav.launch.py` | `challenge_master.launch.py` (BLOCK 12, via `_zone_nav_launch`) | Zone-aware nav state machine. **ORPHANED in the custom A*/PD architecture** (see caveat #9/reuse_plan_step1.md Step 13) — its `/speed_limit` and costmap-layer `SetParameters` calls target full-Nav2 services that don't exist in that setup; already fails gracefully (`service_is_ready()` checked), but nothing consumes its outputs either. Safe to not run at all with the custom controller stack. |
+| `src/diy_motion_planner/launch/pd_navigation.launch.py` | run directly, standalone (not yet in `challenge_master.launch.py`) | `nav2_map_server` + `nav2_lifecycle_manager` (map serving ONLY, not full Nav2) + `a_star_planner_node` + `pd_motion_planner_node` → `/cmd_vel_nav`. `cmd_vel_topic` now defaults to `/cmd_vel_nav` (hardware) — pass `cmd_vel_topic:=/cmd_vel` for sim. |
+| `src/diy_motion_planner/launch/pure_pursuit_navigation.launch.py` | run directly, standalone | Same map_server + A* stack, with `pure_pursuit_motion_planner_node` instead of PD. Same `cmd_vel_topic` default fix applied. |
+| `src/diy_waypoint_sequencer/launch/waypoint_sequencer.launch.py` | run directly, standalone, **optional** | NEW — auto-publishes `/goal_pose` in sequence from a waypoints YAML, waits for `/green_light`, advances on `/pd/goal_reached`. Not running this is completely safe — `/goal_pose` just needs to be published manually instead (RViz "2D Goal Pose"). See reuse_plan_step1.md Step 13 for the full design rationale. |
 | `src/challenge_bringup/launch/joystick_drive.launch.py` | `challenge_master.launch.py` (BLOCK 9), `test_step1`-`3` | `joy_node` + `teleop_twist_joy` only — **does not itself launch a motor node** |
 | `src/challenge_bringup/launch/motion_plan_executor.launch.py` | `test_step4` (indirectly, via `plan_b`) | Standalone `plan_b` executor launch |
 | `src/fast_lio_ros2/launch/lio_localizer.launch.py` | not used by this repo | The `fast_lio_ros2` package's own launch file (upstream) — this repo's `diy_localization/launch/localization.launch.py` launches the node directly with its own params instead |
