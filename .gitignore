@@ -47,10 +47,11 @@ imu_calib_data/
 *.imu
 
 # ── Maps generated at runtime ─────────────────────────────────────────────────
-# (keep maps/ folder with its YAML placeholder; ignore actual PCD/pgm outputs)
-*.pcd
-*.pgm
-# but keep the static_map.yaml placeholder
+# *.pcd/*.pgm are now tracked (2026-09-11): the actual course map artifacts
+# (refined_map.pcd, course_traced_smooth.pgm, etc.) are small, load-bearing
+# files the whole team needs, not disposable local scratch output. Kept the
+# static_map.yaml placeholder note below for history even though it's now
+# redundant with tracking *.pgm directly.
 !src/challenge_bringup/maps/static_map.yaml
 frames_*.gv
 frames_*.pdf
