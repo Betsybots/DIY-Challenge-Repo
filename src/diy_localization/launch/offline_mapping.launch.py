@@ -14,7 +14,7 @@ a factor graph with loop closure produces the globally consistent
 
 FOUR-NODE PIPELINE
 ──────────────────
-  /hesai/points ──╮
+  /lidar_points ──╮
   /imu/data     ──╰
        ↓
   imuPreintegration   — IMU pre-integration; pose prediction between scans

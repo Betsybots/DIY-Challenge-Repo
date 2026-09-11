@@ -301,9 +301,11 @@ def generate_launch_description():
         ),
 
         # ── BLOCK 6: Hesai QT64 lidar driver ──────────────────────────────────
-        # Connects to the lidar over UDP and publishes /hesai/points
-        # (sensor_msgs/PointCloud2 @ ~10 Hz).  This is FAST-LIO2's primary
-        # input for scan matching and map building.
+        # Connects to the lidar over UDP and publishes /lidar_points
+        # (sensor_msgs/PointCloud2 @ ~10 Hz) — CONFIRMED on real hardware
+        # 2026-09-11 (was previously assumed /hesai/points; that assumption
+        # was wrong). This is FAST-LIO2's primary input for scan matching
+        # and map building.
         # Network settings come from DIY_HESAI_* env vars set by the profile.
         Node(
             package='hesai_ros_driver',

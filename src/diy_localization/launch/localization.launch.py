@@ -6,7 +6,7 @@ Brings up the full localisation stack for DIY Robot Challenge 2026.
 
 DATA FLOW (runtime):
 ──────────────────────────────────────────────────────────────────────────────
-  /hesai/points  ──╮
+  /lidar_points  ──╮
   /imu/data      ──╰─ FAST-LIO2  ──→  /lidar_odometry ──╮
                                        /cloud_registered_body │
                                                          │

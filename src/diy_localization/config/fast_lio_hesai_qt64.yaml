@@ -46,21 +46,15 @@
 #      this on every run — that's the checker being stale for this robot's
 #      chosen configuration, not a real problem; ignore that specific FAIL.
 #
-#   4. common.lid_topic = "/lidar_points" below, but challenge_bringup's
-#      BLOCK 6 (challenge_master.launch.py) and profiles/*.env assume a
-#      `hesai_ros_driver` node publishing "/hesai/points". `hesai_ros_driver`
-#      itself is NOT missing — per docs/installation_setup.html it's a
-#      separate overlay workspace that already lives directly on the Jetson
-#      (~/ros2_ws/src/Betsybot-Software/src/HesaiLidar_ROS_2.0, already
-#      built/configured there, outside all 4 git repos and outside this
-#      repo's third_party_ws by design). The remaining gap is purely the
-#      TOPIC NAME: does the real driver on the Jetson actually publish
-#      "/hesai/points" (as challenge_bringup assumes) or "/lidar_points" (as
-#      this tested FAST-LIO2 config assumes)? Since "/lidar_points" is what
-#      fast_lio_ros2 has actually been tested against, treat that as ground
-#      truth for now; either remap hesai_ros_driver's real output to
-#      "/lidar_points" on the Jetson, or update this file to "/hesai/points"
-#      once the real topic name is confirmed there.
+#   4. [RESOLVED 2026-09-11] common.lid_topic = "/lidar_points" below is
+#      CONFIRMED correct — the user directly confirmed the real
+#      hesai_ros_driver on the Jetson publishes "/lidar_points", not
+#      "/hesai/points". challenge_bringup's BLOCK 6
+#      (challenge_master.launch.py) and profiles/*.env's comments assumed
+#      "/hesai/points" — those references have been corrected to match
+#      reality (see docs/reuse_plan_step1.md for the full list of files
+#      fixed). No remapping needed; this file's own value was already
+#      right.
 #
 #   5. mapping.map_file_path below is an absolute path on the original dev's
 #      machine (/home/juggernauts/...) — doesn't exist on other machines.

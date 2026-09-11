@@ -21,7 +21,7 @@
 #
 # Prerequisites:
 #   • ZED2i publishing /zed/zed_node/rgb/image_rect_color
-#   • Hesai QT64 publishing /hesai/points
+#   • Hesai QT64 publishing /lidar_points
 #   • A calibration target visible to both sensors simultaneously:
 #       - Recommended: flat board with AprilTags + reflective/matte checkerboard
 #       - Minimum: matte checkerboard on flat rigid board (no shiny surfaces)
@@ -109,8 +109,8 @@ if ! timeout 5 ros2 topic hz /camera/color/image_raw 2>/dev/null | grep -q "aver
     MISSING=1
 fi
 
-if ! timeout 5 ros2 topic hz /hesai/points 2>/dev/null | grep -q "average rate"; then
-    echo "[ERROR] /hesai/points is NOT publishing."
+if ! timeout 5 ros2 topic hz /lidar_points 2>/dev/null | grep -q "average rate"; then
+    echo "[ERROR] /lidar_points is NOT publishing."
     echo "  Start the Hesai driver or the full bringup."
     MISSING=1
 fi
@@ -180,7 +180,7 @@ echo ""
 ros2 bag record \
     /camera/color/image_raw \
     /camera/color/camera_info \
-    /hesai/points \
+    /lidar_points \
     --output "${BAG_PATH}/bag" \
     --max-bag-duration "${DURATION}" &
 BAG_PID=$!

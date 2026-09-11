@@ -47,7 +47,7 @@ echo "[record_bag] Bag output: ${OUTPUT_DIR}"
 # ── SAD-required topic list ───────────────────────────────────────────────────
 # Section 5.2 Data Recording Requirements
 REQUIRED_TOPICS=(
-    /hesai/points                  # 3-D lidar (raw scans for SLAM replay)
+    /lidar_points                  # 3-D lidar (raw scans for SLAM replay)
     /imu/data                      # IMU after calibration / FAST-LIO2 input
     /gps/fix                       # RTK GPS fix
     /zed/zed_node/rgb/image_rect_color   # ZED2i colour (obstacle classification)

@@ -12,7 +12,7 @@
 #
 #   Real robot:
 #     - use_sim_time: false  ← wall-clock time from hardware drivers
-#     - lidar topic:  /hesai/points  (PointCloud2 from Hesai PandarXT driver)
+#     - lidar topic:  /lidar_points  (PointCloud2 from Hesai QT64 driver — confirmed real topic name 2026-09-11)
 #     - robot frames: standard ROS frames (no namespace prefix)
 #                     robot_base_frame: base_link
 #                     local costmap global_frame: odom
@@ -51,7 +51,7 @@ global_costmap:
         enabled: true
         observation_sources: lidar_points
         lidar_points:
-          topic: /lidar_points   # SIM: /lidar_points  |  REAL: /hesai/points
+          topic: /lidar_points   # Confirmed real topic name (2026-09-11), same for sim and real
           data_type: "PointCloud2"
           marking: true
           clearing: true
@@ -91,7 +91,7 @@ local_costmap:
         mark_threshold: 0
         observation_sources: lidar_points
         lidar_points:
-          topic: /lidar_points   # SIM: /lidar_points  |  REAL: /hesai/points
+          topic: /lidar_points   # Confirmed real topic name (2026-09-11), same for sim and real
           data_type: "PointCloud2"
           marking: true
           clearing: true

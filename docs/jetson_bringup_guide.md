@@ -118,8 +118,8 @@ than `maps/refined_map.pcd`.
 > pair cannot be used as a `map_pcd_path` value or vice versa.
 
 **What this starts, and in what order things become available:**
-1. `fastlio_mapping` (FAST-LIO2) — needs `/hesai/points` (or `/lidar_points`
-   — see the open topic-name question in §5) and `/imu/data` immediately.
+1. `fastlio_mapping` (FAST-LIO2) — needs `/lidar_points` and `/imu/data`
+   immediately.
 2. `ekf_filter_node_odom` (the single EKF) — needs `/wheel_odom` (from the
    RPi, over Zenoh), `/imu/data`, and FAST-LIO2's gated output.
 3. `map_localizer_node` — starts immediately but does nothing until step 4.
@@ -177,7 +177,7 @@ the map → the `map→base_link` TF lookup.
 
 ```bash
 # All the topics you'd expect, and their rates
-ros2 topic hz /hesai/points          # or /lidar_points — see open item below
+ros2 topic hz /lidar_points          # real Hesai QT64 lidar topic
 ros2 topic hz /imu/data              # from the RPi, over Zenoh
 ros2 topic hz /lidar_odometry        # FAST-LIO2 output
 ros2 topic hz /odometry/filtered     # EKF output, should be ~50 Hz
@@ -206,10 +206,12 @@ These affect the localization pipeline specifically and are not yet
 resolved as of this doc — see `reuse_plan_step1.md` for full detail on
 each:
 
-- **`hesai_ros_driver`'s real output topic is unconfirmed**: `/hesai/points`
-  (assumed by `challenge_master.launch.py`) vs `/lidar_points` (what
-  `fast_lio_ros2` has actually been tested against). Check with
-  `ros2 topic list` on your specific Jetson before trusting the lidar leg.
+- ~~`hesai_ros_driver`'s real output topic is unconfirmed~~ **RESOLVED
+  2026-09-11**: confirmed on hardware, the real topic is `/lidar_points`.
+  All code/config in this repo now uses that name consistently (see
+  `reuse_plan_step1.md` Step 25). `challenge_master.launch.py`'s BLOCK 6
+  previously assumed `/hesai/points` — that assumption has been
+  corrected.
 - **`extrinsic_R` was just fixed to a valid rotation (identity) but not
   yet re-verified on hardware** — the new value doesn't match this
   repo's own from-scratch Rx(-90°) derivation from an earlier

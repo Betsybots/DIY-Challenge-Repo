@@ -1899,3 +1899,81 @@ path, and the `--preview-only` path all work correctly.
 **Docs:** `preprocess_map.py`'s `--wall-thickness` help text corrected
 (was a stale/wrong "~0.05m" claim); `--isolate-largest-free`-related tips
 already documented in Step 21 remain accurate.
+
+## Reuse Plan Step 25 — RESOLVED: real lidar topic is `/lidar_points`, not `/hesai/points`
+
+**Context:** Several files (comments and, in a couple of cases, actual
+functional parameters) assumed the raw Hesai QT64 driver publishes on
+`/hesai/points`. This was flagged as an open item as far back as Step
+4-ish of this log, since the *actual* running driver's topic name had
+never been confirmed against real hardware. User has now confirmed
+directly: **the real topic is `/lidar_points`**.
+
+**What was already correct (verified via grep before touching anything):**
+`fast_lio_hesai_qt64.yaml`'s functional `common.lid_topic` and
+`nav2_params.yaml`'s functional `topic:` values were already
+`/lidar_points` — likely fixed opportunistically in an earlier segment
+without the header comments/other files being updated to match.
+
+**What was wrong and got fixed (functional, not just cosmetic):**
+- `src/challenge_bringup/config/collision_monitor_params.yaml` —
+  `topic:`/`observation_sources:` actually said `/hesai/points`. Fixed.
+  (Currently dormant/unlaunched per user: local costmap + collision
+  avoidance are not implemented yet — only controller + localizer are
+  being tested right now — but this is still a real latent bug for
+  whenever that stack is turned on.)
+- `scripts/health_check.sh` — lidar-publishing health check subscribed
+  to the wrong topic, meaning a health-check run before today would
+  have falsely reported the lidar as dead. Fixed.
+- `scripts/record_bag.sh` — bag-recording topic list would have
+  silently recorded nothing for lidar (no error, just an empty/missing
+  topic in the bag). Fixed.
+- `scripts/calibrate_extrinsics.sh` — prerequisite comment + 2
+  functional occurrences (used for cam-lidar calibration data capture).
+  Fixed.
+- `scripts/calibrate_cam_lidar.sh` — prerequisite comment, `ros2 topic
+  hz` health check, and `ros2 bag record` topic list (3 occurrences).
+  Fixed.
+
+**Cosmetic-only fixes** (comments/docstrings/echo statements, no
+functional effect either way, fixed for accuracy anyway):
+`src/diy_localization/config/fast_lio_hesai_qt64.yaml` header comment
+(open item rewritten as RESOLVED with today's date),
+`src/challenge_bringup/launch/challenge_master.launch.py` BLOCK 6
+comment, `src/diy_localization/launch/localization.launch.py` and
+`offline_mapping.launch.py` docstring data-flow diagrams,
+`scripts/test_step3_fastlio.sh` echo statement.
+
+**Deliberately left alone:** `src/diy_ndt_localization/*` — confirmed
+via grep that this package is already deprecated (replaced by
+`map_localizer`, per comments in `localization.launch.py`) and not
+referenced by any active launch file; not worth fixing a dead package.
+`docs/generate_*.py` PDF-generator scripts were swept and found to
+contain no `/hesai/points` references needing correction in the current
+docs set (already-generated PDFs were not touched here since no source
+`.md` content referenced the stale topic).
+
+**Verification:** `bash -n` on every edited shell script, `python3 -c
+"import ast; ast.parse(...)"` on every edited `.py` launch file,
+`yaml.safe_load` on every edited `.yaml` file — all pass. Final `grep
+-rn "hesai/points"` across the whole repo (excluding
+`diy_ndt_localization`, `docs/generate_*.py`, and vendored/build dirs)
+returns only the 3 intentional "this used to be assumed /hesai/points"
+historical-note comments left in place for context — no remaining
+functional or accidental references.
+
+**Still open (unchanged by this step):** whether `extrinsic_R` in
+`fast_lio_hesai_qt64.yaml` is correct is still not 100% proven (see
+Step prior discussion — strong circumstantial timestamp evidence, not
+a live accelerometer re-check). None of today's fixes touch that value.
+
+**Deferred by user request:** 6 more `docs/generate_*.py` PDF
+generators (`generate_arena_debug_guide.py`,
+`generate_camera_guide.py`, `generate_competition_playbook.py`,
+`generate_docs.py` (SAD), `generate_mapping_guide.py`,
+`generate_nav_design.py`) still contain numerous `/hesai/points`
+references in body text and some diagram graphics (matplotlib/graphviz
+labels) — purely cosmetic/documentation, not used by anything run on
+the robot. User explicitly chose to leave these for later since they
+don't affect robot testing. Revisit before finalizing docs for
+competition handoff.

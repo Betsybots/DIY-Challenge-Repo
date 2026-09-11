@@ -11,7 +11,7 @@
 #
 # Prerequisites:
 #   • Robot must be able to move freely (figure-8 manoeuvre ~2 m diameter)
-#   • Hesai QT64 publishing on /hesai/points
+#   • Hesai QT64 publishing on /lidar_points
 #   • IMU publishing on /imu/data
 #   • third_party_ws/install sourced (lidar_imu_calib package)
 #
@@ -65,7 +65,7 @@ read -r
 echo "[calibrate_extrinsics] Recording for ${DURATION} s — DRIVE A FIGURE-8 NOW..."
 timeout "${DURATION}" ros2 bag record \
     --output "${BAG_PATH}" \
-    /hesai/points \
+    /lidar_points \
     /imu/data \
     /imu/data_raw || true
 
@@ -78,7 +78,7 @@ ros2 bag play --clock "${BAG_PATH}" &
 BAG_PID=$!
 
 ros2 launch lidar_imu_calib calib_lidar_imu.launch.py \
-    lidar_topic:=/hesai/points \
+    lidar_topic:=/lidar_points \
     imu_topic:=/imu/data \
     result_path:="${CALIB_DIR}/" || true
 

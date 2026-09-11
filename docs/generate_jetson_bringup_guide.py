@@ -345,8 +345,7 @@ ros2 launch diy_localization localization.launch.py \\
 
     story.append(H('What This Starts, In Order', 'h2', s))
     story += numbered_steps([
-        '<b>fastlio_mapping</b> (FAST-LIO2) &mdash; needs /hesai/points (or '
-        '/lidar_points &mdash; see the open topic-name question in &sect;6) and '
+        '<b>fastlio_mapping</b> (FAST-LIO2) &mdash; needs /lidar_points and '
         '/imu/data immediately.',
         '<b>ekf_filter_node_odom</b> (the single EKF) &mdash; needs /wheel_odom '
         '(from the RPi, over Zenoh), /imu/data, and FAST-LIO2&rsquo;s gated output.',
@@ -425,7 +424,7 @@ def section_verify(s):
     story.append(hr(s))
 
     story += code_block('Topic rates you would expect', '''\
-ros2 topic hz /hesai/points          # or /lidar_points — see §6
+ros2 topic hz /lidar_points          # real Hesai QT64 lidar topic
 ros2 topic hz /imu/data              # from the RPi, over Zenoh
 ros2 topic hz /lidar_odometry        # FAST-LIO2 output
 ros2 topic hz /odometry/filtered     # EKF output, should be ~50 Hz''', s)
@@ -462,12 +461,12 @@ def section_open_items(s):
         'resolved as of this guide &mdash; see reuse_plan_step1.md for full detail on '
         'each.', s))
 
-    story.append(warn_box(
-        '<b>hesai_ros_driver&rsquo;s real output topic is unconfirmed:</b> '
-        '/hesai/points (assumed by challenge_master.launch.py) vs /lidar_points '
-        '(what fast_lio_ros2 has actually been tested against). Check with '
-        '<font face="Courier">ros2 topic list</font> on your specific Jetson before '
-        'trusting the lidar leg.', s))
+    story.append(note_box(
+        '<b>RESOLVED (2026-09-11):</b> hesai_ros_driver&rsquo;s real output '
+        'topic is confirmed on hardware to be <font face="Courier">/lidar_points'
+        '</font>. All code/config in this repo now uses that name consistently '
+        '(challenge_master.launch.py previously assumed /hesai/points &mdash; '
+        'that assumption has been corrected; see reuse_plan_step1.md Step 25).', s))
     story.append(SP(4))
     story.append(warn_box(
         '<b>extrinsic_R was just fixed to a valid rotation (identity) but not yet '

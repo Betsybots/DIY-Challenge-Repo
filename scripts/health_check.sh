@@ -78,7 +78,7 @@ echo ""
 
 # ── 3. Topic rates ────────────────────────────────────────────────────────────
 echo "── Topic Rates ──"
-[[ "${DIY_USE_HESAI}" == "true" ]]   && _check_topic_rate /hesai/points 10 "Hesai lidar"
+[[ "${DIY_USE_HESAI}" == "true" ]]   && _check_topic_rate /lidar_points 10 "Hesai lidar"
 _check_topic_rate /imu/data 100 "IMU"
 [[ "${DIY_USE_GPS}" == "true" ]]     && _check_topic_rate /gps/fix 1 "GPS fix"
 [[ "${DIY_USE_MICRO_ROS}" == "true" ]] && _check_topic_rate /stm32/heartbeat 5 "STM32 heartbeat"

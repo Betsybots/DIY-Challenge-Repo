@@ -28,10 +28,10 @@ collision_monitor:
       visualize: true
       enabled: true
 
-    observation_sources: ["hesai_points"]
-    hesai_points:
+    observation_sources: ["lidar_points"]
+    lidar_points:
       type: "pointcloud"
-      topic: "/hesai/points"
+      topic: "/lidar_points"
       min_height: 0.05
       max_height: 1.5
       enabled: true
