@@ -25,7 +25,7 @@ class PurePursuitMotionPlanner(Node):
         self.declare_parameter('path_topic', '/a_star/path')
         self.declare_parameter('cmd_vel_topic', '/cmd_vel')
         self.declare_parameter('odom_frame', 'odom')
-        self.declare_parameter('base_frame', 'base_footprint')
+        self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('lookahead_distance', 0.2)
         self.declare_parameter('linear_velocity', 0.3)
         self.declare_parameter('max_angular_velocity', 1.0)
