@@ -166,9 +166,11 @@ progresses. `map_yaml` in both `pd_navigation.launch.py` and
 `pure_pursuit_navigation.launch.py` now defaults to, in priority order:
 
 1. **`$DIY_MAP_YAML`** env var, if set
-2. **`$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/global_map_2_smooth.yaml`**
-   otherwise (the map currently used for initial localizer/controller
-   testing)
+2. **`$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/course_traced_smooth.yaml`**
+   otherwise (the current final course map — hand-traced borders
+   smoothed via `preprocess_map.py`; see `docs/reuse_plan_step1.md`
+   Steps 19-24 for the full history of why it's built this way, not via
+   `preprocess_map.py`'s automatic wall detection alone)
 
 So switching maps needs no launch-file edits — just one of:
 
@@ -188,6 +190,53 @@ grid consumed only by `nav2_map_server`/the A\* planner; `map_pcd_path` is
 a 3D point cloud consumed only by `map_localizer` for the `map→odom` TF.
 A `.pgm`/`.yaml` pair cannot be used as a `map_pcd_path` value or vice
 versa.
+
+### Generating real waypoints for controller testing
+
+`diy_waypoint_sequencer/config/waypoints.yaml` ships with placeholder
+`x`/`y`/`yaw` values only meant to document the schema — not real,
+map-valid coordinates. `scripts/pick_waypoints.py` is a click-to-pick tool
+(same pattern as `scripts/register_zones_to_map.py`'s `--pick` mode) that
+generates a real waypoints.yaml by clicking points directly on the actual
+map you're testing against:
+
+```bash
+python3 scripts/pick_waypoints.py \
+    --map maps/course_traced_smooth.yaml \
+    --output maps/test_waypoints.yaml \
+    --overlay maps/test_waypoints_preview.png
+```
+
+Click waypoints **in the order the robot should visit them**; each click
+is checked against the map's own occupancy data immediately (a click on
+an occupied/unknown pixel prints a warning right away — press `u` to undo
+and click again). Heading (`yaw`) is computed automatically as the
+bearing toward the next waypoint — override with `--uniform-yaw <radians>`
+if you'd rather set a fixed heading everywhere. `--overlay` saves a PNG
+with numbered markers + heading arrows so you can sanity-check the path
+before running it on the robot. Close the plot window when you're done
+picking points.
+
+The tool also prints a ready-to-copy `initial_x`/`initial_y`/`initial_yaw`
+override matching wp1 exactly. `map_localizer`'s own relocalization
+initial pose defaults to `(0, 0, 0)` — i.e. it assumes the robot starts
+at the **map frame's own origin**, not at wp1's position. If you actually
+place the robot at wp1's real-world spot before starting, pass that
+printed override to `localization.launch.py`:
+```bash
+ros2 launch diy_localization localization.launch.py \
+    mode:=runtime \
+    initial_x:=9.7610 initial_y:=5.6980 initial_yaw:=-1.3259
+```
+Without it, VGICP relocalization has to converge from however far `(0,0)`
+actually is from wp1 (potentially several metres) — risking a failed or
+wrong convergence instead of a clean one.
+
+Then run it:
+```bash
+ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \
+    waypoints_file:=maps/test_waypoints.yaml
+```
 
 ---
 

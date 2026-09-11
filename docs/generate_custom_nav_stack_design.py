@@ -382,8 +382,9 @@ ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped \\
         'pd_navigation.launch.py and pure_pursuit_navigation.launch.py now '
         'defaults to, in priority order: (1) the DIY_MAP_YAML env var if set, '
         'else (2) $DIY_ROS_WS/src/DIY-Challenge-Repo/maps/'
-        'global_map_2_smooth.yaml (the map currently used for initial '
-        'localizer/controller testing).', s))
+        'course_traced_smooth.yaml (the current final course map &mdash; '
+        'hand-traced borders smoothed via preprocess_map.py; see '
+        'docs/reuse_plan_step1.md Steps 19-24 for the full history).', s))
 
     story += code_block('Switching maps &mdash; no launch-file edits needed', '''\
 # Once per test session, before launching anything:
@@ -399,6 +400,48 @@ ros2 launch diy_motion_planner pd_navigation.launch.py \\
         'jetson_bringup_guide.md &sect;2/&sect;3) are two separate, unrelated '
         'maps. A .pgm/.yaml pair cannot be used as a map_pcd_path value or '
         'vice versa.', s))
+
+    story.append(H('Generating real waypoints for controller testing', 'h2', s))
+    story.append(P(
+        'diy_waypoint_sequencer/config/waypoints.yaml ships with placeholder '
+        'x/y/yaw values only meant to document the schema &mdash; not real, '
+        'map-valid coordinates. scripts/pick_waypoints.py is a click-to-pick '
+        'tool (same pattern as scripts/register_zones_to_map.py&rsquo;s --pick '
+        'mode) that generates a real waypoints.yaml by clicking points '
+        'directly on the actual map you are testing against.', s))
+
+    story += code_block('Pick waypoints on the real test map', '''\
+python3 scripts/pick_waypoints.py \\
+    --map maps/course_traced_smooth.yaml \\
+    --output maps/test_waypoints.yaml \\
+    --overlay maps/test_waypoints_preview.png''', s)
+
+    story.append(P(
+        'Click waypoints in the order the robot should visit them; each '
+        'click is checked against the map&rsquo;s own occupancy data '
+        'immediately (a click on an occupied/unknown pixel prints a warning '
+        'right away &mdash; press \u2018u\u2019 to undo and click again). '
+        'Heading (yaw) is computed automatically as the bearing toward the '
+        'next waypoint &mdash; override with --uniform-yaw &lt;radians&gt; '
+        'for a fixed heading everywhere. --overlay saves a PNG with numbered '
+        'markers + heading arrows to sanity-check the path before running '
+        'it on the robot.', s))
+
+    story.append(note_box(
+        'The tool also prints a ready-to-copy initial_x/initial_y/'
+        'initial_yaw override matching wp1 exactly. map_localizer&rsquo;s '
+        'own relocalization initial pose defaults to (0,0,0) &mdash; i.e. '
+        'it assumes the robot starts at the MAP FRAME&rsquo;s own origin, '
+        'NOT at wp1. If you actually place the robot at wp1&rsquo;s '
+        'real-world spot before starting, pass that printed override to '
+        'localization.launch.py, or VGICP relocalization has to converge '
+        'from however far (0,0) actually is from wp1 (potentially several '
+        'metres) &mdash; risking a failed or wrong convergence instead of a '
+        'clean one.', s))
+
+    story += code_block('Run the picked waypoints', '''\
+ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \\
+    waypoints_file:=maps/test_waypoints.yaml''', s)
 
     story.append(H('6&nbsp;&middot;&nbsp;Still Open', 'h2', s))
     story += B([
