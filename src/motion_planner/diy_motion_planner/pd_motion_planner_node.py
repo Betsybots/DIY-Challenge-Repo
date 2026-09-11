@@ -97,7 +97,7 @@ class PDMotionPlanner(Node):
 
         self.declare_parameter(
             'base_frame',
-            'base_footprint'
+            'base_link'
         )
 
         # Stop once robot is inside this radius of FINAL goal.
