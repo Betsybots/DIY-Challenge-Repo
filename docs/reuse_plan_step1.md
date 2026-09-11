@@ -1244,3 +1244,658 @@ the corrected documentation exactly.
   `differential-drive` package identity, `extrinsic_R` identity-vs-
   Rx(-90°) discrepancy, `GlobalMap.pcd`/`refined_map.pcd` naming/course
   authenticity question.
+
+## Reuse Plan Step 15 — camera_link resolved (not needed); new pcd_to_pgm.py tool
+
+**camera_link question resolved:** user confirmed the ZED2i is not used
+for odometry, VSLAM, AprilTag, or any other spatial-fusion purpose in this
+repo — confirmed empirically by grepping for any consumer of
+`/zed/zed_node/{left,right}/image_rect_color` or any VSLAM/AprilTag/
+perception node anywhere in the repo (none found). Since nothing needs
+`base_link->camera_link` to resolve, this is not a gap needing a fix
+(same treatment as `gps_link` in Step 14) — `camera_link` does NOT need to
+be ported into `robot.urdf.xacro`, and `zed_wrapper`'s `publish_tf=false`
+is fine to leave as-is. Downgrades the "no publisher for
+base_link->camera_link" item from a warning to a non-issue; still worth a
+follow-up pass to update `docs/pipeline_diagram.dot`/`jetson_bringup_guide.md`
+§6 to reflect this (not done in this entry).
+
+**New tool: `scripts/pcd_to_pgm.py`** — while answering "how do I run just
+FAST-LIO2 to build a course map", found a real, previously-undocumented
+gap: FAST-LIO2's own `/map_save` service already works (saves a 3-D
+`.pcd`), but nothing in this repo converts that `.pcd` into the 2-D
+occupancy-grid PGM that `nav2_map_server`/the A* planner need.
+`scripts/generate_course_pgm.py` only builds a PGM from a hand-drawn
+course diagram image (not real sensor data); `scripts/preprocess_map.py`
+only cleans up a PGM that already exists. Built a new, dependency-free
+(numpy + opencv only, no open3d/pcl) converter:
+- Minimal ascii/binary PCD reader (mirrors `fast_lio_ros2/tools/
+  check_map.py`'s own `_load_pcd_minimal()`, reimplemented rather than
+  cross-package-imported since `tools/` isn't on the Python path).
+- `--preview-only` prints the point cloud's real x/y/z bounding box and a
+  z-histogram, so the height slab used to isolate walls from floor/
+  ceiling (`--z-min`/`--z-max`) is chosen from real data, not guessed.
+- Projects the chosen z-slab to a 2-D grid at `--resolution`, writes a
+  PGM (trinary convention: 0=occupied/black, 254=free/white) sized to the
+  point cloud's own bounding box, plus a companion YAML with the origin
+  computed from that same bounding box (NOT assumed `[0,0,0]` — unlike
+  the diagram-derived maps, a real lidar scan is centered wherever
+  FAST-LIO2 happened to start).
+- Deliberately does zero wall-smoothing/denoising itself — designed to
+  feed directly into the existing, already-tested `preprocess_map.py` for
+  that step, avoiding duplicated logic.
+
+**Verified via a real synthetic test** (not just written and assumed
+correct): built a synthetic binary PCD (4x4m square room wall loop at
+z=0.1-1.0m, plus floor-plane noise at z~0 and stray ceiling points at
+z~2.5-3.0m) and ran the full pipeline end-to-end:
+1. `--preview-only` correctly showed the floor spike, wall band, and
+   sparse ceiling stray points in the z-histogram.
+2. Real conversion with `--z-min 0.05 --z-max 1.1` produced a clean binary
+   (0/254 only) PGM showing an exact, correctly-scaled closed square wall
+   loop — verified by rendering it to PNG and visually inspecting it.
+3. Piped that PGM straight into `scripts/preprocess_map.py --keep-walls
+   1` with zero errors — the smoothed output was the same clean square,
+   confirming the two scripts compose correctly.
+4. Also tested: ASCII-format PCD parsing, missing-file error path,
+   missing `--z-min`/`--z-max` error path, and an out-of-range z-slab
+   (zero points survive) error path — all fail with clear messages and
+   exit code 1 rather than crashing or silently producing garbage output.
+
+**Docs updated:** `docs/testing_guide.md` §9 — added `pcd_to_pgm.py` to
+the maps/zones table, plus a new "Building a course map from a real
+FAST-LIO2 scan" walkthrough (the exact `fastlio_mapping` standalone launch
+command, why not to use `fast_lio_ros2`'s own `lio_localizer.launch.py`
+[stale bundled `qt64.yaml`], the `/map_save` service call, and the full
+`pcd_to_pgm.py` -> `preprocess_map.py` chain).
+
+**Still open:**
+- No "FAST-LIO2-only" launch file exists — `localization.launch.py`'s
+  `mode:=mapping` is dead code (every block is gated on
+  `mode == "runtime"` only); the standalone `ros2 run` command documented
+  above is a workaround, not a proper fix. Worth eventually adding a real
+  `mode:=mapping` implementation to that launch file.
+- `pcd_to_pgm.py` has not been run against a REAL FAST-LIO2-saved `.pcd`
+  yet, only a synthetic hand-built one — the real point type
+  (`pcl::PointXYZINormal`) and any real-world scan noise/density patterns
+  haven't been exercised. Re-verify the first time a real scan is
+  available.
+- `preprocess_map.py`'s existing `--keep-walls`/`--close-kernel` tuning
+  guidance was written for diagram-derived maps; real lidar scans may
+  need different defaults (noisier, more fragmented walls) — expect some
+  iteration the first time this runs on real course data.
+
+## Reuse Plan Step 16 — new pick_waypoints.py tool for controller testing
+
+User asked how to generate automatic waypoints for controller testing.
+Clarified this meant an interactive click-to-pick tool (a human still
+chooses where, but the tool handles pixel->world conversion, heading
+computation, and schema-correct output), as opposed to a fully algorithmic
+generator (random free-space sampling or a fixed patrol pattern) — the
+latter was not built.
+
+**New tool: `scripts/pick_waypoints.py`** — same click-to-pick pattern
+already established by `scripts/register_zones_to_map.py`'s `--pick` mode
+(same `px_to_world()` convention, same matplotlib click-handling
+approach), purpose-built for `diy_waypoint_sequencer`'s simpler schema:
+- Click waypoints in visit order on a real map image; each click is
+  checked against the map's own occupancy value immediately (warns if the
+  point lands on an occupied/unknown pixel, so a bad pick is caught before
+  it ever reaches the robot); `u` undoes the last point.
+- Heading (`yaw`) is computed automatically as the bearing toward the
+  next waypoint (a sane default a path-following controller test actually
+  wants) — `--uniform-yaw` overrides this with a fixed value if preferred.
+- Writes `waypoints.yaml` in `diy_waypoint_sequencer`'s exact schema
+  (`frame_id`/`loop`/`waypoints:[{label,x,y,yaw}]`) — confirmed by reading
+  `waypoint_sequencer_node.py`'s own `_load_waypoints()` parser, not just
+  assumed.
+- `--overlay` saves a PNG with numbered markers + heading arrows for a
+  visual sanity check before running on the robot (same idea as
+  `register_zones_to_map.py`'s own `--overlay`).
+
+**Verified (the parts that can be, in a sandbox with no display):** all
+non-interactive logic — `px_to_world()` round-trip and occupancy lookup
+against the REAL `maps/global_map_2_smooth.pgm` (not synthetic data),
+`compute_headings()` bearing math against a known square path (including
+the single-point edge case), the output YAML schema round-tripped and
+checked key-for-key against `waypoint_sequencer_node.py`'s actual parser
+expectations, and `--overlay` rendering (headless/Agg backend) against
+real free-space points sampled from the actual test map — the overlay
+correctly showed all points inside the real ring-shaped course corridor
+with correct path order and heading arrows. Also verified the
+missing-map-file error path exits cleanly (added a check — the first
+version raised a raw traceback here, same as `register_zones_to_map.py`
+still does today; fixed only in the new script).
+
+**Not verified (inherent to being an interactive GUI tool):** the actual
+mouse-click event loop itself was not exercised end-to-end in this
+sandbox (no display) — only every function it calls was. Same caveat
+already applies to the existing `register_zones_to_map.py --pick`.
+
+**Docs updated:** `docs/testing_guide.md` §9 (new table row) and
+`docs/custom_nav_stack_design.md` §5 (+ regenerated
+`Custom_Nav_Stack_Design.pdf`, now 7 pages, both new pages visually
+verified) — new "Generating real waypoints for controller testing"
+subsection.
+
+## Reuse Plan Step 17 — pick_waypoints.py: loop-closing heading fix + initial-pose hint
+
+Two follow-ups from real usage of `scripts/pick_waypoints.py` on an actual
+23-point course (`maps/test_waypoints.yaml`):
+
+**1. Fixed a real bug in `compute_headings()`:** it was ignoring `--loop`
+entirely — the last waypoint's heading always just repeated the previous
+segment's direction, even when the path loops back to wp1. Now, if
+`loop=True`, the last waypoint's heading is computed as the bearing
+toward point[0] instead (the actual direction the robot will drive next
+after wrapping around). Verified with a 4-point square: `loop=False`
+gives the last point 180°/same as previous segment; `loop=True` correctly
+gives -90° (bearing toward point 0) instead — a real, different value,
+not just a no-op change. Also patched the user's already-picked
+`maps/test_waypoints.yaml` in place (no re-clicking needed — positions
+were correct, only `loop: false→true` and wp23's yaw needed recomputing)
+and regenerated its overlay to visually confirm the loop closes cleanly.
+
+**2. Added an `initial_x`/`initial_y`/`initial_yaw` hint, printed after
+every run:** discovered while explaining "is wp1 (0,0,0) in the robot
+frame" that `map_localizer`'s own relocalization initial pose (see
+`trigger_map_relocalize.py`'s `initial_x`/`initial_y`/`initial_yaw`
+parameters, wired from `localization.launch.py`'s launch args) defaults
+to `(0.0, 0.0, 0.0)` — i.e. it assumes the robot starts at the MAP
+FRAME's own origin, which is generally NOT the same point as wp1 (in the
+real 23-point course, wp1 is at `(9.761, 5.698)`, ~11m from the map
+origin). If the robot is physically placed at wp1 before start but this
+override isn't passed, VGICP relocalization has to converge from a large,
+wrong initial guess — risking a failed or wrong convergence rather than a
+clean one. `pick_waypoints.py` now prints the exact, ready-to-copy
+override matching wp1 after every run, so nobody has to compute or
+copy these numbers by hand.
+
+**Verified:** re-ran the full non-interactive regression suite (px/world
+round-trip against real map data, heading computation incl. the new
+loop-closing behavior, YAML schema round-trip, overlay rendering) — all
+still pass after both changes. The new hint's printed values were checked
+against the real `test_waypoints.yaml`'s wp1 entry and match exactly
+(`x=9.7610, y=5.6980, yaw=-1.3259`).
+
+**Docs updated:** `docs/custom_nav_stack_design.md` §5 (+ regenerated
+`Custom_Nav_Stack_Design.pdf`, still 7 pages, new content visually
+verified — the added note box spans a page break cleanly via ReportLab's
+normal flow, no content lost) and the script's own module docstring.
+
+## Reuse Plan Step 18 — test_step5_full_autonomy.sh: consolidate 5 terminals into 1
+
+User asked how many terminals a full end-to-end autonomy test (localizer +
+controller + waypoint sequencer) needs. Counted precisely: 4 long-running
+foreground processes on the Jetson (`localization.launch.py`,
+`pd_navigation.launch.py`, `cmd_vel_mux_node`,
+`waypoint_sequencer.launch.py`) + 1 more for one-shot/verification
+commands + 1 on the RPi for driveStack = 6 total. Confirmed this repo
+already has an established pattern for exactly this problem
+(`test_step3_fastlio.sh`/`test_step4_motion_plan.sh` background multiple
+nodes with `&` + a `trap cleanup INT TERM` that does `kill 0`), so built
+`scripts/test_step5_full_autonomy.sh` following that same convention —
+reduces the Jetson side to 1 terminal (+ 1 still needed on the RPi for
+driveStack, which stays independent per the Zenoh cmd_vel_safe design).
+
+**Design decisions:**
+- `initial_x`/`initial_y`/`initial_yaw` for `map_localizer`'s relocalization
+  are auto-derived by reading wp1 directly out of `--waypoints-file` (same
+  numbers `pick_waypoints.py`'s `print_initial_pose_hint()` already prints
+  — just read programmatically here instead of requiring a copy-paste
+  step) — overridable via `--initial-x/--initial-y/--initial-yaw` if the
+  robot isn't actually placed at wp1.
+- Pre-flight checks all three input files (`map_pcd_path`, `map_yaml`,
+  `waypoints_file`) exist before launching anything, failing fast with a
+  clear message rather than partially starting the stack.
+- Does NOT auto-fire `/green_light` — that stays a deliberate, separate
+  action (`scripts/trigger_green_light.sh`) taken only after manually
+  confirming localization actually converged, so a bad relocalization
+  can't silently start the robot moving.
+- Does NOT launch any motor driver (unlike `test_step1`-`test_step4`,
+  which use `diy_motor_control_legacy` locally) — driveStack stays on the
+  RPi in its own terminal, independent, per the existing Zenoh-bridge
+  `cmd_vel_safe` design.
+
+**Verified (everything testable without real ROS hardware/build in this
+sandbox):** bash syntax (`bash -n`), `shellcheck` (only info/style-level
+findings, matching `test_step3_fastlio.sh`'s own identical "unused PID
+variable" pattern — cleanup uses `kill 0`, not individual PIDs, by
+design), the wp1-auto-derivation Python/bash logic against the REAL,
+current `maps/test_waypoints.yaml` (confirmed it correctly picks up
+whatever the file's current wp1 is — the file had actually changed to a
+new 22-point set since the previous turn, and the script picked that up
+correctly, not a stale cached value), the pre-flight file-check failing
+correctly on a missing file and passing on real existing files, and the
+CLI argument-parsing loop (flags + positional profile argument, plus the
+unexpected-extra-argument error path).
+
+**Not verified (needs real hardware/build, not possible in this
+sandbox):** the actual `ros2 launch`/`ros2 run` invocations were not run
+end-to-end — they are the exact same commands already given directly to
+the user in this conversation and described as the correct invocations,
+just consolidated into one backgrounded script now.
+
+**Docs updated:** `docs/testing_guide.md` §4 — table header changed to
+"`test_step1`-`test_step5`", new row added, caveat #1 note updated to
+clarify `test_step5` doesn't use the legacy motor package at all (doesn't
+launch any motor driver locally).
+
+## Reuse Plan Step 19 — CRITICAL: global_map_2_smooth and refined_map.pcd are NOT the same coordinate frame
+
+User asked how the robot knows its starting pose relative to the PGM's
+top-left-corner-as-(0,0) convention, correctly pointing out the robot
+obviously did not start recording at that corner. Investigating this
+surfaced a serious, previously-undetected bug affecting every waypoint
+picked so far.
+
+**Root cause, confirmed with hard numbers, not assumption:**
+`maps/global_map_2_smooth.yaml` has `origin: [0.0, 0.0, 0.0]`. This is
+NOT a real, measured tie to any physical location — it is
+`scripts/preprocess_map.py`'s own hardcoded fallback (`write_yaml()`)
+used whenever no source `.yaml` is passed in. The user confirmed why: a
+teammate handed over `global_map_2.pgm`/`global_map_3.pgm` directly, with
+NO accompanying `.yaml` at all, so `preprocess_map.py` had nothing real
+to inherit an origin from and silently defaulted to `[0,0,0]`.
+
+Meanwhile `maps/refined_map.pcd` (what `map_localizer` actually loads for
+its `map->odom` TF) has its own real coordinate frame, derived from
+FAST-LIO2/LIO-SAM's actual odometry during recording — completely
+unrelated to the PGM's assumed `[0,0,0]`.
+
+**Verified this is a real, current problem, not a hypothetical:**
+projected `refined_map.pcd` with `scripts/pcd_to_pgm.py` and checked
+every waypoint in the user's actual `maps/test_waypoints.yaml` (picked
+against `global_map_2_smooth`) against `refined_map.pcd`'s real bounding
+box (x:[-6.15,4.82], y:[-6.75,7.63]) — **18 of 22 waypoints fall
+completely outside the area the lidar ever scanned.** The
+`initial_x/y/yaw` override set up two turns ago (matching wp1) was
+therefore ALSO wrong — it would have told map_localizer's relocalization
+to seed VGICP ~10+ metres from any real scan data.
+
+**Investigated and ruled out a shortcut fix:** found that
+`LIO_Localization/src/map_del/` (the teammate's own repo, outside
+DIY-Challenge-Repo) contains BOTH `global_map.pgm`+`refined_map_1.pcd`
+(byte-identical to this repo's `global_map_2.pgm`) AND
+`global_map_1.pgm`+`refined_map.pcd` (byte-identical to this repo's
+`global_map_3.pgm` and the currently-active `maps/refined_map.pcd`) —
+i.e. confirmed real, same-mapping-run PAIRS exist. Tried swapping
+`maps/refined_map.pcd` to be `refined_map_1.pcd` (the file that pairs
+with `global_map_2.pgm`, the actual source of `global_map_2_smooth`)
+expecting this would fix the frame mismatch — it did NOT: re-checked the
+same 22 waypoints against `refined_map_1.pcd`'s real bounding box
+(x:[-6.28,7.05], y:[-7.53,5.09]) and still found 14/22 out of bounds.
+**Conclusion: even a genuinely paired PGM+PCD from the same mapping run
+do not automatically share a coordinate origin** unless whatever tool
+produced the PGM explicitly derived it from the point cloud (confirmed
+`maps/global_map.yaml` — an older, different map family — DOES have a
+real non-zero origin `[-5.25,-7.35,0.0]`, so this has been done
+correctly before, just not for the `global_map_2`/`_3` family). Reverted
+`maps/refined_map.pcd` back to its original file (matching
+`global_map_3.pgm`) since the swap didn't help.
+
+**Only reliable fix:** generate the 2D map DIRECTLY from the same `.pcd`
+`map_localizer` will load, using `pcd_to_pgm.py` (which computes origin
+from the point cloud's own real bounding box, not a placeholder). Did
+this: `maps/course_from_pcd.pgm`/`.yaml` (z-slab -0.3 to 1.4m, resolution
+0.05, `--no-smooth` mode). This is frame-correct by construction, but
+visually rough — `refined_map.pcd` is genuinely sparse (12,685 points
+total across the whole course), and no combination of
+`--close-kernel`/`--keep-walls`/z-range tried (several combinations,
+0.025 and 0.05 resolution, smooth and no-smooth modes) produced a fully
+clean closed ring; real wall-point gaps remain even in the best result.
+Confirmed a higher `--z-max` (tried 1.4/1.5/2.0/2.2) does NOT help —
+occupied pixel count barely changes (1001->1005 px), meaning the extra
+height range only catches a handful of stray points, not more real wall
+structure — sparsity is the genuine limiting factor, not z-window choice.
+
+User chose to proceed with the rough-but-frame-correct
+`maps/course_from_pcd.pgm`/`.yaml` as-is rather than spend more time
+tuning preprocessing or waiting for denser source data.
+
+**Still open / next steps:**
+- `maps/test_waypoints.yaml` needs to be re-picked entirely against
+  `maps/course_from_pcd.yaml` (NOT `global_map_2_smooth.yaml`) — the
+  current file is invalid (18/22 points out of the real scanned area).
+- The `initial_x/y/yaw` override for `map_localizer`'s relocalization
+  must be re-derived from the NEW wp1 once re-picked (same
+  `pick_waypoints.py` auto-hint mechanism, just needs a fresh run).
+- `docs/custom_nav_stack_design.md`/`docs/testing_guide.md` still
+  reference `maps/global_map_2_smooth.yaml` as the example test map in
+  several places — needs updating to `maps/course_from_pcd.yaml` (or
+  whatever the team settles on) once this is finalized, to avoid the
+  same mistake recurring.
+- Longer-term: if a denser mapping pass becomes available (more lidar
+  points, e.g. via LIO-SAM's loop-closure-refined map rather than raw
+  FAST-LIO2 output), regenerating `course_from_pcd` from that would
+  likely produce a visually cleaner map without changing this fix's
+  approach.
+
+## Reuse Plan Step 20 — pcd_to_pgm.py: point-splatting + outlier removal + region exclusion for clean walls from sparse scans
+
+User asked whether the rough `course_from_pcd.pgm` walls could be
+smoothed like the (frame-mismatched, not usable as-is) `global_map_3.pgm`
+teammate map, and separately flagged a stray "antenna" spike protruding
+from the top of the outer wall in the rendered overlay as noise that
+should be removed.
+
+**Investigated why the raw wall-selection/contour pipeline failed on
+this sparse point cloud:** `refined_map.pcd` only has 12,685 total points
+across the whole course. At native resolution, individual wall points
+are frequently too far apart to touch as single pixels, so
+`preprocess_map.py`'s connected-components step saw dozens of tiny
+fragments (~1300px components) instead of one real wall, and no
+`--close-kernel` value (tried 15-100) could bridge the real gaps without
+either leaving fragments or over-merging unrelated structure.
+
+**Root-fix added to `scripts/pcd_to_pgm.py` (new, reusable capability,
+not a one-off hack for this map):**
+1. **`--point-radius-px N`**: splats each occupied pixel into a filled
+   disk of N pixels before writing the PGM — the same technique real
+   occupancy-grid converters (octomap, PCL grid projection) use for
+   sparse point clouds. Verified with a synthetic test (a line of points
+   spaced wider than the raster resolution originally rasterized to 17
+   isolated pixels; with `--point-radius-px 3` the same points produced
+   513 connected occupied pixels — a continuous line). On the real data,
+   `--point-radius-px 3` grew wall components from ~1300px to
+   96000-150000px — genuinely continuous walls, verified visually
+   (closed ring, both outer and inner boundaries solid).
+2. **`--outlier-min-neighbors N` / `--outlier-radius-factor`**:
+   statistical outlier removal (same concept as PCL's
+   StatisticalOutlierRemoval) — drops points whose 2D neighborhood (via
+   `scipy.spatial.cKDTree`) is too sparse to be a real densely-scanned
+   wall, applied BEFORE rasterizing/splatting (so splatting can't weld an
+   isolated noise point onto the real wall the way it would if outlier
+   removal ran after). Verified on real data: of 7854 slab points, 87
+   have <=3 neighbors within 0.15m (3x resolution) vs. 7316 with >10 —
+   a clear, real bimodal separation between isolated noise and dense wall
+   structure. Verified with a synthetic dense-wall + isolated-3-point-
+   cluster test: outlier removal correctly dropped the isolated cluster,
+   kept the dense wall.
+3. **`--exclude-region X_MIN,X_MAX,Y_MIN,Y_MAX`** (repeatable): manually
+   drops every point inside a given world-space x/y box before
+   rasterizing. Added specifically because the user-flagged spike turned
+   out NOT to be simple isolated noise — investigated its actual point
+   distribution and found ~296-337 points in a locally coherent (not
+   isolated) cluster around x=[-2.2,1.2] y=[2.2,3.63], meaning neither
+   `--outlier-min-neighbors` (tried 3/5/8 — no visible change, since the
+   cluster is locally dense enough to pass any reasonable neighbor
+   threshold) nor morphological opening (tried k=15/25 on the pre-contour
+   filled mask — either left the spike mostly intact or, at a strong
+   enough kernel to remove it, also fragmented the real wall, since the
+   spike and the real wall are similar thickness) could tell it apart
+   from real structure automatically. Manual region exclusion was the
+   only approach that worked cleanly, verified before/after
+   side-by-side: the long finger-like protrusion visible in the original
+   render is now a small, much-reduced bump.
+
+**Not fully resolved:** a small residual bump remains at the excluded
+region's boundary (visible in the final `maps/test_waypoints_preview.png`
+overlay near the top of the outer wall) — likely a contour-smoothing
+edge effect where the algorithm draws through the now-sparser boundary
+of the excluded zone. Cosmetic only; does not affect any of the 23
+waypoints (re-verified in-bounds and in free space against the final
+map after every iteration in this step).
+
+**Final map**: `maps/course_from_pcd_smooth.pgm`/`.yaml`
+(resolution 0.025, origin `[-5.6551, -6.9249, 0.0]` — same origin
+throughout every variant tried in this step, confirming none of
+splatting/outlier-removal/region-exclusion disturbed frame correctness).
+Generated via:
+```
+python3 scripts/pcd_to_pgm.py --input maps/refined_map.pcd \
+    --output /tmp/final2 --z-min -0.3 --z-max 1.4 --resolution 0.05 \
+    --point-radius-px 3 --exclude-region="-2.5,1.5,1.6,10.0"
+python3 scripts/preprocess_map.py --input /tmp/final2.pgm \
+    --yaml /tmp/final2.yaml --close-kernel 5 --keep-walls 2 --no-display
+```
+All 23 existing waypoints in `maps/test_waypoints.yaml` re-verified
+in-bounds and in free space against this final map (0 out of bounds, 0
+on occupied/unknown) — no re-picking needed, only the map's wall
+rendering changed, not its coordinate frame.
+
+**Still open:**
+- The residual small bump at the exclusion boundary could likely be
+  removed with a wider/differently-shaped exclusion region, or by
+  accepting it as cosmetic (current recommendation, given the boundary
+  doesn't intersect any real waypoint or corridor path).
+- These new `pcd_to_pgm.py` flags are generically reusable for any future
+  sparse-scan map, not tied to this specific course/point cloud — worth
+  documenting in `docs/testing_guide.md`'s map-generation section as the
+  new recommended workflow for sparse LIO2/LIO-SAM point clouds.
+
+## Reuse Plan Step 21 — preprocess_map.py: mark enclosed inner-ring interior unavailable
+
+User pointed out the inner ring's interior was still shown as free (white)
+in `course_from_pcd_smooth.pgm`, even though it's fully enclosed by a
+wall and genuinely unreachable — should be unavailable, same treatment
+as the exterior outside the outer wall.
+
+**Root cause:** `preprocess_map.py`'s `_flood_and_assemble()` only
+flood-fills from the 4 IMAGE BORDERS inward to find the true exterior.
+Since both the real corridor AND the inner ring's interior are fully
+enclosed by walls, NEITHER touches the image border — the border flood
+fill correctly marks the true exterior unavailable, but has no way to
+also reach and mark the separately-enclosed interior island.
+
+**Fix:** added `isolate_largest_free` parameter to `_flood_and_assemble()`
+(wired through `smooth_pipeline()`/`simple_pipeline()`/new CLI flag
+`--isolate-largest-free`, default OFF). After the usual border flood
+fill, if enabled, runs connected-components on the remaining free-space
+regions and keeps only the SINGLE LARGEST one as free — any other
+enclosed free blob (the inner-ring interior) gets marked
+unavailable/unknown too. Deliberately opt-in, not the new default: this
+technique can't distinguish "unreachable enclosed island" from "a second
+genuinely separate navigable room" — it just assumes the largest
+connected free blob is the only real one, which is correct for a single
+closed-loop/corridor course but would silently break a map with multiple
+legitimately separate rooms.
+
+**Verified with a synthetic test** (two square wall outlines: an outer
+boundary + an inner island, matching the real course's topology) before
+touching real data: confirmed the old behavior incorrectly left the
+island's interior FREE; the new `isolate_largest_free=True` correctly
+marks it UNKNOWN while the real corridor between the two walls stays
+FREE and the true exterior stays UNKNOWN in both cases.
+
+**Applied to the real course map**: regenerated
+`maps/course_from_pcd_smooth.pgm`/`.yaml` with `--isolate-largest-free`
+added to the existing recipe (same z-slab/point-radius/exclude-region
+from Step 20) — log confirmed a 151,776 px enclosed blob (the inner ring
+interior) was correctly marked unavailable; verified visually (both
+exterior and inner-ring interior now consistently grey, only the
+corridor between them white). Origin unchanged (`[-5.6551, -6.9249]`) —
+confirms this didn't disturb frame correctness. Re-verified all 26
+waypoints in `maps/test_waypoints.yaml` still in-bounds and in free space
+against the updated map (0 out of bounds, 0 on occupied/unknown) — no
+re-picking needed, since the change only affects space the waypoints
+were never placed in anyway.
+
+## Reuse Plan Step 22 — new draw_map_borders.py: manual wall tracing for real scan gaps
+
+User asked for an interactive tool to open the raw PGM (from `pcd_to_pgm.py`)
+and hand-draw the outer/inner wall borders, explicitly to solve the real
+gap found in Step 20's `refined_map_1.pcd` generalization test — a genuine
+scan gap (zero points in one stretch) that no `--close-kernel`/
+`--inner-close-kernel` value could close, since those tools can only
+bridge gaps BETWEEN existing points, not invent data that was never
+scanned.
+
+**New tool: `scripts/draw_map_borders.py`** — same interactive-picker
+pattern as `pick_waypoints.py`/`register_zones_to_map.py` (matplotlib
+click handling, explicit backend fallback for the known `QT_API`
+misconfiguration bug), purpose-built for manual wall tracing:
+- Shows the raw/messy PGM dimmed as a background reference so the user
+  traces directly over real scan data.
+- `'o'` starts/restarts the OUTER wall trace; `'i'` finishes the current
+  polygon and starts a new INNER obstacle (repeatable for multiple
+  separate inner obstacles); `'u'` undoes the last point; closing the
+  window finalizes and rasterizes.
+- Traced polygons are resampled to evenly-spaced points then
+  Gaussian-smoothed in periodic (wrap) mode — same smoothing technique
+  `preprocess_map.py` already uses on its own auto-extracted contours,
+  so hand-clicked points don't look like jagged straight-line segments.
+- Rasterization: FREE only inside the outer polygon AND outside every
+  inner polygon; UNKNOWN everywhere else (true exterior AND every inner
+  obstacle's interior, consistent treatment — same idea as Step 21's
+  `--isolate-largest-free`, but driven by an exact hand-drawn shape
+  instead of an automatic largest-blob heuristic, so it works even when
+  the automatic wall detection can't close a real gap).
+- Output PGM/YAML preserves the INPUT map's resolution/origin exactly
+  (not re-derived) — this only re-draws walls on an already-correct
+  frame, it does not touch frame correctness at all.
+
+**Verified (everything testable without a live GUI in this sandbox):**
+- `resample_and_smooth()`: a synthetic square resamples to the requested
+  point count; smoothing measurably rounds a corner (moves it away from
+  the exact clicked corner point) vs. no smoothing, confirming the
+  Gaussian pass has a real, visible effect.
+- `rasterize()`: a synthetic outer square + inner square obstacle
+  correctly classifies exterior=UNKNOWN, corridor=FREE,
+  inner-obstacle-interior=UNKNOWN, and the traced boundary itself=WALL.
+  Re-verified the zero-inner-polygon case (a course with only an outer
+  wall, no obstacle) correctly leaves the whole interior FREE.
+- `write_output()`: confirmed the output YAML's resolution/origin exactly
+  match the input meta dict, byte-for-byte on the printed values — not
+  just "close enough."
+- `draw_overlay()`: renders without error on real PGM dimensions.
+- **End-to-end proof against the actual real gap found in Step 20**:
+  loaded the real raw projection of `refined_map_1.pcd`
+  (`pcd_to_pgm.py --z-min -0.3 --z-max 1.2 --point-radius-px 3`),
+  simulated a realistic hand-trace (a plausible sequence of click points
+  a person would place, including bridging the exact real gap region
+  identified in Step 20's point-density check) through `rasterize()`
+  directly (not the live GUI, which can't be exercised headlessly) —
+  produced a fully closed, clean ring with both the exterior and the
+  inner obstacle's interior correctly marked unavailable, and the
+  corridor correctly free — the exact result the automatic pipeline
+  could NOT produce for this file no matter which parameters were tried.
+
+**Not verified (inherent to being an interactive GUI tool, same caveat as
+`pick_waypoints.py`/`register_zones_to_map.py --pick`):** the actual
+mouse-click event loop and key-binding handlers were not exercised
+end-to-end in this sandbox (no display) — every function they call was
+tested directly instead.
+
+**Docs updated:** `docs/testing_guide.md` §9 — new table row, positioned
+as the manual alternative to `preprocess_map.py` specifically for when
+automatic wall detection can't cleanly close a real scan gap.
+
+## Reuse Plan Step 23 — draw_map_borders.py: save/reload traced points + real-world wall thickness
+
+Two real usability gaps found while iterating with the user on
+`draw_map_borders.py`:
+
+**1. `cv2.polylines(thickness=N)` does not draw exactly N pixels wide** —
+confirmed empirically (requesting 3 draws 5px; requesting 8 draws 9px;
+the relationship isn't a clean formula). This meant a user-requested
+"~5 inch wall" via a naive pixel-count guess came out ~2x too thick.
+Fixed by adding `--wall-thickness-in`/`--wall-thickness-m`: these
+empirically calibrate the real drawn width AT RUNTIME (draw real test
+lines at increasing requested thicknesses on a throwaway canvas, measure
+the actual result, pick the closest match) rather than trusting a
+hardcoded formula that could be wrong on a different OpenCV build.
+Verified: targeting 5in at 0.05 m/px resolution correctly resolves to
+cv2 thickness=2, which empirically draws 3px = 5.91in (the closest
+achievable value — pixel granularity at this resolution limits
+precision to ~2in steps, can't hit exactly 5.00in without a
+higher-resolution source map).
+
+Also re-measured `preprocess_map.py`'s (the automatic pipeline)
+already-generated `course_from_pcd_smooth.pgm` for comparison: its
+default `--wall-thickness=8` (a DIFFERENT script with different internal
+4x-scale-then-2x-downsample math, not directly comparable to
+`draw_map_borders.py`'s parameter) produces an actual real-world
+thickness of ~4.3-4.5 inches, measured the same way (distance-transform
+ridge method).
+
+**2. User asked why they had to re-trace every time** — a completely
+valid complaint; the tool had no way to persist a trace. Added:
+- `--points-file PATH` (default `<output>_borders.yaml`): saves the
+  traced outer/inner polygon pixel coordinates + the source image shape
+  after every trace.
+- On a subsequent run, if this file already exists, it's loaded
+  automatically and the interactive tracer is SKIPPED ENTIRELY — trace
+  once per input map, then freely re-run with different
+  `--wall-thickness-in`/`--smooth-sigma`/etc. with zero re-tracing.
+- `--retrace` forces the interactive tracer to open again (overwriting
+  the saved file) if the user genuinely wants to redraw.
+- If the saved points' recorded image shape doesn't match the current
+  input PGM's shape, prints a clear warning (pixel coordinates are only
+  meaningful for the exact image they were traced against) but doesn't
+  hard-fail, since the user may know what they're doing.
+
+**Verified:**
+- `resolve_wall_thickness_px()`: tested at two different resolutions
+  (0.05 and 0.025 m/px) for the same 5in target, confirming it correctly
+  adapts the resolved cv2 parameter per-resolution rather than using a
+  fixed value.
+- Mutual-exclusivity CLI validation: `--wall-thickness` +
+  `--wall-thickness-in` together correctly errors (exit code 2) rather
+  than silently picking one.
+- `save_points_yaml()`/`load_points_yaml()`: exact round-trip verified
+  (saved then reloaded points match byte-for-byte); shape-mismatch case
+  verified to warn but not crash.
+- **Full end-to-end simulation of the real two-run workflow**: saved a
+  realistic trace (matching `course_from_pcd.pgm`'s actual dimensions),
+  then simulated exactly what a second script invocation's `main()`
+  would do (load from the points file, skip `interactive_draw()`
+  entirely) — produced a correct, clean rasterized map purely from the
+  saved file, confirming the "trace once, reuse forever" behavior
+  actually works end-to-end, not just at the unit level.
+
+**Docs:** module docstring's ARGUMENTS AT A GLANCE section updated with
+all new flags.
+
+## Reuse Plan Step 24 — real-world wall thickness for preprocess_map.py + optional pipeline wrapper
+
+Two follow-ups to streamline the pcd->final-map workflow:
+
+**1. Added `--wall-thickness-in`/`--wall-thickness-m` to `preprocess_map.py`**
+(mirroring `draw_map_borders.py`'s identical fix from Step 23) —
+`smooth_pipeline()`'s raw `--wall-thickness` parameter draws at an
+internal 4x-upscaled canvas then downsamples 2x, so it never mapped
+1:1 to real-world size; empirically calibrated at runtime instead
+(replicate just the draw-at-4x + downsample-2x steps on a synthetic
+line, measure the real result, pick the closest match) — verified
+against a real ground-truth data point (measured, via a genuine
+straight 18-column wall segment on `course_hand_drawn_smooth.pgm`: the
+default `--wall-thickness=8` produces 5px final = 4.92in, not the
+stale docstring's claimed "~0.05m"): the new calibration function
+correctly resolves a 4.92in target to `--wall-thickness=7`, landing on
+the identical actual 5px/4.92in result (off by 1 in the underlying
+parameter vs. the empirical ground truth, attributable to the
+calibration deliberately skipping blur/close-kernel steps that add
+marginal extra thickness in the full real pipeline — functionally
+accurate for its purpose).
+
+**2. Found and fixed a real, pre-existing, unrelated bug while touching
+this code**: `smooth_pipeline`'s output resolution was HARDCODED to
+`0.025` in `main()`, not computed from the actual input resolution —
+this only ever happened to be correct in all of today's testing because
+every map used exactly `0.05` m/px input by coincidence. Fixed to
+`input_resolution / 2.0` (the real, always-true relationship given
+`smooth_pipeline`'s fixed 4x-upscale/2x-downsample math). Verified the
+fix is genuinely active, not still coincidentally masked: regenerated a
+map from `refined_map.pcd` at a deliberately different resolution
+(`0.08` m/px input) and confirmed the output yaml correctly reports
+`0.04` (not the old hardcoded `0.025`).
+
+**3. New optional convenience script: `scripts/build_course_map.sh`** —
+chains `pcd_to_pgm.py` -> `draw_map_borders.py` -> `preprocess_map.py`
+into one command with the defaults validated across this session
+(`--point-radius-px 3`, `--keep-walls 2`, `--isolate-largest-free`,
+`--wall-thickness-in 5`). Explicitly presented to the user as OPTIONAL —
+they confirmed they're fine running the 3 steps manually and asked not
+to over-engineer this; built as a lightweight best-effort convenience,
+not a hard requirement. `--preview-only` runs just the z-histogram step
+(picking a z-slab still requires human judgment, can't be automated).
+Re-running with the same `--output` prefix auto-reuses any previously
+saved trace (via `draw_map_borders.py`'s existing points-file feature),
+so re-tuning `--wall-thickness-in`/`--keep-walls` afterward needs no
+re-tracing. Verified: bash syntax check, missing-required-arg error
+path, and the `--preview-only` path all work correctly.
+
+**Docs:** `preprocess_map.py`'s `--wall-thickness` help text corrected
+(was a stale/wrong "~0.05m" claim); `--isolate-largest-free`-related tips
+already documented in Step 21 remain accurate.

@@ -141,11 +141,63 @@ def load_pgm(path):
     return img
 
 
+# ─── Real-world wall thickness resolution ────────────────────────────────────
+
+def resolve_wall_thickness_px(target_thickness_m, input_resolution):
+    """smooth_pipeline()'s --wall-thickness parameter is a cv2.polylines
+    thickness drawn on a 4x-upscaled internal canvas, which then gets
+    downsampled 2x (SCALE=4, OUT=SCALE//2=2) before being written out at
+    resolution = input_resolution/2 -- so the parameter does NOT map
+    1:1 to final real-world size, and (same root cause as
+    draw_map_borders.py's identical function) cv2.polylines itself doesn't
+    even draw exactly the requested pixel count. Rather than derive a
+    fragile analytic formula through both effects, calibrate empirically
+    at runtime: replicate just the draw-at-4x + downsample-2x steps (the
+    dominant, always-present contributors to final thickness; skipped
+    here: blur/close-kernel/contour-smoothing, which only marginally
+    soften a wall's cross-section on a straight test segment, not
+    meaningfully change its core thickness) on a throwaway synthetic
+    straight line, measure the REAL final thickness cv2 actually
+    produces, and pick the requested --wall-thickness whose measured
+    result is closest to the target.
+    """
+    output_resolution = input_resolution / 2.0
+    target_px = target_thickness_m / output_resolution
+    SCALE = 4
+    OUT = SCALE // 2
+    test_canvas_size = 240
+    test_pts = np.array(
+        [[10, test_canvas_size // 2], [test_canvas_size - 10, test_canvas_size // 2]],
+        dtype=np.int32,
+    ).reshape(-1, 1, 2)
+
+    best_req, best_diff, best_actual = 1, float("inf"), None
+    for req in range(1, 81):
+        canvas = np.zeros((test_canvas_size, test_canvas_size), dtype=np.uint8)
+        cv2.polylines(canvas, [test_pts], isClosed=False, color=255, thickness=req)
+        out_size = test_canvas_size * OUT // SCALE
+        downsampled = cv2.resize(canvas, (out_size, out_size),
+                                  interpolation=cv2.INTER_NEAREST)
+        col = downsampled[:, out_size // 2]
+        actual_px = int((col > 0).sum())
+        diff = abs(actual_px - target_px)
+        if diff < best_diff:
+            best_req, best_diff, best_actual = req, diff, actual_px
+        if actual_px >= target_px and diff <= best_diff:
+            break
+
+    print(f"Wall thickness: requested {target_thickness_m*39.3701:.2f} in "
+          f"({target_px:.2f} px at output resolution {output_resolution} m/px) "
+          f"-> using --wall-thickness={best_req} (empirically measured actual: "
+          f"{best_actual} px = {best_actual*output_resolution*39.3701:.2f} in)")
+    return best_req
+
+
 # ─── Smooth pipeline ──────────────────────────────────────────────────────────
 
 def smooth_pipeline(orig, occupied_thresh, keep_walls, min_area,
                     smooth_sigma, wall_thickness, close_kernel, inner_close_kernel,
-                    denoise_area):
+                    denoise_area, isolate_largest_free=False):
     """
     Drop noise specks (native res) -> upscale 4x -> Gaussian blur binary
     mask -> bridge scan gaps -> connected components -> smooth contour
@@ -271,7 +323,7 @@ def smooth_pipeline(orig, occupied_thresh, keep_walls, min_area,
             cv2.polylines(canvas, [smooth_pts], isClosed=True,
                           color=255, thickness=wall_thickness)
 
-    final = _flood_and_assemble(canvas)
+    final = _flood_and_assemble(canvas, isolate_largest_free=isolate_largest_free)
 
     # Downsample to 2x original (0.025 m/px)
     OUT = SCALE // 2
@@ -281,7 +333,8 @@ def smooth_pipeline(orig, occupied_thresh, keep_walls, min_area,
 
 # ─── Simple pipeline (--no-smooth) ───────────────────────────────────────────
 
-def simple_pipeline(orig, occupied_thresh, keep_walls, min_area, close_kernel):
+def simple_pipeline(orig, occupied_thresh, keep_walls, min_area, close_kernel,
+                     isolate_largest_free=False):
     """
     Connected component filter only, no smoothing, original resolution.
     """
@@ -313,12 +366,35 @@ def simple_pipeline(orig, occupied_thresh, keep_walls, min_area, close_kernel):
             wall_mask[labels == i] = 1
 
     canvas = np.where(wall_mask == 1, 255, 0).astype(np.uint8)
-    return _flood_and_assemble(canvas)
+    return _flood_and_assemble(canvas, isolate_largest_free=isolate_largest_free)
 
 
 # ─── Shared: flood-fill exterior + assemble PGM ───────────────────────────────
 
-def _flood_and_assemble(canvas):
+def _flood_and_assemble(canvas, isolate_largest_free=False):
+    """
+    canvas: 0=free, 255=wall (pre-flood-fill working representation).
+
+    Flood-fills from the 4 image borders inward to mark the TRUE exterior
+    (outside the outermost wall) as unknown/unavailable — walls block the
+    fill, so anything fully enclosed by walls (a real navigable corridor,
+    OR an enclosed interior island the robot can never reach) is left
+    alone by this step alone; neither touches the image border once
+    surrounded by a wall.
+
+    isolate_largest_free: if True, ALSO finds every remaining connected
+    free-space blob after the border flood-fill and keeps only the
+    LARGEST one as actually free — any other enclosed free blob (e.g. the
+    solid interior of a closed inner ring/island, which is walled off and
+    genuinely unreachable, not a second real room) is marked
+    unknown/unavailable too, the same as the exterior. Off by default
+    since it would be WRONG for a map with multiple real, separately
+    navigable rooms/areas (this can't tell "unreachable island" apart
+    from "a second real room" — it just assumes the single largest
+    free-space blob is the only navigable one). Only enable this for maps
+    that are known to be a single closed loop/corridor with no other
+    intentionally-separate navigable area.
+    """
     h, w = canvas.shape
     ff = np.zeros((h+2, w+2), np.uint8)
     for col in range(w):
@@ -327,6 +403,18 @@ def _flood_and_assemble(canvas):
     for row in range(h):
         if canvas[row, 0]   == 0: cv2.floodFill(canvas, ff, (0,   row),  128)
         if canvas[row, w-1] == 0: cv2.floodFill(canvas, ff, (w-1, row),  128)
+
+    if isolate_largest_free:
+        free_mask = (canvas == 0).astype(np.uint8)
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(free_mask, connectivity=8)
+        if n > 1:
+            areas = [(stats[i, cv2.CC_STAT_AREA], i) for i in range(1, n)]
+            largest_id = max(areas)[1]
+            for area, i in areas:
+                if i != largest_id:
+                    canvas[labels == i] = 128
+                    print(f"  Enclosed free blob {i}: {area} px marked unavailable "
+                          f"(not the largest connected free region)")
 
     final = np.full(canvas.shape, UNKNOWN_VALUE, dtype=np.uint8)
     final[canvas == 255] = WALL_VALUE
@@ -397,8 +485,27 @@ def parse_args():
                    help='Skip contour smoothing; blob filter only (original resolution)')
     p.add_argument('--smooth-sigma',     type=float, default=6.0,
                    help='Gaussian sigma for contour path smoothing (default 6)')
-    p.add_argument('--wall-thickness',   type=int, default=8,
-                   help='Wall thickness in pixels at 4x scale (default 8 = ~0.05m real)')
+    p.add_argument('--wall-thickness',   type=int, default=None,
+                   help='Wall thickness as a raw cv2.polylines pixel count '
+                        'at 4x internal scale (default 8). NOTE: this does '
+                        'NOT map cleanly to real-world size -- empirically '
+                        'measured default=8 actually produces ~4.9 in '
+                        '(~0.125 m) at a 0.05 m/px input resolution, not a '
+                        'simple formula. Use --wall-thickness-in/'
+                        '--wall-thickness-m instead for a real-world-'
+                        'accurate result; this raw option is for matching '
+                        'a specific previously-used value.')
+    p.add_argument('--wall-thickness-in', type=float, default=None,
+                   help='Wall thickness in real-world INCHES. Empirically '
+                        'calibrates the actual --wall-thickness parameter '
+                        'needed to hit this size on THIS input resolution '
+                        '(measured at runtime by replicating the real '
+                        'draw-at-4x + downsample-2x steps, not a hardcoded '
+                        'formula). Mutually exclusive with --wall-thickness/'
+                        '--wall-thickness-m.')
+    p.add_argument('--wall-thickness-m',  type=float, default=None,
+                   help='Same as --wall-thickness-in, in metres. Mutually '
+                        'exclusive with --wall-thickness/--wall-thickness-in.')
     p.add_argument('--close-kernel',     type=int, default=13,
                    help='Gap-bridging closing kernel, in original-image px '
                         '(default 13). Bridges small real scan gaps BEFORE '
@@ -425,6 +532,18 @@ def parse_args():
                         'dropped; raise it if small spikes/bumps still show '
                         'up on the final wall. Set 0 to disable.')
     p.add_argument('--no-display',       action='store_true')
+    p.add_argument('--isolate-largest-free', action='store_true',
+                   help='After the usual exterior-of-outer-wall flood fill, '
+                        'ALSO mark any OTHER enclosed free-space blob '
+                        '(e.g. the solid interior of a closed inner ring/'
+                        'island) as unavailable, keeping only the single '
+                        'largest connected free region as actually free. '
+                        'Off by default: a map with multiple genuinely '
+                        'separate navigable rooms/areas would be broken by '
+                        'this (it cannot tell "unreachable island" apart '
+                        'from "a second real room" — it just assumes '
+                        'largest-blob-wins). Only enable for a map that is '
+                        'known to be a single closed loop/corridor.')
     p.add_argument('--preview-only',     action='store_true',
                    help='Save diff PNG but do not write PGM/yaml')
     return p.parse_args()
@@ -444,6 +563,36 @@ def main():
     if not os.path.isfile(src_yaml):
         src_yaml = None
 
+    # Real input resolution (needed both to correctly compute the output
+    # resolution below -- previously hardcoded to 0.025 regardless of the
+    # real input, which only ever happened to be correct because every map
+    # generated so far used exactly 0.05 m/px input -- and to calibrate
+    # --wall-thickness-in/--wall-thickness-m against the ACTUAL input
+    # resolution rather than assuming one).
+    input_resolution = 0.05
+    if src_yaml:
+        with open(src_yaml) as f:
+            for line in f:
+                if line.strip().startswith('resolution:'):
+                    input_resolution = float(line.split(':', 1)[1].strip())
+                    break
+
+    specified = [
+        v is not None for v in
+        (args.wall_thickness, args.wall_thickness_in, args.wall_thickness_m)
+    ]
+    if sum(specified) > 1:
+        sys.exit("ERROR: Specify only ONE of --wall-thickness / "
+                 "--wall-thickness-in / --wall-thickness-m.")
+    if args.wall_thickness_in is not None:
+        wall_thickness = resolve_wall_thickness_px(
+            args.wall_thickness_in * 0.0254, input_resolution)
+    elif args.wall_thickness_m is not None:
+        wall_thickness = resolve_wall_thickness_px(
+            args.wall_thickness_m, input_resolution)
+    else:
+        wall_thickness = args.wall_thickness if args.wall_thickness is not None else 8
+
     print(f"\nLoading: {in_pgm}")
     original = load_pgm(in_pgm)
     print(f"  Size: {original.shape[1]}x{original.shape[0]} px")
@@ -452,17 +601,24 @@ def main():
         print("\nMode: simple blob filter (no smoothing)")
         final = simple_pipeline(original, args.occupied_thresh,
                                 args.keep_walls, args.min_area,
-                                args.close_kernel)
+                                args.close_kernel,
+                                isolate_largest_free=args.isolate_largest_free)
         new_res = None
     else:
         print(f"\nMode: smooth contour reconstruction  "
-              f"(sigma={args.smooth_sigma}, wall_thickness={args.wall_thickness})")
+              f"(sigma={args.smooth_sigma}, wall_thickness={wall_thickness})")
         final = smooth_pipeline(original, args.occupied_thresh,
                                 args.keep_walls, args.min_area,
-                                args.smooth_sigma, args.wall_thickness,
+                                args.smooth_sigma, wall_thickness,
                                 args.close_kernel, args.inner_close_kernel,
-                                args.denoise_area)
-        new_res = 0.025
+                                args.denoise_area,
+                                isolate_largest_free=args.isolate_largest_free)
+        # smooth_pipeline outputs at 2x the input's pixel count over the
+        # same physical area (SCALE=4 internal upscale, OUT=SCALE//2=2
+        # final downsample -- see resolve_wall_thickness_px's docstring),
+        # so the real output resolution is always exactly half the real
+        # INPUT resolution, not a hardcoded constant.
+        new_res = input_resolution / 2.0
 
     print(f"\n  Output size: {final.shape[1]}x{final.shape[0]} px")
     print(f"  Wall px    : {(final == WALL_VALUE).sum()}")
@@ -489,7 +645,7 @@ def main():
     print(f"  Wrong walls kept    -> change --keep-walls (currently {args.keep_walls})")
     print(f"  Walls too smooth    -> lower --smooth-sigma (currently {args.smooth_sigma})")
     print(f"  Walls too jagged    -> raise --smooth-sigma")
-    print(f"  Walls too thin/fat  -> adjust --wall-thickness (currently {args.wall_thickness})")
+    print(f"  Walls too thin/fat  -> adjust --wall-thickness (currently {wall_thickness})")
     print(f"  Inner wall broken   -> raise --close-kernel (currently {args.close_kernel})")
     print(f"  Separate walls merged -> lower --close-kernel (currently {args.close_kernel})")
     print(f"  Inner loop still broken / double-lined -> raise --inner-close-kernel "

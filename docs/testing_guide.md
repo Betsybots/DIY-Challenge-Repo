@@ -258,17 +258,20 @@ Jetson, since `DIY_USE_CMD_VEL_MUX=false` there is expected).
 
 ---
 
-## 4. Incremental subsystem tests (`test_step1`–`test_step4`)
+## 4. Incremental subsystem tests (`test_step1`–`test_step5`)
 
 Bench-test scripts that bring up one slice of the stack at a time, standalone
 (not via `challenge_master.launch.py`) — designed for isolated, single-machine
 testing during development, each addable with `--viz rviz|foxglove`.
 
-**⚠️ Read caveat #1 above first** — all four currently use
+**⚠️ Read caveat #1 above first** — `test_step1`-`test_step4` currently use
 `diy_motor_control_legacy`, not `driveStack`'s tested fork. Confirm the CAN
 bus number (`can1` in the legacy code) actually matches your physical wiring
 before running any of these on real hardware, or update the scripts to use
 `driveStack`'s package instead if that's what's actually wired up.
+`test_step5` is different — it's Jetson-only (localizer + controller +
+waypoint sequencer) and does NOT launch any motor driver at all; run
+driveStack separately on the RPi for the robot to actually move.
 
 | Script | Brings up | Verify |
 |---|---|---|
@@ -276,6 +279,7 @@ before running any of these on real hardware, or update the scripts to use
 | `scripts/test_step2_fused_odom.sh [--viz ...] [profile]` | + EKF fusing wheel+IMU (`ekf_odom.yaml`; requires the independent RPi IMU driver already running for imu0) | `/odometry/filtered`, `odom→base_link` TF |
 | `scripts/test_step3_fastlio.sh [--viz ...] [profile]` | + Hesai lidar + FAST-LIO2 + EKF + map_localizer (`localization.launch.py mode:=runtime` — no FAST-LIO2-only mode) | `/lidar_odometry` @ ~10 Hz |
 | `scripts/test_step4_motion_plan.sh [--viz ...] [fastlio\|fused] [profile]` | + `plan_b` motion executor (forward→90°turn→forward demo). `fastlio`/`fused` only selects which already-running pose topic feeds it. | `/cmd_vel_mux_node` → `AUTONOMOUS`, `/cmd_vel_safe` flowing |
+| `scripts/test_step5_full_autonomy.sh [--viz ...] [profile] [options]` | **NEW.** The custom nav stack, all in one terminal: localization (FAST-LIO2+EKF+map_localizer) + controller (nav2_map_server+A*+PD) + `cmd_vel_mux` (auto-set to `AUTONOMOUS`) + `diy_waypoint_sequencer`. `initial_x/y/yaw` for relocalization are auto-derived from wp1 in `--waypoints-file` (assumes the robot is physically placed at wp1's real-world position — override with `--initial-x/--initial-y/--initial-yaw` if not). Does NOT auto-fire `/green_light` — verify localization converged first (`tf2_echo map base_link`), then run `scripts/trigger_green_light.sh` yourself. Replaces needing ~5 separate terminals on the Jetson. | `tf2_echo map base_link`, `/goal_pose` advancing, `/cmd_vel_nav` nonzero while moving |
 
 ---
 
@@ -328,8 +332,46 @@ tested, working manual-drive bringup: joystick → differential-drive kinematics
 | Script | Purpose |
 |---|---|
 | `scripts/generate_course_pgm.py [--diagram path] [--output prefix]` | Generates a Nav2 map + 10 zone waypoints from the official course diagram image |
-| `scripts/preprocess_map.py --input <pgm> [--preview-only]` | Cleans/smooths a real LiDAR-scanned PGM map for Nav2 (removes noise blobs, smooths walls) |
+| `scripts/pcd_to_pgm.py --input <pcd> --z-min <m> --z-max <m> [--preview-only]` | **NEW.** Projects a real FAST-LIO2 `.pcd` scan (from `/map_save`, see §4/§9 mapping workflow below) into a raw 2-D occupancy-grid PGM — the previously-missing first step between "FAST-LIO2 built a map" and "Nav2/A\* can use it". `--preview-only` prints a z-height histogram to help pick the wall slab; feed its output into `preprocess_map.py` next. |
+| `scripts/preprocess_map.py --input <pgm> [--preview-only]` | Cleans/smooths a real LiDAR-scanned PGM map for Nav2 (removes noise blobs, smooths walls; `--isolate-largest-free` marks any enclosed inner-ring interior unavailable too) — run this AFTER `pcd_to_pgm.py` for a real scan, or directly on a diagram-derived PGM |
+| `scripts/draw_map_borders.py --map <yaml> --output <prefix> [--overlay png]` | **NEW.** Manual alternative to `preprocess_map.py`'s automatic wall detection, for when it can't cleanly close a real scan gap (confirmed on `refined_map_1.pcd`: the inner wall has a genuine gap — zero scanned points in one stretch — no `--close-kernel`/`--inner-close-kernel` value can fix that). Shows the raw PGM dimmed as a background reference; you click-trace the outer wall and each inner obstacle by eye, bridging any gap the way a human naturally would. Outputs a clean, fully-closed trinary map at the SAME resolution/origin as the input (frame preserved exactly, not re-derived). |
 | `scripts/register_zones_to_map.py --target-map <yaml> [--pick]` | Re-projects the diagram-derived zone waypoints onto a real, LIO-SAM-generated map (once available from an arena practice pass — expected ~1 week before competition) |
+| `scripts/pick_waypoints.py --map <yaml> --output <waypoints.yaml> [--overlay png]` | **NEW.** Click-to-pick tool: generates a real, map-valid `waypoints.yaml` for `diy_waypoint_sequencer` by clicking points on the actual map — replaces hand-typing coordinates. Validates each click against the map's own occupancy data live, auto-computes heading toward the next waypoint. See §12 custom nav stack notes / `custom_nav_stack_design.md` §5. |
+
+### Building a course map from a real FAST-LIO2 scan (no EKF/map_localizer needed)
+
+Run FAST-LIO2 standalone on the Jetson (drive the course via driveStack on
+the RPi separately — no localization/EKF/map_localizer required just to
+build a map):
+
+```bash
+source scripts/env.sh jetson
+
+ros2 run fast_lio_ros2 fastlio_mapping \
+    --ros-args \
+    --params-file src/diy_localization/config/fast_lio_hesai_qt64.yaml \
+    -r /Odometry:=/lidar_odometry \
+    -p mapping.map_file_path:="$HOME/ros2_ws/src/DIY-Challenge-Repo/maps/fastlio_raw.pcd"
+```
+
+Do **not** use `fast_lio_ros2`'s own `lio_localizer.launch.py` for this —
+its bundled `config/qt64.yaml` is stale (`imu_gyr_unit: "deg"`,
+`fov_degree: 360.0`) compared to the config above.
+
+After driving the course, save the map without stopping (`Ctrl-C` also
+saves on shutdown):
+```bash
+ros2 service call /map_save std_srvs/srv/Trigger {}
+```
+
+Then convert + clean:
+```bash
+python3 scripts/pcd_to_pgm.py --input maps/fastlio_raw.pcd --preview-only
+python3 scripts/pcd_to_pgm.py --input maps/fastlio_raw.pcd \
+    --z-min <from the histogram above> --z-max <from the histogram above>
+python3 scripts/preprocess_map.py --input maps/fastlio_raw.pgm \
+    --yaml maps/fastlio_raw.yaml --keep-walls 2
+```
 
 ---
 
