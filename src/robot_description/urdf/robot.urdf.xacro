@@ -166,7 +166,7 @@
         <!-- <origin xyz="-0.093339143 0.185046036 -0.156049187" rpy="${pi/2} 0 0"/> -->
         <origin xyz="-0.07000435725  0.138784527 -0.11703689025" rpy="${pi/2} 0 0"/>
         <geometry>
-          <mesh filename="package://diy_robot_description/urdf/meshes/caster_wheel.stl"
+          <mesh filename="package://robot_description/urdf/meshes/caster_wheel.stl"
                 scale="0.01905 0.01905 0.01905"/>
         </geometry>
         <material name="green"/>
@@ -291,7 +291,7 @@
           <topic>cmd_vel</topic>
           <odom_topic>odom_wheel</odom_topic>   <!-- wheel encoder odom — drifts on ramp/slip -->
           <!-- Publish odom→base_link TF — must match Nav2 robot_base_frame.
-               Ignition namespaces these as diy_robot/odom→diy_robot/base_link.
+               Ignition namespaces these as robot/odom→robot/base_link.
                SIM only: on real robot EKF1/EKF2 publish this transform instead. -->
           <odom_frame>odom</odom_frame>
           <robot_base_frame>base_link</robot_base_frame>

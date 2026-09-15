@@ -15,8 +15,8 @@
 # see docs/Camera_Calibration_Guide.pdf Section 3.3 for Kalibr instructions.
 #
 # After calibration:
-#   1. Update base_to_camera joint in src/diy_robot_description/urdf/robot.urdf.xacro
-#   2. Rebuild: colcon build --packages-select diy_robot_description
+#   1. Update base_to_camera joint in src/robot_description/urdf/robot.urdf.xacro
+#   2. Rebuild: colcon build --packages-select robot_description
 #   3. Verify with RViz2 (see guide Section 4.3)
 #
 # Prerequisites:
@@ -125,7 +125,7 @@ fi
 echo "[INFO] Both sensors confirmed publishing."
 echo ""
 echo "[INFO] Current URDF placeholder (will be replaced after calibration):"
-grep -A1 "base_to_camera" "${REPO_ROOT}/src/diy_robot_description/urdf/robot.urdf.xacro" \
+grep -A1 "base_to_camera" "${REPO_ROOT}/src/robot_description/urdf/robot.urdf.xacro" \
     | grep origin || echo "  (could not parse URDF automatically)"
 echo ""
 
@@ -164,9 +164,9 @@ z=${MEAS_Z}
 rpy=${MEAS_RPY}
 #
 # To apply immediately (before Kalibr processing):
-#   Edit src/diy_robot_description/urdf/robot.urdf.xacro
+#   Edit src/robot_description/urdf/robot.urdf.xacro
 #   Replace the base_to_camera <origin> line with the values above.
-#   Then: colcon build --packages-select diy_robot_description
+#   Then: colcon build --packages-select robot_description
 MEAS_EOF
 echo "  Saved."
 echo "  ─────────────────────────────────────────────────────────────────────"
@@ -202,9 +202,9 @@ printf  "  │  %-66s │\n" ""
 echo "  │  NEXT STEPS:                                                       │"
 echo "  │                                                                     │"
 echo "  │  Option A — Apply physical measurement immediately (fast):         │"
-echo "  │    Edit src/diy_robot_description/urdf/robot.urdf.xacro           │"
+echo "  │    Edit src/robot_description/urdf/robot.urdf.xacro           │"
 echo "  │    Set base_to_camera origin to values in physical_measurement.txt │"
-echo "  │    colcon build --packages-select diy_robot_description            │"
+echo "  │    colcon build --packages-select robot_description            │"
 echo "  │    Verify with RViz2 (guide Section 4.3)                          │"
 echo "  │                                                                     │"
 echo "  │  Option B — Precision Kalibr calibration (offline, ~2 hours):    │"

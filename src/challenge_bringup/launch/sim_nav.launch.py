@@ -36,7 +36,7 @@ def _zone_nav_launch(context, use_zone_nav_lc, use_circuit_runner_lc, circuit_wa
     if context.perform_substitution(use_zone_nav_lc).lower() != 'true':
         return []
 
-    zone_nav_pkg = get_package_share_directory('diy_zone_nav')
+    zone_nav_pkg = get_package_share_directory('zone_nav')
     zone_nav_launch = os.path.join(zone_nav_pkg, 'launch', 'zone_nav.launch.py')
 
     launch_args = {
@@ -67,7 +67,7 @@ def generate_launch_description():
     nav2_params      = os.path.join(pkg_dir, 'config', 'nav2_params.yaml')
     keepout_mask_yaml = os.path.join(pkg_dir, 'maps', 'keepout_mask.yaml')
     default_circuit_wp = os.path.join(
-        get_package_share_directory('diy_zone_nav'),
+        get_package_share_directory('zone_nav'),
         'config', 'sim_circuit_waypoints.yaml')
 
     use_circuit_runner  = LaunchConfiguration('use_circuit_runner')

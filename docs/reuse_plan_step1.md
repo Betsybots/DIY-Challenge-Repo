@@ -297,7 +297,7 @@ outright on launch (no `realsense2_camera` driver exists for a ZED2i).
   real [zed-ros2-wrapper source](https://github.com/stereolabs/zed-ros2-wrapper)
   that all three default `true` and would otherwise start a second,
   competing `robot_state_publisher` + TF broadcaster for frames already
-  owned by `diy_robot_description` (static camera frame) and
+  owned by `robot_description` (static camera frame) and
   FAST-LIO2/EKF2/NDT-OMP (dynamic odom/map transforms).
 - **Real bug found while verifying this:** a plain `IncludeLaunchDescription`
   + `IfCondition(use_zed)` still calls `get_package_share_directory('zed_wrapper')`
@@ -330,7 +330,7 @@ outright on launch (no `realsense2_camera` driver exists for a ZED2i).
    normally uses Stereolabs' own SDK calibration tools, not the ROS
    `camera_calibration` checkerboard flow it currently wraps. Flagged
    in-file, not rewritten — needs a team decision on approach.
-2. The currently-active URDF (`src/diy_robot_description/urdf/robot.urdf.xacro`)
+2. The currently-active URDF (`src/robot_description/urdf/robot.urdf.xacro`)
    is missing `camera_link`, `lidar_link`, `imu_link`, and `gps_link`
    entirely, despite its own header comment documenting all four as
    required. (The old, no-longer-loaded `robot-old.urdf.xacro` still has a
@@ -527,9 +527,9 @@ inspection-only):
   resolved.)
 - **Cosmetic-only, not fixed:** the "EKF1"/"EKF2" naming still appears in
   code comments (not functional logic) across several *other* packages this
-  pass didn't touch — `diy_zone_nav/src/lidar_odom_gate_node.cpp`,
+  pass didn't touch — `zone_nav/src/lidar_odom_gate_node.cpp`,
   `zone_nav_manager_node.cpp`, `diy_ndt_localization/src/ndt_localizer_node.cpp`,
-  `diy_robot_description`'s URDF headers, `record_bag.sh`/`record_zone_nav.sh`.
+  `robot_description`'s URDF headers, `record_bag.sh`/`record_zone_nav.sh`.
   All still functionally correct (the topics they reference — `/odometry/
   filtered`, `/lidar_odometry_gated` — haven't changed), just describes the
   old two-EKF mental model. Low priority; flagging so a future pass doesn't
@@ -961,8 +961,8 @@ While answering "how do I run this on a freshly-cloned Jetson", tested
 relevant packages, ran the exact `colcon build --packages-select ...` list
 setup.sh uses) and found it was missing packages needed at runtime:
 
-- **`diy_zone_nav`** — referenced directly by `challenge_master.launch.py`
-  (`Node(package='diy_zone_nav', executable='lidar_odom_gate_node', ...)`,
+- **`zone_nav`** — referenced directly by `challenge_master.launch.py`
+  (`Node(package='zone_nav', executable='lidar_odom_gate_node', ...)`,
   always launched whenever `use_localization=true`, i.e. every normal run)
   but was never in `setup.sh`'s `--packages-select` list, at any point
   before today's changes either — a pre-existing gap, not something
@@ -985,7 +985,7 @@ list, with a comment explaining why (and how this class of bug is found —
 by removing a package's `install/` dir and actually re-running the
 documented build+launch sequence, not just reading the list and assuming
 it's complete). Verified by literally doing that: removed
-`install/{fast_lio_ros2,slam_interfaces,map_localizer,diy_zone_nav}`, ran
+`install/{fast_lio_ros2,slam_interfaces,map_localizer,zone_nav}`, ran
 the corrected package list, confirmed all 9 packages build, then re-ran
 the full `ros2 launch localization localization.launch.py` end-to-end
 test from Step 11 again to confirm nothing broke.
@@ -1008,8 +1008,8 @@ for consistency). Rebuilt `map_localizer` clean after the fix.
 **Still not fixed / flagged for later:** this exposed a broader pattern —
 `challenge_bringup`'s `package.xml` doesn't declare `exec_depend` on ANY
 of the repo-local packages its own launch file `Node()`-launches
-(`diy_cmd_vel_mux`, `diy_estop_controller`, `diy_robot_description`,
-`diy_zone_nav`, `localization`). Switching `setup.sh` to
+(`diy_cmd_vel_mux`, `diy_estop_controller`, `robot_description`,
+`zone_nav`, `localization`). Switching `setup.sh` to
 `colcon build --packages-up-to challenge_bringup` instead of an explicit
 list would be more robust long-term (confirmed empirically that
 `--packages-up-to` correctly resolves `exec_depend` — that's how this
@@ -1020,13 +1020,13 @@ here. Documented as a known gap; the explicit list in `setup.sh` is
 correct and complete for today's purposes but requires manual updating
 again if a future change adds another new runtime-only package dependency.
 
-## Reuse Plan Step 13 — Decoupled the custom A*/PD controller from diy_zone_nav
+## Reuse Plan Step 13 — Decoupled the custom A*/PD controller from zone_nav
 
 User's teammate is building a custom navigation stack (nav2_map_server-only
 + a custom A* planner + PD/pure-pursuit path follower — NOT full Nav2) that
 already exists in this repo via an earlier rebase (`src/diy_planning`,
 `src/motion_planner`) but was never investigated until now. User asked:
-design things so `diy_zone_nav` can be removed entirely with zero impact,
+design things so `zone_nav` can be removed entirely with zero impact,
 since the plan is for the controller to consume "info from the zone
 navigator" and they want that dependency to be optional/safe-to-remove
 from day one, not bolted on and only discovered to be load-bearing later.
@@ -1056,7 +1056,7 @@ from day one, not bolted on and only discovered to be load-bearing later.
   `zone_nav_manager_node.cpp` already checks `service_is_ready()` before
   every such call and skips gracefully with a warn log if the service
   isn't there, so this was already safe, just newly-relevant.
-- **Net finding: `diy_zone_nav` is already fully orphaned/optional in this
+- **Net finding: `zone_nav` is already fully orphaned/optional in this
   new architecture** — nothing in the custom controller path consumes any
   of its outputs, and it already fails gracefully when its own targets
   (Nav2 services) don't exist. No code changes were needed to achieve
@@ -1089,8 +1089,8 @@ design ask (an automated `/goal_pose` publisher for competition runs where
 no human clicks RViz goals), designed from the start to be safely
 removable:
 - Deliberately a brand-new, separate, minimal package — NOT added inside
-  `diy_zone_nav` or `diy_planning`/`motion_planner`. This was a real
-  design decision: putting it inside `diy_zone_nav` would re-couple "can I
+  `zone_nav` or `diy_planning`/`motion_planner`. This was a real
+  design decision: putting it inside `zone_nav` would re-couple "can I
   remove zone_nav" with "do I still get automated goal sequencing",
   exactly the ambiguity this whole task was about avoiding.
 - `waypoint_sequencer_node`: loads a simple waypoints YAML (`label, x, y,
@@ -1133,7 +1133,7 @@ correct):**
 generic "Nav2 (never run)" placeholder with the real architecture
 (`nav2_map_server`+`nav2_lifecycle_manager`, `a_star_planner_node`,
 `pd`/`pure_pursuit_motion_planner_node`, the new `waypoint_sequencer`), and
-`diy_zone_nav` re-drawn as explicitly ORPHANED with no consumers, with an
+`zone_nav` re-drawn as explicitly ORPHANED with no consumers, with an
 explanatory label so this doesn't need re-investigating later.
 
 **Still open / not addressed this pass:**
@@ -1142,9 +1142,9 @@ explanatory label so this doesn't need re-investigating later.
   `challenge_master.launch.py` at all — currently only launchable
   standalone via `pd_navigation.launch.py`/`pure_pursuit_navigation.launch.py`.
   Master-launch integration (a `use_custom_nav`-style flag, deciding how it
-  coexists with/replaces the `diy_zone_nav`/Nav2 blocks already there) is a
+  coexists with/replaces the `zone_nav`/Nav2 blocks already there) is a
   separate, larger decision not made in this pass.
-- Whether `diy_zone_nav` should eventually be deleted outright (vs. kept
+- Whether `zone_nav` should eventually be deleted outright (vs. kept
   orphaned-but-present) wasn't decided — no urgency since it's already
   proven harmless to leave in place.
 - `tf_transformations` is not installed in this sandbox (no `sudo`) —
@@ -1155,7 +1155,7 @@ explanatory label so this doesn't need re-investigating later.
 
 User asked whether a recently-updated xacro is "the URDF" and whether it
 resolves the long-flagged "URDF missing lidar_link/imu_link/camera_link/
-gps_link" item. Read `src/diy_robot_description/urdf/robot.urdf.xacro` in
+gps_link" item. Read `src/robot_description/urdf/robot.urdf.xacro` in
 full (all ~440 lines, not just the header comment) — this is confirmed to
 be the actual active URDF (`description.launch.py` loads it directly).
 
@@ -1186,7 +1186,7 @@ be the actual active URDF (`description.launch.py` loads it directly).
 **Real, consequential bug found while re-checking this:**
 `challenge_master.launch.py`'s `_zed_launch()` forces `zed_wrapper`'s own
 `publish_urdf`/`publish_tf`/`publish_map_tf` to `false`, with the
-justification (in-code comment) *"diy_robot_description publishes the
+justification (in-code comment) *"robot_description publishes the
 static camera_link transform"*. That premise is false — confirmed
 `camera_link` doesn't exist in the active URDF at all. **Net effect:
 `base_link→camera_link` currently has NO publisher anywhere in the running
@@ -1206,7 +1206,7 @@ for a `/gps/fix` topic that can never exist, producing a false pre-flight
 - `profiles/{jetson,raspi,laptop}.env`: `DIY_USE_GPS=false` everywhere,
   with a comment explaining there's no GPS hardware at all (was already
   `false` on laptop.env, just had a slightly misleading comment).
-- `src/diy_robot_description/package.xml`: description no longer claims
+- `src/robot_description/package.xml`: description no longer claims
   `camera_link (RealSense D435i)` and `gps_link (RTK antenna)` as defined
   frames — corrected to describe the real current state (lidar/imu real,
   camera not yet ported + wrong brand in the old reference copies, no GPS
@@ -1224,7 +1224,7 @@ for a `/gps/fix` topic that can never exist, producing a false pre-flight
   yellow) and annotated with the base_link→camera_link-has-no-publisher
   finding, since this is now a confirmed real gap, not just "untested."
 
-**Verification performed:** `xacro src/diy_robot_description/urdf/
+**Verification performed:** `xacro src/robot_description/urdf/
 robot.urdf.xacro` (the real xacro processor, not just an XML well-formed
 check) — exits 0, and the generated URDF was grepped to confirm exactly
 `lidar_link`/`imu_link` exist and `camera_link`/`gps_link` do not, matching

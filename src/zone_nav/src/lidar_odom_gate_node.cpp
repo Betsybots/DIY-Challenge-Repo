@@ -31,7 +31,7 @@
 //   nav_mode_watchdog_timeout_s (default 5 s = 50 missed messages at 10 Hz).
 //
 // DEPENDENCIES: rclcpp, nav_msgs, std_msgs
-// BUILD:  colcon build --packages-select diy_zone_nav
+// BUILD:  colcon build --packages-select zone_nav
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <chrono>

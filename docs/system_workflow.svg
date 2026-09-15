@@ -37,7 +37,7 @@
 <g id="clust6" class="cluster">
 <title>cluster_ours</title>
 <polygon fill="#f5eef8" stroke="#8e44ad" stroke-width="2" points="810.5,-710.25 810.5,-804.25 1271.5,-804.25 1271.5,-710.25 810.5,-710.25"/>
-<text text-anchor="middle" x="1041" y="-789.85" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#8e44ad">OUR CODE &#160;(diy_zone_nav)</text>
+<text text-anchor="middle" x="1041" y="-789.85" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#8e44ad">OUR CODE &#160;(zone_nav)</text>
 </g>
 <g id="clust7" class="cluster">
 <title>cluster_mux</title>

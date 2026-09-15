@@ -258,7 +258,7 @@ HTML = f"""<!DOCTYPE html>
   <div class="cover-badge">Zone Nav Software Design Guide v1.0</div>
   <h1>Zone-Aware Navigation<br/><span>Software Design Guide</span></h1>
   <p class="subtitle">
-    diy_zone_nav &bull; cmd_vel_mux &bull; lidar_odom_gate<br/>
+    zone_nav &bull; cmd_vel_mux &bull; lidar_odom_gate<br/>
     Distilled from 46 bugs — hard-won implementation knowledge for the 2026 DIY Robot Challenge.
   </p>
   <div class="cover-meta">
@@ -268,7 +268,7 @@ HTML = f"""<!DOCTYPE html>
     </div>
     <div class="cover-meta-item">
       <div class="label">Packages</div>
-      <div class="value">diy_zone_nav</div>
+      <div class="value">zone_nav</div>
     </div>
     <div class="cover-meta-item">
       <div class="label">Platform</div>

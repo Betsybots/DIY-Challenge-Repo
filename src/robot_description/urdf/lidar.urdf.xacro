@@ -22,7 +22,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://diy_robot_description/urdf/meshes/lidar_3d_v1.dae"/> 
+          <mesh filename="package://robot_description/urdf/meshes/lidar_3d_v1.dae"/> 
         </geometry>
       </visual>
 

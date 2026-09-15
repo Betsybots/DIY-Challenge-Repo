@@ -9,7 +9,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     # 1. Setup paths to required packages
-    pkg_robot_description = get_package_share_directory('diy_robot_description')
+    pkg_robot_description = get_package_share_directory('robot_description')
     pkg_sim = get_package_share_directory('diy_sim')
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
     pkg_challenge_bringup = get_package_share_directory('challenge_bringup')

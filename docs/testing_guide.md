@@ -21,7 +21,7 @@ you're up and running and need the full script/flag reference.
 [docs/Custom_Nav_Stack_Design.pdf](Custom_Nav_Stack_Design.pdf) (source
 markdown: [custom_nav_stack_design.md](custom_nav_stack_design.md),
 regenerate with `python3 docs/generate_custom_nav_stack_design.py` after
-editing) covers the custom A*/PD nav stack and why `diy_zone_nav` is
+editing) covers the custom A*/PD nav stack and why `zone_nav` is
 already safely decoupled from it — see caveat #9 below for the summary.
 
 ---
@@ -146,9 +146,9 @@ first so you don't get tripped up.
    uses only `nav2_map_server`/`nav2_lifecycle_manager` for map serving,
    not the full Nav2 navigation system.** It publishes `/cmd_vel_nav`
    (same topic `cmd_vel_mux` already reads for AUTONOMOUS mode — no mux
-   changes needed) and has **zero dependency on `diy_zone_nav`**
+   changes needed) and has **zero dependency on `zone_nav`**
    (confirmed by grepping the actual source — no reference to
-   `/nav_mode`/`/speed_limit` anywhere). `diy_zone_nav` can be run or not
+   `/nav_mode`/`/speed_limit` anywhere). `zone_nav` can be run or not
    run with this stack with zero behavior difference either way — its
    Nav2-costmap/speed-limit service calls already fail gracefully
    (`service_is_ready()` checked) since those services don't exist here.
@@ -162,7 +162,7 @@ first so you don't get tripped up.
    signal at all) so an external sequencer can react to goal completion.
    **New, optional package `diy_waypoint_sequencer`** auto-publishes
    `/goal_pose` in sequence for competition runs — deliberately its own
-   separate package (not inside `diy_zone_nav`) so removing it doesn't
+   separate package (not inside `zone_nav`) so removing it doesn't
    entangle with the zone_nav question at all; if not run, `/goal_pose`
    is simply set manually instead (RViz "2D Goal Pose"). See
    `docs/reuse_plan_step1.md` Step 13 for the full investigation and a
@@ -408,11 +408,11 @@ them directly, but useful to know they exist:
 
 | File | Included by | Purpose |
 |---|---|---|
-| `src/diy_robot_description/launch/description.launch.py` | `challenge_master.launch.py` (BLOCK 2, always) | `robot_state_publisher` from the URDF — runs independently on both Jetson and RPi (safe to duplicate, see §2) |
+| `src/robot_description/launch/description.launch.py` | `challenge_master.launch.py` (BLOCK 2, always) | `robot_state_publisher` from the URDF — runs independently on both Jetson and RPi (safe to duplicate, see §2) |
 | `src/localization/launch/localization.launch.py` | `challenge_master.launch.py` (BLOCK 8), `test_step3`/`test_step4` | FAST-LIO2 (`fast_lio_ros2`) + single EKF (`ekf_odom.yaml`) + `map_localizer` (VGICP) — `mode:=runtime` always launches all three (plus a one-shot `trigger_map_relocalize.py` to load the map), there is no FAST-LIO2-only mode |
 | `src/localization/launch/offline_mapping.launch.py` | run directly, standalone | LIO-SAM offline prior-map generation from a recorded bag |
 | `src/diy_ndt_localization/launch/ndt_localization.launch.py` | **not launched by anything anymore** — DEPRECATED | NDT-OMP map→odom scan matching; replaced by `map_localizer` after a real TF-composition bug was found (see caveat #4/reuse_plan_step1.md Step 11) — kept in the repo for reference/rollback only |
-| `src/diy_zone_nav/launch/zone_nav.launch.py` | `challenge_master.launch.py` (BLOCK 12, via `_zone_nav_launch`) | Zone-aware nav state machine. **ORPHANED in the custom A*/PD architecture** (see caveat #9/reuse_plan_step1.md Step 13) — its `/speed_limit` and costmap-layer `SetParameters` calls target full-Nav2 services that don't exist in that setup; already fails gracefully (`service_is_ready()` checked), but nothing consumes its outputs either. Safe to not run at all with the custom controller stack. |
+| `src/zone_nav/launch/zone_nav.launch.py` | `challenge_master.launch.py` (BLOCK 12, via `_zone_nav_launch`) | Zone-aware nav state machine. **ORPHANED in the custom A*/PD architecture** (see caveat #9/reuse_plan_step1.md Step 13) — its `/speed_limit` and costmap-layer `SetParameters` calls target full-Nav2 services that don't exist in that setup; already fails gracefully (`service_is_ready()` checked), but nothing consumes its outputs either. Safe to not run at all with the custom controller stack. |
 | `src/motion_planner/launch/pd_navigation.launch.py` | run directly, standalone (not yet in `challenge_master.launch.py`) | `nav2_map_server` + `nav2_lifecycle_manager` (map serving ONLY, not full Nav2) + `a_star_planner_node` + `pd_motion_planner_node` → `/cmd_vel_nav`. `cmd_vel_topic` now defaults to `/cmd_vel_nav` (hardware) — pass `cmd_vel_topic:=/cmd_vel` for sim. |
 | `src/motion_planner/launch/pure_pursuit_navigation.launch.py` | run directly, standalone | Same map_server + A* stack, with `pure_pursuit_motion_planner_node` instead of PD. Same `cmd_vel_topic` default fix applied. |
 | `src/diy_waypoint_sequencer/launch/waypoint_sequencer.launch.py` | run directly, standalone, **optional** | NEW — auto-publishes `/goal_pose` in sequence from a waypoints YAML, waits for `/green_light`, advances on `/pd/goal_reached`. Not running this is completely safe — `/goal_pose` just needs to be published manually instead (RViz "2D Goal Pose"). See reuse_plan_step1.md Step 13 for the full design rationale. |

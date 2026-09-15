@@ -205,7 +205,7 @@ def main():
     if wp_file is None:
         candidate = os.path.join(
             os.path.dirname(__file__), "..",
-            "src/diy_zone_nav/config/sim_simple_loop_waypoints.yaml")
+            "src/zone_nav/config/sim_simple_loop_waypoints.yaml")
         if os.path.isfile(candidate):
             wp_file = os.path.realpath(candidate)
 

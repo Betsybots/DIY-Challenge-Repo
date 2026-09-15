@@ -12,7 +12,7 @@ DESIGN GOAL — fully optional, zero hard dependents:
 This node is the ONLY thing in the custom A*/PD stack that assumes anything
 about "zones" or automated sequencing. Deliberately kept as its own,
 separate, minimal package (diy_waypoint_sequencer) — NOT part of
-diy_zone_nav, which has a much larger surface (BLIND_DRIVE tunnel handling,
+zone_nav, which has a much larger surface (BLIND_DRIVE tunnel handling,
 Nav2 costmap/speed-limit modulation) that this simpler A*+PD stack has never
 consumed (confirmed: no reference to /nav_mode or /speed_limit anywhere in
 diy_planning or motion_planner).
@@ -30,7 +30,7 @@ If this node is not run at all:
 
 INPUTS:
   /green_light        (std_msgs/Bool)  — competition start trigger (same
-                       topic diy_zone_nav's manager uses — see
+                       topic zone_nav's manager uses — see
                        docs/reuse_plan_step1.md for why this is std_msgs/Bool,
                        edge-triggered on data:true). Optional — see
                        wait_for_green_light param.

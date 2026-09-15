@@ -57,7 +57,7 @@ digraph DIYRobot {
 
     // ── OUR CODE ─────────────────────────────────────────────────────────────
     subgraph cluster_ours {
-        label="OUR CODE  (diy_zone_nav)"
+        label="OUR CODE  (zone_nav)"
         style=filled fillcolor="#F5EEF8" color="#8E44AD" penwidth=2
         fontsize=13 fontcolor="#8E44AD"
 

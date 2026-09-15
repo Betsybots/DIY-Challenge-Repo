@@ -5,7 +5,7 @@
 # zone_nav's richer zone_waypoints.yaml (radius/exit_radius/mode/inflation_radius
 # etc.) which encodes Nav2 costmap + BLIND_DRIVE state-machine behavior this
 # A*/PD stack does not use at all. If you later need a real zone-aware state
-# machine again, use diy_zone_nav's config format instead — don't try to grow
+# machine again, use zone_nav's config format instead — don't try to grow
 # this one to match it; keep this file's job to just "which poses, in what
 # order."
 

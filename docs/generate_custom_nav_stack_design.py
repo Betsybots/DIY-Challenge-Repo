@@ -168,7 +168,7 @@ def cover_page(s):
     story.append(HRFlowable(width='100%', thickness=1.5, color=C_BLUE, spaceAfter=12))
     story.append(Paragraph(
         'This guide covers: the custom A*+PD/pure-pursuit navigation architecture '
-        '&middot; verified findings on why diy_zone_nav is already fully decoupled '
+        '&middot; verified findings on why zone_nav is already fully decoupled '
         'from it &middot; two real bugs found and fixed along the way &middot; the '
         'new diy_waypoint_sequencer package for automated goal sequencing, including '
         'its real functional test results.',
@@ -218,7 +218,7 @@ def section_zone_nav_findings(s):
     story.append(H('2&nbsp;&middot;&nbsp;The Zone Nav Question &mdash; What Was Actually Verified', 'h1', s))
     story.append(hr(s))
     story.append(P(
-        'The ask: design so diy_zone_nav can be removed entirely with no impact, '
+        'The ask: design so zone_nav can be removed entirely with no impact, '
         'since the plan is for the controller to eventually consume "info from the '
         'zone navigator." Investigated the real code before designing anything &mdash; '
         'did not assume.', s))
@@ -246,7 +246,7 @@ def section_zone_nav_findings(s):
 
     story.append(SP(8))
     story.append(tip_box(
-        'diy_zone_nav was ALREADY fully orphaned and safely removable in this '
+        'zone_nav was ALREADY fully orphaned and safely removable in this '
         'architecture before any code was changed. Its /speed_limit output and '
         'costmap SetParameters calls have no consumer and no valid service target '
         'respectively, in a stack that only runs nav2_map_server. Nothing needed to '
@@ -306,8 +306,8 @@ def section_sequencer(s):
     story.append(H('Key Design Decision', 'h2', s))
     story.append(note_box(
         'Built as a brand-new, standalone, minimal package &mdash; NOT added inside '
-        'diy_zone_nav, diy_planning, or motion_planner. Putting it inside '
-        'diy_zone_nav would have re-coupled "can I remove zone_nav" with "do I '
+        'zone_nav, diy_planning, or motion_planner. Putting it inside '
+        'zone_nav would have re-coupled "can I remove zone_nav" with "do I '
         'still get automated sequencing" &mdash; exactly the ambiguity this whole '
         'task was about avoiding.', s))
 
@@ -372,7 +372,7 @@ ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped \\
     "{header: {frame_id: map}, pose: {position: \\
     {x: 1.0, y: 1.0}, orientation: {w: 1.0}}}"''', s)
 
-    story.append(note_box('diy_zone_nav is NOT required for any of the above to work.', s))
+    story.append(note_box('zone_nav is NOT required for any of the above to work.', s))
 
     story.append(H('Switching maps during testing', 'h2', s))
     story.append(P(
@@ -449,7 +449,7 @@ ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \\
         'challenge_master.launch.py &mdash; currently launched standalone only. '
         'Master-launch integration is a separate, larger decision not made in '
         'this pass.',
-        'Whether diy_zone_nav should eventually be deleted outright (vs. kept '
+        'Whether zone_nav should eventually be deleted outright (vs. kept '
         'orphaned-but-present) was not decided &mdash; no urgency since it is '
         'already proven harmless to leave in place.',
         'tf_transformations is not installed in this sandbox (no sudo) &mdash; '

@@ -23,7 +23,7 @@ CLI overrides are also supported without editing this file:
 
 STARTUP ORDER
 ─────────────
-   1. diy_robot_description  — publishes URDF / TF tree  (MUST be first)
+   1. robot_description  — publishes URDF / TF tree  (MUST be first)
    2. micro_ros_agent        — STM32 serial link (disabled by default — see BLOCK 4)
    3. estop_controller_node  — reads STM32 state, publishes /estop_active
    4. cmd_vel_mux_node       — velocity arbitration (single-owner device — see BLOCK 5)

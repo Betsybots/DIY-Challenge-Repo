@@ -63,8 +63,8 @@
 //          → mux→AUTONOMOUS | stop /cmd_vel_zone_nav
 //
 // DEPENDENCIES: rclcpp, std_msgs, geometry_msgs, nav_msgs, nav2_msgs, rcl_interfaces
-// BUILD:  colcon build --packages-select diy_zone_nav
-// RUN:    ros2 launch diy_zone_nav zone_nav.launch.py
+// BUILD:  colcon build --packages-select zone_nav
+// RUN:    ros2 launch zone_nav zone_nav.launch.py
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <cctype>

@@ -3,7 +3,7 @@
 Companion doc to [jetson_bringup_guide.md](jetson_bringup_guide.md) — covers
 the custom A* + PD/pure-pursuit navigation stack (`diy_planning`,
 `motion_planner`) built by the teammate, why it is already decoupled
-from `diy_zone_nav`, the two real bugs found while verifying that, and the
+from `zone_nav`, the two real bugs found while verifying that, and the
 new `diy_waypoint_sequencer` package built for automated goal sequencing.
 
 Full investigation and verification detail: `docs/reuse_plan_step1.md` Step 13.
@@ -48,7 +48,7 @@ for AUTONOMOUS mode — no mux changes were needed to plug this controller in.
 
 ## 2. The Zone Nav Question — What Was Actually Verified
 
-The ask: design so `diy_zone_nav` can be removed entirely with no impact,
+The ask: design so `zone_nav` can be removed entirely with no impact,
 since the plan is for the controller to eventually consume "info from the
 zone navigator." Investigated the real code before designing anything —
 did not assume.
@@ -60,7 +60,7 @@ did not assume.
 | Does `cmd_vel_mux`'s AUTONOMOUS mode depend on zone_nav? | Read `cmd_vel_mux_node.py`'s mode logic | No — reads `/cmd_vel_nav` unconditionally; BLIND_DRIVE only activates via an explicit service call only `zone_nav_manager_node` makes |
 | Does zone_nav crash if Nav2's costmap/controller services don't exist? | Read `zone_nav_manager_node.cpp`'s service-call sites | No — already checks `service_is_ready()` before every call, skips gracefully with a warn log |
 
-**Conclusion: `diy_zone_nav` was already fully orphaned and safely
+**Conclusion: `zone_nav` was already fully orphaned and safely
 removable in this architecture before any code was changed.** Its
 `/speed_limit` output and costmap `SetParameters` calls have no consumer
 and no valid service target respectively, in a stack that only runs
@@ -99,8 +99,8 @@ auto-publish `/goal_pose` in sequence for a competition run where no human
 is clicking RViz goals.
 
 **Key design decision:** built as a brand-new, standalone, minimal
-package — **not** added inside `diy_zone_nav`, `diy_planning`, or
-`motion_planner`. Putting it inside `diy_zone_nav` would have
+package — **not** added inside `zone_nav`, `diy_planning`, or
+`motion_planner`. Putting it inside `zone_nav` would have
 re-coupled "can I remove zone_nav" with "do I still get automated
 sequencing" — exactly the ambiguity this whole task was about avoiding.
 
@@ -155,7 +155,7 @@ ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \
 ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped \
     "{header: {frame_id: map}, pose: {position: {x: 1.0, y: 1.0}, orientation: {w: 1.0}}}"
 
-# diy_zone_nav is NOT required for any of the above to work.
+# zone_nav is NOT required for any of the above to work.
 ```
 
 ### Switching maps during testing
@@ -245,9 +245,9 @@ ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \
 - The custom controller stack is not yet wired into
   `challenge_master.launch.py` — currently launched standalone only.
   Master-launch integration (a `use_custom_nav`-style flag, and how it
-  coexists with the existing `diy_zone_nav`/Nav2 blocks already there) is
+  coexists with the existing `zone_nav`/Nav2 blocks already there) is
   a separate, larger decision not made in this pass.
-- Whether `diy_zone_nav` should eventually be deleted outright (vs. kept
+- Whether `zone_nav` should eventually be deleted outright (vs. kept
   orphaned-but-present) was not decided — no urgency since it is already
   proven harmless to leave in place.
 - `tf_transformations` is not installed in this sandbox (no `sudo`) —

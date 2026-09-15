@@ -18,8 +18,8 @@
   <depend>ros_gz_sim</depend>
   <exec_depend>nav2_bringup</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
-  <exec_depend>diy_robot_description</exec_depend>
-  <exec_depend>diy_zone_nav</exec_depend>
+  <exec_depend>robot_description</exec_depend>
+  <exec_depend>zone_nav</exec_depend>
   <exec_depend>challenge_bringup</exec_depend>
 
 <!-- ros2_control if using 

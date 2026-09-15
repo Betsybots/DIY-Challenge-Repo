@@ -10,7 +10,7 @@ def generate_launch_description():
     world = LaunchConfiguration('world', default='diy_world.sdf')
     robot_entity = 'betsybot'  # entity name spawned in Gazebo
 
-    robot_pkg_share = get_package_share_directory('diy_robot_description')
+    robot_pkg_share = get_package_share_directory('robot_description')
     sim_pkg_share = get_package_share_directory('diy_sim')
     urdf_file = PathJoinSubstitution([robot_pkg_share, 'urdf', 'robot.urdf.xacro'])
     world_file = PathJoinSubstitution([sim_pkg_share, 'worlds', world])

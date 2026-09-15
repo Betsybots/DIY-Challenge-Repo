@@ -23,7 +23,7 @@ CLI overrides are also supported without editing this file:
 
 STARTUP ORDER
 ─────────────
-   1. diy_robot_description  — publishes URDF / TF tree  (MUST be first)
+   1. robot_description  — publishes URDF / TF tree  (MUST be first)
    2. micro_ros_agent        — STM32 serial link (disabled by default — see BLOCK 4)
    3. estop_controller_node  — reads STM32 state, publishes /estop_active
    4. cmd_vel_mux_node       — velocity arbitration (single-owner device — see BLOCK 5)
@@ -98,7 +98,7 @@ def _zone_nav_launch(context, use_zone_nav_lc, waypoints_file_lc):
     if context.perform_substitution(use_zone_nav_lc).lower() != 'true':
         return []
 
-    zone_nav_pkg = get_package_share_directory('diy_zone_nav')
+    zone_nav_pkg = get_package_share_directory('zone_nav')
     zone_nav_launch = os.path.join(zone_nav_pkg, 'launch', 'zone_nav.launch.py')
 
     launch_args = {}
@@ -145,7 +145,7 @@ def _zed_launch(context, use_zed_lc):
                 'camera_model':   'zed2i',
                 # All three default true in zed_wrapper. Forced false here:
                 # this stack's TF tree is already fully owned elsewhere —
-                # diy_robot_description publishes the static camera_link
+                # robot_description publishes the static camera_link
                 # transform, and FAST-LIO2 + the localization EKF + NDT-OMP own the dynamic
                 # odom->base_link and map->odom transforms. Leaving these at
                 # their defaults would start a second, competing
@@ -219,7 +219,7 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(
-                    get_package_share_directory('diy_robot_description'),
+                    get_package_share_directory('robot_description'),
                     'launch',
                     'description.launch.py',
                 )
@@ -449,7 +449,7 @@ def generate_launch_description():
         # Default nav_mode is "INIT" which leaves the gate open (pass-through),
         # so localization accuracy is unaffected when zone_nav is disabled.
         Node(
-            package='diy_zone_nav',
+            package='zone_nav',
             executable='lidar_odom_gate_node',
             name='lidar_odom_gate',
             output='screen',

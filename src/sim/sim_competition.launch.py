@@ -31,7 +31,7 @@ def generate_launch_description():
     robot_z      = LaunchConfiguration('robot_z',     default='0.05')
     robot_yaw    = LaunchConfiguration('robot_yaw',   default='0.0')
 
-    robot_pkg_share  = get_package_share_directory('diy_robot_description')
+    robot_pkg_share  = get_package_share_directory('robot_description')
     sim_pkg_share    = get_package_share_directory('diy_sim')
     ros_gz_sim_share = get_package_share_directory('ros_gz_sim')
 
@@ -39,11 +39,11 @@ def generate_launch_description():
     world_file = PathJoinSubstitution([sim_pkg_share, 'worlds', world])
 
     # Expose diy_sim/models so Ignition can resolve model:// URIs.
-    # Also expose diy_robot_description/share so model://diy_robot_description/... resolves.
+    # Also expose robot_description/share so model://robot_description/... resolves.
     # Set os.environ NOW so gz_sim.launch.py's OpaqueFunction picks it up
     # (it reads os.environ directly, not the ROS 2 launch environment).
     models_dir      = os.path.join(sim_pkg_share, 'models')
-    robot_share_dir = os.path.dirname(robot_pkg_share)   # …/share  (parent of diy_robot_description)
+    robot_share_dir = os.path.dirname(robot_pkg_share)   # …/share  (parent of robot_description)
     existing_gz_path = os.environ.get('GZ_SIM_RESOURCE_PATH',
                        os.environ.get('IGN_GAZEBO_RESOURCE_PATH', ''))
     new_gz_path = ':'.join(filter(None, [models_dir, robot_share_dir, existing_gz_path]))
@@ -90,7 +90,7 @@ def generate_launch_description():
         output='screen',
         arguments=[
             '-topic', 'robot_description',
-            '-name',  'diy_robot',
+            '-name',  'robot',
             '-x', robot_x,
             '-y', robot_y,
             '-z', robot_z,
@@ -125,9 +125,9 @@ def generate_launch_description():
     # Nav2 needs a map→odom transform to exist.  Publishing identity (0,0,0)
     # means Nav2 treats odom frame == map frame — fine for testing the nav
     # pipeline without localization error.
-    # NOTE: ros_gz_bridge forwards /tf with BARE frame names (no diy_robot/ prefix).
+    # NOTE: ros_gz_bridge forwards /tf with BARE frame names (no robot/ prefix).
     # The odom frame published by Ignition's diff-drive/odometry plugins is simply "odom".
-    # So the static TF must bridge map → odom (not map → diy_robot/odom).
+    # So the static TF must bridge map → odom (not map → robot/odom).
     map_to_odom_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',

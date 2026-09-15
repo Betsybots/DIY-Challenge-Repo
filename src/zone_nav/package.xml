@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>diy_zone_nav</name>
+  <name>zone_nav</name>
   <version>0.1.0</version>
   <description>
     Zone-aware navigation state machine for DIY Robot Challenge 2026.

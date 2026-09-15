@@ -3,7 +3,7 @@
 # run_zone_nav.sh
 #
 # Convenience wrapper for:
-#   ros2 launch diy_zone_nav zone_nav.launch.py
+#   ros2 launch zone_nav zone_nav.launch.py
 #
 # USAGE:
 #   ./scripts/run_zone_nav.sh [OPTIONS]
@@ -111,4 +111,4 @@ echo "  Monitor:    ros2 topic echo /nav_mode"
 echo ""
 
 # ── Run ───────────────────────────────────────────────────────────────────
-exec ros2 launch diy_zone_nav zone_nav.launch.py "${LAUNCH_ARGS[@]}"
+exec ros2 launch zone_nav zone_nav.launch.py "${LAUNCH_ARGS[@]}"

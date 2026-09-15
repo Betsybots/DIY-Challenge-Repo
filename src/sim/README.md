@@ -58,7 +58,7 @@ rosdep install --from-paths src --ignore-src -r -y
 
 # Build (symlink-install avoids rebuild on script edits)
 colcon build --symlink-install --packages-select \
-  diy_sim diy_robot_description diy_zone_nav challenge_bringup
+  diy_sim robot_description zone_nav challenge_bringup
 
 # Source
 source install/setup.bash
@@ -209,8 +209,8 @@ ros2 launch diy_sim sim_simple_loop.launch.py
 | File | What to tune |
 |---|---|
 | `src/challenge_bringup/config/nav2_params.yaml` | Controller, planner, costmap, goal tolerances |
-| `src/diy_zone_nav/config/sim_simple_loop_waypoints.yaml` | Waypoint XY positions and target yaw |
-| `src/diy_zone_nav/scripts/circuit_runner_node.py` | Turn detection, rotation logic, retry policy |
+| `src/zone_nav/config/sim_simple_loop_waypoints.yaml` | Waypoint XY positions and target yaw |
+| `src/zone_nav/scripts/circuit_runner_node.py` | Turn detection, rotation logic, retry policy |
 
 ---
 

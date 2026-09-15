@@ -209,11 +209,11 @@ source /opt/ros/humble/setup.bash
 
 colcon build --symlink-install \\
   --packages-select \\
-    diy_zone_nav \\
+    zone_nav \\
     diy_cmd_vel_mux \\
     diy_estop_controller \\
     challenge_bringup \\
-    diy_robot_description
+    robot_description
 
 source install/setup.bash''', s)
     story.append(note_box(
@@ -316,7 +316,7 @@ ros2 launch challenge_bringup challenge_master.launch.py \\
 
     story.append(H('3.3  Zone Nav Only (without full bringup)', 'h2', s))
     story += code_block('Launch zone nav subsystem in isolation', '''\
-ros2 launch diy_zone_nav zone_nav.launch.py \\
+ros2 launch zone_nav zone_nav.launch.py \\
     use_localization:=true \\
     launch_gate:=true''', s)
     story.append(note_box(
@@ -439,7 +439,7 @@ bash scripts/inspect_zone_nav.sh
         [3.5*cm, 5.5*cm, 7*cm], s))
 
     story += code_block('Launch RViz2 standalone', '''\
-rviz2 -d src/diy_robot_description/rviz/default.rviz''', s)
+rviz2 -d src/robot_description/rviz/default.rviz''', s)
 
     story.append(H('5.4  Quick Topic Checks (One-liners)', 'h2', s))
     story += code_block('Useful ros2 topic commands during a run', '''\

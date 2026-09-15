@@ -2,7 +2,7 @@
 zone_nav.launch.py — Launch the zone-aware navigation state machine.
 
 Usage:
-    ros2 launch diy_zone_nav zone_nav.launch.py
+    ros2 launch zone_nav zone_nav.launch.py
 
 Optional args:
     waypoints_file:=<path>          — override zone_waypoints.yaml location
@@ -23,7 +23,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
 
-    pkg_share = get_package_share_directory("diy_zone_nav")
+    pkg_share = get_package_share_directory("zone_nav")
 
     # Default config files shipped with the package
     default_params    = os.path.join(pkg_share, "config", "zone_nav_manager.yaml")
@@ -87,7 +87,7 @@ def generate_launch_description():
     # launch_gate:=false when challenge_master already started the gate node
     # under its use_localization block, to avoid two competing gate nodes.
     lidar_gate_node = Node(
-        package="diy_zone_nav",
+        package="zone_nav",
         executable="lidar_odom_gate_node",
         name="lidar_odom_gate",
         output="screen",
@@ -96,7 +96,7 @@ def generate_launch_description():
 
     # ── Zone nav manager node ─────────────────────────────────────────────
     zone_nav_node = Node(
-        package="diy_zone_nav",
+        package="zone_nav",
         executable="zone_nav_manager_node",
         name="zone_nav_manager",
         output="screen",
@@ -117,7 +117,7 @@ def generate_launch_description():
     # re-submits after each lap until zone_nav_manager publishes DONE.
     # Only started when use_circuit_runner:=true.
     circuit_runner_node = Node(
-        package="diy_zone_nav",
+        package="zone_nav",
         executable="circuit_runner_node",
         name="circuit_runner",
         output="screen",

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(diy_robot_description)
+project(robot_description)
 
 find_package(ament_cmake REQUIRED)
 

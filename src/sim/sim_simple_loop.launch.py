@@ -60,7 +60,7 @@ def _nav2_stack(context, use_circuit_runner_lc, use_zone_nav_lc,
                 use_rviz_lc, circuit_waypoints_lc):
     """OpaqueFunction: resolve paths at runtime and return nav2 nodes."""
     bringup_pkg  = get_package_share_directory('challenge_bringup')
-    zone_nav_pkg = get_package_share_directory('diy_zone_nav')
+    zone_nav_pkg = get_package_share_directory('zone_nav')
 
     nav2_params       = os.path.join(bringup_pkg, 'config', 'nav2_params.yaml')
     keepout_mask_yaml = os.path.join(bringup_pkg, 'maps', 'keepout_mask.yaml')
@@ -149,7 +149,7 @@ def _nav2_stack(context, use_circuit_runner_lc, use_zone_nav_lc,
 def generate_launch_description():
 
     sim_pkg_share   = get_package_share_directory('diy_sim')
-    robot_pkg_share = get_package_share_directory('diy_robot_description')
+    robot_pkg_share = get_package_share_directory('robot_description')
     ros_gz_sim_share = get_package_share_directory('ros_gz_sim')
 
     world = LaunchConfiguration('world', default='simple_loop.sdf')
@@ -211,7 +211,7 @@ def generate_launch_description():
         output='screen',
         arguments=[
             '-topic', 'robot_description',
-            '-name',  'diy_robot',
+            '-name',  'robot',
             '-x', robot_x, '-y', robot_y,
             '-z', robot_z, '-Y', robot_yaw,
         ],

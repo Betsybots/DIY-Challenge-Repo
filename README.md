@@ -45,7 +45,7 @@ DIY-Challenge-Repo/
 │   ├── diy_estop_controller/   ← STM32 heartbeat watchdog / e-stop
 │   ├── localization/       ← FAST-LIO2 + single EKF fusion (wheel+IMU rate+lidar → /odometry/filtered)
 │   ├── diy_motor_control_legacy/ ← Differential drive motor controller (wheel odometry)
-│   ├── diy_robot_description/  ← URDF / robot_state_publisher
+│   ├── robot_description/  ← URDF / robot_state_publisher
 │   ├── diy_sim/                ← Gazebo simulation world and plugins
 │   ├── fast_lio_ros2/          ← FAST-LIO2, Hesai QT64 fork (vendored from teammate repo LIO_Localization)
 │   └── plan_b/                 ← Autonomous motion plan executor (waypoint sequencer)

@@ -1,5 +1,5 @@
 """
-description.launch.py — diy_robot_description
+description.launch.py — robot_description
 ═══════════════════════════════════════════════════════════════════════════════
 PURPOSE
   Starts robot_state_publisher with the robot URDF. This establishes the
@@ -44,7 +44,7 @@ def generate_launch_description():
     # ── Resolve the installed package path ───────────────────────────────────
     # get_package_share_directory returns the installed share/ path so this
     # works regardless of whether the package is built in-place or installed.
-    pkg_dir  = get_package_share_directory('diy_robot_description')
+    pkg_dir  = get_package_share_directory('robot_description')
     urdf_path = os.path.join(pkg_dir, 'urdf', 'robot.urdf.xacro')
     raw_robot_desc = Command(['xacro', ' ', urdf_path, ' sim:=false'])
     robot_desc_param = ParameterValue(raw_robot_desc, value_type=str)

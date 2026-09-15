@@ -381,7 +381,7 @@ def build_story(styles):
     ]))
     story += [tbl, SP()]
     story.append(warn_box(
-        'The URDF file (src/diy_robot_description/urdf/robot.urdf.xacro) currently has '
+        'The URDF file (src/robot_description/urdf/robot.urdf.xacro) currently has '
         'PLACEHOLDER values for camera_link (xyz="0.20 0.0 0.20"). '
         'These must be replaced with real measured values before the robot is used. '
         'Using wrong extrinsics will cause misaligned sensor fusion and poor localization.', styles))
@@ -694,7 +694,7 @@ ros2 bag record /camera/color/image_raw /camera/color/camera_info \\
 
     story.append(H('4.1  Update the URDF camera joint', 'h2', styles))
     story.append(P(
-        'Open <code>src/diy_robot_description/urdf/robot.urdf.xacro</code> and '
+        'Open <code>src/robot_description/urdf/robot.urdf.xacro</code> and '
         'replace the placeholder camera joint origin with your measured values:', styles))
     story += code_block('robot.urdf.xacro — replace placeholder (line ~118)', """\
 <!-- BEFORE (placeholder): -->
@@ -718,10 +718,10 @@ ros2 bag record /camera/color/image_raw /camera/color/camera_info \\
     story.append(H('4.2  Rebuild the robot description package', 'h2', styles))
     story += code_block('Rebuild and verify TF tree', """\
 # Rebuild after URDF change
-cd ~/ros2_ws && colcon build --packages-select diy_robot_description
+cd ~/ros2_ws && colcon build --packages-select robot_description
 
 # Verify the TF tree is correct
-ros2 launch diy_robot_description description.launch.py &
+ros2 launch robot_description description.launch.py &
 ros2 run tf2_tools view_frames  # saves frames.pdf
 # Check that base_link → camera_link transform matches your measurements""", styles)
 
@@ -849,9 +849,9 @@ EOF""", styles)
          Paragraph('REQUIRED', styles['tc']),
          Paragraph('grep "base_to_camera" urdf/robot.urdf.xacro — no CALIB: comment', styles['tc'])],
         [Paragraph('☐', styles['tc']),
-         Paragraph('Rebuild diy_robot_description package', styles['tc']),
+         Paragraph('Rebuild robot_description package', styles['tc']),
          Paragraph('REQUIRED', styles['tc']),
-         Paragraph('colcon build --packages-select diy_robot_description', styles['tc'])],
+         Paragraph('colcon build --packages-select robot_description', styles['tc'])],
         [Paragraph('☐', styles['tc']),
          Paragraph('Verify TF tree in RViz2 (camera_link at expected position)', styles['tc']),
          Paragraph('REQUIRED', styles['tc']),
@@ -897,7 +897,7 @@ EOF""", styles)
         [Paragraph('File', styles['th']),
          Paragraph('What to change', styles['th']),
          Paragraph('When', styles['th'])],
-        [Paragraph('src/diy_robot_description/urdf/robot.urdf.xacro', styles['tc']),
+        [Paragraph('src/robot_description/urdf/robot.urdf.xacro', styles['tc']),
          Paragraph('base_to_camera joint xyz/rpy — replace placeholder', styles['tc']),
          Paragraph('After physical measurement (required)', styles['tc'])],
         [Paragraph('src/challenge_bringup/config/color_camera_info.yaml\n(create new)', styles['tc']),

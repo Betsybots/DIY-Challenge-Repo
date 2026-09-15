@@ -3,7 +3,7 @@
 # Configuration for Hesai QT64 LiDAR with FAST-LIO2 (ROS 2).
 /**:
     ros__parameters:
-        map_yaml: "/home/juggernauts/DIY-Challenge-Repo/src/mapping/maps/small_house/smooth_map.yaml"
+        map_yaml: "/home/juggernauts/DIY-Challenge-Repo/src/mapping/maps/small_house/global_map.yaml"
         use_sim_time: false
         base_frame: base_link
         odom_frame: odom

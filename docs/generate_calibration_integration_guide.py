@@ -385,7 +385,7 @@ extrinsic_est_en: false   # disable online estimation after calibration
     story.append(SP(4))
 
     story.append(H2('3.3  Write Extrinsics into URDF'))
-    story += CB('src/diy_robot_description/urdf/robot.urdf.xacro — base_to_lidar joint:', '''\
+    story += CB('src/robot_description/urdf/robot.urdf.xacro — base_to_lidar joint:', '''\
 <!-- Replace with lidar_imu_calib result.
      xyz = extrinsic_T (metres)
      rpy = rotation matrix to Euler ZYX (radians) -->
@@ -567,7 +567,7 @@ ros2 topic echo /odometry/filtered | grep -A 36 "pose.*covariance"
 
     story.append(H2('7.2  After URDF Change'))
     checks_urdf = [
-        'Rebuild diy_robot_description: colcon build --packages-select diy_robot_description',
+        'Rebuild robot_description: colcon build --packages-select robot_description',
         'Confirm robot model in RViz has all links in correct position',
         'Verify TF tree: ros2 run tf2_tools view_frames — all expected frames present',
         'Check base_to_lidar transform: ros2 run tf2_ros tf2_echo base_link lidar_link',
@@ -606,7 +606,7 @@ ros2 topic echo /odometry/filtered | grep -A 36 "pose.*covariance"
 # Check fast_lio config for placeholder values (0.1 is placeholder for acc/gyr_cov)
 grep -n "CALIB" src/localization/config/fast_lio_hesai_qt64.yaml
 grep -n "CALIB" src/localization/config/navsat_transform.yaml
-grep -n "CALIB" src/diy_robot_description/urdf/robot.urdf.xacro
+grep -n "CALIB" src/robot_description/urdf/robot.urdf.xacro
 
 # Check for identity extrinsics (still placeholder):
 grep -n "extrinsic_T: \\[ 0.0, 0.0, 0.0" src/localization/config/fast_lio_hesai_qt64.yaml

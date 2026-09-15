@@ -7,7 +7,7 @@
     Standalone, optional automated goal-pose sequencer for the custom
     A* + PD/pure-pursuit navigation stack (diy_planning / motion_planner).
     Publishes /goal_pose in sequence from a simple waypoints YAML, advancing
-    on /pd/goal_reached. Deliberately has ZERO dependency on diy_zone_nav —
+    on /pd/goal_reached. Deliberately has ZERO dependency on zone_nav —
     if this node isn't run, /goal_pose can still be published manually
     (RViz "2D Goal Pose", or ros2 topic pub) with no code changes anywhere
     else in the stack. See docs/reuse_plan_step1.md for the design rationale.

@@ -472,7 +472,7 @@ DIY-Challenge-Repo/
 │   ├── challenge_bringup/   ← Top-level launch + Nav2/map config
 │   ├── diy_cmd_vel_mux/     ← cmd_vel arbitration node
 │   ├── diy_estop_controller/← STM32 E-stop mirror node
-│   ├── diy_robot_description/← URDF / TF tree
+│   ├── robot_description/← URDF / TF tree
 │   └── localization/    ← FAST-LIO2 + EKF1 + EKF2 + navsat
 └── third_party_ws/          ← Pre-built SLAM & sensor packages
     ├── src/FAST_LIO/
@@ -624,8 +624,8 @@ DIY-Challenge-Repo/
         'the USB cable is unplugged, /estop_active will go True within 800 ms '
         'and cmd_vel_mux will publish zero velocity.', styles))
 
-    # ── 2.4 diy_robot_description ─────────────────────────────────────────
-    story.append(H('2.4  diy_robot_description', 'h2', styles))
+    # ── 2.4 robot_description ─────────────────────────────────────────
+    story.append(H('2.4  robot_description', 'h2', styles))
     story.append(P(
         '<b>Type:</b> ament_cmake | Provides: URDF Xacro + static TF tree', styles))
     story.append(P(
@@ -642,7 +642,7 @@ DIY-Challenge-Repo/
     story.append(H('2.5  localization', 'h2', styles))
     story.append(P(
         '<b>Type:</b> ament_cmake (configs + launch) | '
-        '<b>Depends on:</b> fast_lio, robot_localization, diy_robot_description', styles))
+        '<b>Depends on:</b> fast_lio, robot_localization, robot_description', styles))
     story.append(P(
         'Launches the full localisation stack: FAST-LIO2 lidar-inertial '
         'odometry feeding two robot_localization EKF instances and a '
@@ -870,7 +870,7 @@ colcon build --symlink-install \\
         challenge_bringup \\
         diy_cmd_vel_mux \\
         diy_estop_controller \\
-        diy_robot_description \\
+        robot_description \\
         localization
 
 # 7. Run preflight health check
@@ -1239,7 +1239,7 @@ source ~/ros2_ws/src/DIY-Challenge-Repo/scripts/env.sh jetson
 # 2. Copy extrinsic_T and extrinsic_R into fast_lio_hesai_qt64.yaml
 # 3. Update joint xyz/rpy in urdf/robot.urdf.xacro
 # 4. Set extrinsic_est_en: false in fast_lio_hesai_qt64.yaml
-# 5. Rebuild: colcon build --packages-select localization diy_robot_description""", styles)
+# 5. Rebuild: colcon build --packages-select localization robot_description""", styles)
 
     story.append(H('6.3  Prior Map Generation', 'h2', styles))
     story.append(P(
@@ -1377,7 +1377,7 @@ ros2 topic echo /mux_mode""", styles)
 
 # After deploy, rebuild on the robot:
 ssh ubuntu@jetson.local 'cd ~/ros2_ws && colcon build --symlink-install \\
-    --packages-select localization diy_robot_description challenge_bringup'""", styles)
+    --packages-select localization robot_description challenge_bringup'""", styles)
     story.append(PageBreak())
 
     # ════════════════════════════════════════════════════════════════════════
@@ -1501,7 +1501,7 @@ ssh ubuntu@jetson.local 'cd ~/ros2_ws && colcon build --symlink-install \\
             ]
         ),
         (
-            'colcon build fails on localization / diy_robot_description',
+            'colcon build fails on localization / robot_description',
             [
                 'Source environment before building: source scripts/env.sh jetson',
                 'Check third_party_ws is built: ls third_party_ws/install/',
