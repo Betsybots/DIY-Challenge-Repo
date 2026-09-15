@@ -149,14 +149,26 @@ def generate_launch_description():
         ),
     )
 
-    # ros2 launch fast_lio_ros2 lio_localizer.launch.py
-
-    # ── BLOCK 3: Robot description  (URDF → TF static transforms) ─────────────
+    # ── BLOCK 2: Robot description launch (URDF → TF static transforms and joint transforms) ──
     # MUST be first.  robot_state_publisher reads the URDF and broadcasts
     # every joint as a static TF transform (base_link → lidar_link, imu_link,
     # camera_link, etc.).  All downstream nodes depend on these transforms
     # to project sensor data into robot-body coordinates.
     #
+    robot_description_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('robot_description'),
+                'launch',
+                'description.launch.py',
+            )
+        ),
+    )
+
+    # ── BLOCK 3: Fast-LIO2 Launch  ──────────────────────────
+    # Launches the Fast-LIO2 localizer, which performs real-time LiDAR-inertial odometry and mapping.
+    # Needs the Hesai lidar driver and IMU to be running.
+
     # pcd_save_en: only accumulate a PCD map while driving manually (mapping
     # runs); autonomous runs replay an existing map, so skip the save.
     pcd_save_en = PythonExpression(["'false' if '", autonomous, "' == 'true' else 'true'"])
@@ -174,9 +186,10 @@ def generate_launch_description():
         }.items(),
     )
 
-    # ── loop_pgo: loop closure / pose-graph optimization ─────────────────
+    # ── Block 4: loop_pgo: loop closure / pose-graph optimization ─────────────────
     # Only runs during manual mapping drives (autonomous=false); autonomous
     # runs localize against an already-finished map, so no PGO is needed.
+
     loop_pgo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -188,8 +201,9 @@ def generate_launch_description():
         condition=UnlessCondition(autonomous),
     )
 
-    # ── map_hba: hierarchical bundle adjustment map refinement ────────────
+    # ── Block 5: map_hba: hierarchical bundle adjustment map refinement ────────────
     # Runs after loop_pgo, same gating (manual mapping drives only).
+
     map_hba_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -202,7 +216,7 @@ def generate_launch_description():
     )
 
 
-    # ── BLOCK 11: Nav2 autonomous navigation stack ─────────────────────────────
+    # ── BLOCK 6: Nav2 autonomous navigation stack ─────────────────────────────
     # Nav2 planning + control stack: MPPI controller, SmacHybrid planner,
     # Behaviour Trees, global/local costmaps, lifecycle manager.
     # Does NOT start AMCL or map_server — per the Navigation Design Guide,
@@ -297,6 +311,7 @@ def generate_launch_description():
         declare_autonomous,
 
         # Launch sequence starts here
+        robot_description_launch,
         hesai_launch,
         delayed_fast_lio,
         delayed_nav2,
