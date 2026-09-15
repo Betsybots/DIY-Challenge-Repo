@@ -1,0 +1,16 @@
+# Configuration for the diy_motion_planner PD navigation stack.
+/**:
+    ros__parameters:
+        map_yaml: "/home/juggernauts/DIY-Challenge-Repo/src/mapping/maps/small_house/smooth_map.yaml"
+        use_sim_time: false
+        base_frame: base_link
+        odom_frame: odom
+        robot_clearance: 0.25
+        cmd_vel_topic: "/cmd_vel"
+        kp: 2.0
+        kd: 0.1
+        step_size: 0.2
+        max_linear_velocity: 0.3
+        max_angular_velocity: 1.0
+        goal_tolerance: 0.15
+        use_rviz: true

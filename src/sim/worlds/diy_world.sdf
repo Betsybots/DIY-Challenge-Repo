@@ -11,6 +11,7 @@
     <gravity>0 0 -9.8</gravity>
     <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
     <atmosphere type='adiabatic'/>
+    <!-- width = 36" = 0.9144 meters -->
     
     <!-- plugins -->
     <plugin name='gz::sim::systems::Physics' filename='ignition-gazebo-physics-system'/>
@@ -114,113 +115,248 @@
       <pose>0 0 0 0 -0 0</pose>
       <self_collide>false</self_collide>
     </model>
-    
+    <!--
     <include>
         <name>ground_plane_image</name>
         <uri>../models/grass_plane/model.sdf</uri>
     </include>
+    --> 
+    <include>
+        <name>line_0</name>
+        <uri>../models/drawn_line/model.sdf</uri>
+        <pose>0 -0.4572 0.25 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>line_1</name>
+        <uri>../models/drawn_line/model.sdf</uri>
+        <pose>0 0.4572 0.25 0 0 0.0</pose>
+    </include>
+    <include>
+        <name>polyline_58_5</name>
+        <uri>../models/polyline/58.5/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_61_5</name>
+        <uri>../models/polyline/61.5/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>    
+    <include>
+        <name>polyline_48_5</name>
+        <uri>../models/polyline/48.5/model.sdf</uri>
+        <pose>7.235 15.285 0.0 0 0 -1.3962634</pose>
+    </include>
+    <include>
+        <name>polyline_51_5</name>
+        <uri>../models/polyline/51.5/model.sdf</uri>
+        <pose>7.235 15.285 0.0 0 0 -1.3962634</pose>
+    </include>    
+    <include>
+        <name>polyline_38_5</name>
+        <uri>../models/polyline/38.5/model.sdf</uri>
+        <pose>8.2756 12.422 0.0 0 0 -1.22173</pose>
+    </include>
+    <include>
+        <name>polyline_41_5</name>
+        <uri>../models/polyline/41.5/model.sdf</uri>
+        <pose>8.2756 12.422 0.0 0 0 -1.22173</pose>
+    </include>
+    <include>
+        <name>polyline_28_5</name>
+        <uri>../models/polyline/28.5/model.sdf</uri>
+        <pose>9.8 9.785 0.0 0 0 -1.0472</pose>
+    </include>
+    <include>
+        <name>polyline_31_5</name>
+        <uri>../models/polyline/31.5/model.sdf</uri>
+        <pose>9.8 9.785 0.0 0 0 -1.0472</pose>
+    </include>
+    <!--
+    <include>
+        <name>polyline_18_5</name>
+        <uri>../models/polyline/18.5/model.sdf</uri>
+        <pose>11 8.5 0.0 0 0 -0.872665</pose>
+    </include>
+    <include>
+        <name>polyline_21_5</name>
+        <uri>../models/polyline/21.5/model.sdf</uri>
+        <pose>11 8.5 0.0 0 0 -0.872665</pose>
+    </include>
+    <include>
+        <name>polyline_8_5</name>
+        <uri>../models/polyline/8.5/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_11_5</name>
+        <uri>../models/polyline/11.5/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_4_5</name>
+        <uri>../models/polyline/4.5/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_7_5</name>
+        <uri>../models/polyline/7.5/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
 
-<!--
+    <include>
+        <name>polyline_23_8</name>
+        <uri>../models/polyline/23.8/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_26_8</name>
+        <uri>../models/polyline/26.8/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_33_8</name>
+        <uri>../models/polyline/33.8/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_36_8</name>
+        <uri>../models/polyline/36.8/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+        <name>polyline_43_8</name>
+        <uri>../models/polyline/43.8/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_46_8</name>
+        <uri>../models/polyline/46.8/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+        <name>polyline_53_8</name>
+        <uri>../models/polyline/53.8/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    <include>
+        <name>polyline_56_8</name>
+        <uri>../models/polyline/56.8/model.sdf</uri>
+        <pose>6.7056 18.288 0.0 0 0 -1.5708</pose>
+    </include>
+    -->
+    <include>
+        <name>polyline_4.5_150</name>
+        <uri>../models/polyline/4.5_150/model.sdf</uri>
+        <pose>14.46 4.14 0.0 0 0 -0.872665</pose>
+    </include>
+    <include>
+        <name>polyline_7.5_150</name>
+        <uri>../models/polyline/7.5_150/model.sdf</uri>
+        <pose>14.46 4.14 0.0 0 0 -0.872665</pose>
+    </include>
+    <!-- size of the strawbale 1, 0.5, 0.5 -->
+    <!--
     <include>
         <name>model_0</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>1.5374999999999979 9.45 0.175 0 0 0.0</pose> 
-        <pose>0 -1 0 0 0 0.0</pose>
+        <pose>0 -1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_1</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>0 1 0 0 0 0.0</pose>
+        <pose>0 1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_2</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>1 -1 0 0 0 1.5707</pose>
+        <pose>1 -1 0.25 0 0 0</pose>
     </include>
     <include>
         <name>model_3</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>1 1 0 0 0 1.5707</pose>
+        <pose>1 1 0.25 0 0 0</pose>
     </include>
     <include>
         <name>model_4</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>2 -1 0 0 1.5707 0.0</pose>
+        <pose>2 -1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_5</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>2 1 0 0 1.5707 0.0</pose>
+        <pose>2 1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_6</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>3 -1 0 0.707 0 0.0</pose>
+        <pose>3 -1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_7</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>3 1 0 0.707 0 0.0</pose>
+        <pose>3 1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_8</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>4 0 0 0 0 1.5707</pose>
+        <pose>4 -1 0.25 0 0 0</pose>
     </include>
     <include>
         <name>model_9</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>4 1 0 0 0 0.0</pose>
+        <pose>4 1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_10</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>5 -1 0 0 0 0.0</pose>
+        <pose>5 -1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_11</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>5 1 0 0 0 0.0</pose>
+        <pose>5 1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_12</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>6 -1 0 0 0 0.0</pose>
+        <pose>6 -1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_13</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>6 1 0 0 0 0.0</pose>
+        <pose>6 1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_14</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>7 -1 0 0 0 0.0</pose>
+        <pose>7 -1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_15</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>7 1 0 0 0 0.0</pose>
+        <pose>7 1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_16</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>8 0 0 0 0 1.5707</pose>
+        <pose>8 -1 0.25 0 0 0</pose>
     </include>
     <include>
         <name>model_17</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>8 1 0 0 0 0.0</pose>
+        <pose>8 1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_18</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>9 -1 0 0 0 0.0</pose>
+        <pose>9 -1 0.25 0 0 0.0</pose>
     </include>
     <include>
         <name>model_19</name>
         <uri>../models/straw_bale/model.sdf</uri>
-        <pose>9 1 0 0 0 0.0</pose>
+        <pose>9 1 0.25 0 0 0.0</pose>
     </include>
     -->
     <!-- Robot Description -->

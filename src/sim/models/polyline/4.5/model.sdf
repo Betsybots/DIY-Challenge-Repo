@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+    <model name="polyline">
+      <pose>0 0 0 0 0 0</pose>
+      <static>true</static>
+      <link name="curve_link">
+        <visual name="curve_visual">
+          <geometry>
+            <polyline>
+              <!-- Curved line: 4.5 ft (1.3716 m) radius, 10 deg sweep, 0.05 m width -->
+              <point>1.3466 0.0000</point>
+              <point>1.3464 0.0235</point>
+              <point>1.3458 0.0470</point>
+              <point>1.3448 0.0705</point>
+              <point>1.3433 0.0939</point>
+              <point>1.3415 0.1174</point>
+              <point>1.3392 0.1408</point>
+              <point>1.3366 0.1641</point>
+              <point>1.3335 0.1874</point>
+              <point>1.3300 0.2107</point>
+              <point>1.3261 0.2338</point>
+              <point>1.3754 0.2425</point>
+              <point>1.3794 0.2185</point>
+              <point>1.3830 0.1944</point>
+              <point>1.3862 0.1702</point>
+              <point>1.3889 0.1460</point>
+              <point>1.3913 0.1217</point>
+              <point>1.3932 0.0974</point>
+              <point>1.3947 0.0731</point>
+              <point>1.3957 0.0487</point>
+              <point>1.3964 0.0244</point>
+              <point>1.3966 0.0000</point>
+              <height>0.5</height>
+            </polyline>
+          </geometry>
+        </visual>
+      </link>
+    </model>
+</sdf>

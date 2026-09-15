@@ -1,9 +1,9 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription,ExecuteProcess
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, SetEnvironmentVariable, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, Command
+from launch.substitutions import LaunchConfiguration, Command, TextSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -31,8 +31,21 @@ def generate_launch_description():
     robot_desc_param = ParameterValue(raw_robot_desc, value_type=str)
     
     bridge_config_file = os.path.join(pkg_sim, 'config', 'bridge_config.yaml')
-    
-    script_path = './src/lidar_patch_script.py'
+    workspace_root = os.path.abspath(
+        os.path.join(pkg_challenge_bringup, '..', '..', '..', '..')
+    )
+
+    # Ignition/Gazebo needs the model/resource path and loopback networking so it
+    # does not hang on VPN interfaces or missing model paths when starting the sim.
+    sim_models_dir = os.path.join(pkg_sim, 'models')
+    robot_share_dir = os.path.dirname(pkg_robot_description)
+    existing_gz_path = os.environ.get('GZ_SIM_RESOURCE_PATH', os.environ.get('IGN_GAZEBO_RESOURCE_PATH', ''))
+    new_gz_path = ':'.join(filter(None, [sim_models_dir, robot_share_dir, existing_gz_path]))
+    os.environ['GZ_SIM_RESOURCE_PATH'] = new_gz_path
+    os.environ['IGN_GAZEBO_RESOURCE_PATH'] = new_gz_path
+    os.environ.setdefault('IGN_IP', '127.0.0.1')
+
+    script_path = os.path.join(workspace_root, 'src', 'lidar_patch_script.py')
     
     # Define the process execution
     run_python_script = ExecuteProcess(
@@ -70,7 +83,10 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': f'-r {world_path}'}.items()
+        launch_arguments={
+            'gz_args': [world_path, TextSubstitution(text=' -r')],
+            'on_exit_shutdown': 'true',
+        }.items()
     )
 
     # 7. Spawn the robot model inside the running Ignition simulation instance (Needed for both SIM and live hardware)
@@ -147,32 +163,37 @@ def generate_launch_description():
             arguments=['0', '0', '0', '0', '0', '0', 'body', 'imu_link'],
             parameters=[{'use_sim_time': True}]
         )
-    
+
+    # 12. Fuse wheel odometry + IMU (angular rate) via EKF -> /FinalOdometry (Needed for SIM)
+    ekf_config = os.path.join(pkg_challenge_bringup, 'config', 'ekf_sim.yaml')
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_filter_node_sim',
+        output='screen',
+        parameters=[ekf_config, {'use_sim_time': use_sim_time}],
+        remappings=[('odometry/filtered', '/FinalOdometry')]
+    )
+
     return LaunchDescription([
+        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', new_gz_path),
+        SetEnvironmentVariable('IGN_GAZEBO_RESOURCE_PATH', new_gz_path),
+        SetEnvironmentVariable('IGN_IP', '127.0.0.1'),
         DeclareLaunchArgument(
             'use_sim_time',
             default_value='true',
             description='Use simulation (Gazebo) clock if true'
         ),
-        Node(
-            package='ros_gz_bridge',
-            executable='parameter_bridge',
-            arguments=[
-                # 1. Bridge cmd_vel from ROS 2 (keyboard) -> Gazebo (plugin)
-                '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
-                
-                # 2. Bridge joint_states from Gazebo (plugin) -> ROS 2 (robot_state_publisher)
-                '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
-            ],
-            output='screen'
-        ),
         robot_state_publisher_node,
-        #joint_state_publisher_node,
         ignition_spawn_sim,
-        robot_spawn_node,
-        ros_gz_lidar_bridge_node,
-        rviz_node,
-        #static_transform_publisher_node,
-        #fast_lio_launch,
-        run_python_script
+        TimerAction(
+            period=8.0,
+            actions=[
+                robot_spawn_node,
+                ros_gz_lidar_bridge_node,
+                rviz_node,
+                run_python_script,
+                ekf_node,
+            ],
+        ),
     ])

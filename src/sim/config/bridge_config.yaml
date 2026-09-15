@@ -26,6 +26,13 @@
   ros_type_name: "sensor_msgs/msg/Imu"
   gz_type_name: "ignition.msgs.IMU"
   direction: GZ_TO_ROS
+
+  # Wheel encoder odometry (from the DiffDrive plugin) — fed into the sim EKF as /wheel_odom
+- ros_topic_name: "/wheel_odom"
+  gz_topic_name: "/odom_wheel"
+  ros_type_name: "nav_msgs/msg/Odometry"
+  gz_type_name: "ignition.msgs.Odometry"
+  direction: GZ_TO_ROS
   
   # Command Velocity topics
 - ros_topic_name: "/cmd_vel"

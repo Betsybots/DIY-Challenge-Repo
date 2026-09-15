@@ -289,7 +289,7 @@
           <wheel_separation>${base_width+2*wheel_ygap}</wheel_separation> <!-- Adjust to your robot's width (meters) -->
           <wheel_radius>${wheel_radius}</wheel_radius>     <!-- Adjust to your wheel radius (meters) -->
           <topic>cmd_vel</topic>
-          <odom_topic>odom_wheel</odom_topic>   <!-- wheel encoder odom — drifts on ramp/slip -->
+          <odom_topic>/odom_wheel</odom_topic>   <!-- wheel encoder odom — drifts on ramp/slip; absolute topic so it bridges to ROS 2 -->
           <!-- Publish odom→base_link TF — must match Nav2 robot_base_frame.
                Ignition namespaces these as robot/odom→robot/base_link.
                SIM only: on real robot EKF1/EKF2 publish this transform instead. -->

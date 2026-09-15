@@ -1,0 +1,16 @@
+# Configuration for the diy_motion_planner pure-pursuit navigation stack.
+/**:
+    ros__parameters:
+        map_yaml: "/home/juggernauts/DIY-Challenge-Repo/src/mapping/maps/small_house/global_map.yaml"
+        use_sim_time: false
+        base_frame: base_link
+        odom_frame: odom
+        robot_clearance: 0.25
+        cmd_vel_topic: "/cmd_vel"
+        lookahead_distance: 0.2
+        linear_velocity: 0.3
+        max_angular_velocity: 1.0
+        rotate_in_place_threshold: 1.0
+        minimum_turning_velocity: 0.05
+        goal_tolerance: 0.15
+        use_rviz: true
