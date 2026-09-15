@@ -49,13 +49,31 @@ OUTPUT:
 """
 
 import sys
+from math import cos, sin
 
 import rclpy
 import yaml
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from std_msgs.msg import Bool
-from tf_transformations import quaternion_from_euler
+
+try:
+    from tf_transformations import quaternion_from_euler
+except ImportError:
+    # Fallback for environments where tf_transformations is unavailable.
+    def quaternion_from_euler(roll, pitch, yaw):
+        cy = cos(yaw * 0.5)
+        sy = sin(yaw * 0.5)
+        cp = cos(pitch * 0.5)
+        sp = sin(pitch * 0.5)
+        cr = cos(roll * 0.5)
+        sr = sin(roll * 0.5)
+
+        x = sr * cp * cy - cr * sp * sy
+        y = cr * sp * cy + sr * cp * sy
+        z = cr * cp * sy - sr * sp * cy
+        w = cr * cp * cy + sr * sp * sy
+        return (x, y, z, w)
 
 
 class WaypointSequencerNode(Node):

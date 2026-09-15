@@ -16,10 +16,12 @@ leave it out for manual RViz-goal testing.
 """
 
 import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.actions import OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -27,6 +29,28 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_share = get_package_share_directory('diy_waypoint_sequencer')
     default_waypoints = os.path.join(pkg_share, 'config', 'waypoints.yaml')
+
+    def launch_setup(context, *args, **kwargs):
+        raw_waypoints_file = LaunchConfiguration('waypoints_file').perform(context)
+        resolved_waypoints_file = _resolve_waypoints_file(
+            raw_waypoints_file, pkg_share
+        )
+
+        return [
+            Node(
+                package='diy_waypoint_sequencer',
+                executable='waypoint_sequencer_node',
+                name='waypoint_sequencer_node',
+                output='screen',
+                parameters=[{
+                    'waypoints_file': resolved_waypoints_file,
+                    'goal_frame_id': LaunchConfiguration('goal_frame_id'),
+                    'wait_for_green_light': LaunchConfiguration('wait_for_green_light'),
+                    'start_delay_s': LaunchConfiguration('start_delay_s'),
+                    'loop': LaunchConfiguration('loop'),
+                }],
+            )
+        ]
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -59,17 +83,23 @@ def generate_launch_description():
             default_value='false',
             description='Wrap back to the first waypoint after the last one is reached.',
         ),
-        Node(
-            package='diy_waypoint_sequencer',
-            executable='waypoint_sequencer_node',
-            name='waypoint_sequencer_node',
-            output='screen',
-            parameters=[{
-                'waypoints_file': LaunchConfiguration('waypoints_file'),
-                'goal_frame_id': LaunchConfiguration('goal_frame_id'),
-                'wait_for_green_light': LaunchConfiguration('wait_for_green_light'),
-                'start_delay_s': LaunchConfiguration('start_delay_s'),
-                'loop': LaunchConfiguration('loop'),
-            }],
-        ),
+        OpaqueFunction(function=launch_setup),
     ])
+
+
+def _resolve_waypoints_file(raw_value, pkg_share):
+    candidate = Path(raw_value).expanduser()
+    if candidate.is_absolute() and candidate.exists():
+        return str(candidate)
+    if candidate.exists():
+        return str(candidate.resolve())
+
+    package_candidates = [
+        Path(pkg_share) / candidate,
+        Path(pkg_share) / 'config' / candidate.name,
+    ]
+    for package_candidate in package_candidates:
+        if package_candidate.exists():
+            return str(package_candidate)
+
+    return raw_value
