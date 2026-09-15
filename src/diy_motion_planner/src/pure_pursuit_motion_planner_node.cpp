@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "nav2_core/controller.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/path.hpp"
