@@ -78,10 +78,11 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, GroupAction
+from launch.actions import (DeclareLaunchArgument, GroupAction,
+                             IncludeLaunchDescription, OpaqueFunction, TimerAction)
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -96,37 +97,41 @@ def generate_launch_description():
     # ROS 2 launch evaluates at start-up.  Pass them directly to IfCondition()
     # or as node parameters.  Do NOT use them in Python if/else; use an
     # OpaqueFunction for that (see localization.launch.py for an example).
-    autonomous   = LaunchConfiguration('autonomous')
-    # use_nav2         = LaunchConfiguration('use_nav2')
-    # use_zone_nav     = LaunchConfiguration('use_zone_nav')
-    # use_zed          = LaunchConfiguration('use_zed')
-    # use_hesai        = LaunchConfiguration('use_hesai')
-    # use_micro_ros    = LaunchConfiguration('use_micro_ros')
-    # use_localization = LaunchConfiguration('use_localization')
-    # use_cmd_vel_mux  = LaunchConfiguration('use_cmd_vel_mux')
+    use_autonomous   = LaunchConfiguration('use_autonomous')
+    use_nav2         = LaunchConfiguration('use_nav2')
+    use_zone_nav     = LaunchConfiguration('use_zone_nav')
+    use_zed          = LaunchConfiguration('use_zed')
+    use_hesai        = LaunchConfiguration('use_hesai')
+    use_micro_ros    = LaunchConfiguration('use_micro_ros')
+    use_localization = LaunchConfiguration('use_localization')
+    use_cmd_vel_mux  = LaunchConfiguration('use_cmd_vel_mux')
     use_rviz         = LaunchConfiguration('use_rviz')
-    # mux_mode         = LaunchConfiguration('mux_mode')
+    mux_mode         = LaunchConfiguration('mux_mode')
     fastlio_config   = LaunchConfiguration('fastlio_config')
-    # waypoints_file   = LaunchConfiguration('waypoints_file')
+    waypoints_file   = LaunchConfiguration('waypoints_file')
     startup_delay = LaunchConfiguration('startup_delay')
 
     # ── Argument declarations ──────────────────────────────────────────────
     # Defaults match the jetson.env full-hardware profile.
     # Override per-session at the CLI without editing this file:
     #   ros2 launch challenge_bringup challenge_master.launch.py use_nav2:=true
-    # declare_use_autonomous = DeclareLaunchArgument('autonomous', default_value='true')
-    # declare_use_nav2 = DeclareLaunchArgument('use_nav2', default_value='false')
-    # declare_use_zone_nav = DeclareLaunchArgument('use_zone_nav', default_value='false')
-    # declare_use_zed = DeclareLaunchArgument('use_zed', default_value='true')
-    # declare_use_hesai = DeclareLaunchArgument('use_hesai', default_value='true')
-    # declare_use_micro_ros = DeclareLaunchArgument('use_micro_ros', default_value='false')
-    # declare_use_localization = DeclareLaunchArgument('use_localization', default_value='true')
-    # declare_use_cmd_vel_mux = DeclareLaunchArgument('use_cmd_vel_mux', default_value='true')
+    declare_use_autonomous = DeclareLaunchArgument('use_autonomous', default_value='true')
+    declare_use_nav2 = DeclareLaunchArgument('use_nav2', default_value='false')
+    declare_use_zone_nav = DeclareLaunchArgument('use_zone_nav', default_value='false')
+    declare_use_zed = DeclareLaunchArgument('use_zed', default_value='true')
+    declare_use_hesai = DeclareLaunchArgument('use_hesai', default_value='true')
+    declare_use_micro_ros = DeclareLaunchArgument('use_micro_ros', default_value='false')
+    declare_use_localization = DeclareLaunchArgument('use_localization', default_value='true')
+    declare_use_cmd_vel_mux = DeclareLaunchArgument('use_cmd_vel_mux', default_value='true')
     declare_use_rviz = DeclareLaunchArgument('use_rviz', default_value='false')
-    # declare_mux_mode = DeclareLaunchArgument('mux_mode', default_value='AUTONOMOUS')
-    declare_fastlio_config = DeclareLaunchArgument('fastlio_config', default_value='fast_lio_hesai_qt64.yaml')
-    declare_autonomous = DeclareLaunchArgument('autonomous', default_value='true')
-
+    declare_mux_mode = DeclareLaunchArgument('mux_mode', default_value='AUTONOMOUS')
+    declare_fastlio_config = DeclareLaunchArgument(
+        'fastlio_config', default_value='fast_lio_hesai_qt64.yaml')
+    declare_waypoints_file = DeclareLaunchArgument(
+        'waypoints_file',
+        default_value='',   # empty → zone_nav.launch.py uses its package default
+        description='Absolute path to zone_waypoints.yaml; leave blank for the default',
+    )
     declare_startup_delay = DeclareLaunchArgument(
         'startup_delay',
         default_value='5.0',
@@ -156,11 +161,6 @@ def generate_launch_description():
     # every joint as a static TF transform (base_link → lidar_link, imu_link,
     # camera_link, etc.).  All downstream nodes depend on these transforms
     # to project sensor data into robot-body coordinates.
-    #
-    # pcd_save_en: only accumulate a PCD map while driving manually (mapping
-    # runs); autonomous runs replay an existing map, so skip the save.
-    pcd_save_en = PythonExpression(["'false' if '", autonomous, "' == 'true' else 'true'"])
-
     fast_lio_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -169,38 +169,7 @@ def generate_launch_description():
                 'lio_localizer.launch.py',
             )
         ),
-        launch_arguments={
-            'pcd_save_en': pcd_save_en,
-        }.items(),
     )
-
-    # ── loop_pgo: loop closure / pose-graph optimization ─────────────────
-    # Only runs during manual mapping drives (autonomous=false); autonomous
-    # runs localize against an already-finished map, so no PGO is needed.
-    loop_pgo_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('loop_pgo'),
-                'launch',
-                'loop_pgo_launch.py',
-            )
-        ),
-        condition=UnlessCondition(autonomous),
-    )
-
-    # ── map_hba: hierarchical bundle adjustment map refinement ────────────
-    # Runs after loop_pgo, same gating (manual mapping drives only).
-    map_hba_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('map_hba'),
-                'launch',
-                'map_hba_launch.py',
-            )
-        ),
-        condition=UnlessCondition(autonomous),
-    )
-
 
     # ── BLOCK 11: Nav2 autonomous navigation stack ─────────────────────────────
     # Nav2 planning + control stack: MPPI controller, SmacHybrid planner,
@@ -230,7 +199,7 @@ def generate_launch_description():
                 'pure_pursuit_navigation.launch.py',   # no AMCL — NDT-OMP handles map→odom
             )
         ),
-        condition=IfCondition(autonomous),
+        condition=IfCondition(use_nav2),
         launch_arguments={
             key: str(value) for key, value in pure_pursuit_params.items()
         }.items(),
@@ -253,13 +222,13 @@ def generate_launch_description():
     # joystick teleop node under manual_only). Gated on use_autonomous so
     # exactly one group is active at a time.
     autonomous_only = GroupAction(
-        condition=IfCondition(autonomous),
+        condition=IfCondition(use_autonomous),
         actions=[
             # TODO: autonomous-only launches/nodes
         ],
     )
     manual_only = GroupAction(
-        condition=UnlessCondition(autonomous),
+        condition=UnlessCondition(use_autonomous),
         actions=[
             # TODO: manual-only launches/nodes
         ],
@@ -282,23 +251,24 @@ def generate_launch_description():
             ],
         )
 
-    # delayed_loop_pgo = TimerAction(
-        # period=startup_delay,
-        # actions=[
-            # loop_pgo_launch,
-            # map_hba_launch,
-        # ],
-    # )
-
     return LaunchDescription([
         # Declare launch Arguments
+        declare_use_nav2,
+        declare_use_zone_nav,
+        declare_use_zed,
+        declare_use_hesai,
+        declare_use_micro_ros,
+        declare_use_localization,
+        declare_use_cmd_vel_mux,
+        declare_use_rviz,
+        declare_mux_mode,
         declare_fastlio_config,
+        declare_waypoints_file,
         declare_startup_delay,
-        declare_autonomous,
+        declare_use_autonomous,
 
         # Launch sequence starts here
         hesai_launch,
         delayed_fast_lio,
         delayed_nav2,
-        #delayed_loop_pgo,
     ])

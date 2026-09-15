@@ -52,7 +52,7 @@ trap cleanup INT TERM
 # GlobalMap.pcd exists at the path configured in ndt_localizer.yaml (known,
 # pre-existing issue — see docs/pipeline_diagram for status); this does not
 # block FAST-LIO2 or the EKF, which run in separate processes.
-ros2 launch diy_localization localization.launch.py \
+ros2 launch localization localization.launch.py \
     mode:=runtime \
     use_rviz:=false &
 PID_FASTLIO=$!

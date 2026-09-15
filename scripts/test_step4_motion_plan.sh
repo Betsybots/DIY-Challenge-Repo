@@ -86,7 +86,7 @@ trap cleanup INT TERM
 # the two pose topics this already-running stack produces feeds the motion
 # plan executor. NDT-OMP will fail to load its map until GlobalMap.pcd
 # exists (known, pre-existing issue) — this does not block FAST-LIO2/EKF.
-ros2 launch diy_localization localization.launch.py \
+ros2 launch localization localization.launch.py \
     mode:=runtime \
     use_rviz:=false &
 PID_FASTLIO=$!
@@ -94,7 +94,7 @@ PID_FASTLIO=$!
 # Node 2: EKF — provided automatically by localization.launch.py above
 # (mode:=runtime always includes the single merged EKF from ekf_odom.yaml
 # fusing wheel+IMU+lidar, publishing /odometry/filtered — see
-# diy_localization/config/ekf_odom.yaml's header for the architecture).
+# localization/config/ekf_odom.yaml's header for the architecture).
 # No separate ekf_node launch needed here: manually launching a second one
 # under the same node name (ekf_filter_node_odom) as localization.launch.py's
 # built-in EKF would collide. 'fused' vs 'fastlio' just selects which pose

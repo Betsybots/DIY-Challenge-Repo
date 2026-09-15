@@ -25,7 +25,7 @@
 # care who's asking) once a real map is loaded.
 #
 # odom_topic CHANGED from the vendored default "/Odometry" to
-# "/lidar_odometry": diy_localization/launch/localization.launch.py remaps
+# "/lidar_odometry": localization/launch/localization.launch.py remaps
 # FAST-LIO2's hardcoded /Odometry topic to /lidar_odometry for consistent
 # naming across this repo. Since map_localizer syncs cloud+odom via
 # message_filters::ApproximateTime (both topics required before its

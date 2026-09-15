@@ -34,7 +34,7 @@ on the RPi.
 
 ```bash
 # Recommended: clone at exactly this path. profiles/jetson.env's
-# DIY_ROS_WS defaults to ${HOME}/ros2_ws, and diy_localization's
+# DIY_ROS_WS defaults to ${HOME}/ros2_ws, and localization's
 # map_pcd_path launch argument defaults to
 # $DIY_ROS_WS/src/DIY-Challenge-Repo/maps/refined_map.pcd — if you clone
 # somewhere else, you'll need to pass map_pcd_path explicitly every time
@@ -100,7 +100,7 @@ Isolates FAST-LIO2 + EKF + `map_localizer` without Nav2/zone_nav/motor
 control — much easier to debug on a first run:
 
 ```bash
-ros2 launch diy_localization localization.launch.py \
+ros2 launch localization localization.launch.py \
     mode:=runtime \
     use_rviz:=true \
     map_pcd_path:=/absolute/path/to/your/refined_map.pcd
@@ -250,7 +250,7 @@ bash setup.sh jetson
 source scripts/env.sh jetson
 
 # Test localization in isolation
-ros2 launch diy_localization localization.launch.py mode:=runtime use_rviz:=true
+ros2 launch localization localization.launch.py mode:=runtime use_rviz:=true
 
 # Full stack (after localization checks out)
 scripts/run_robot.sh jetson

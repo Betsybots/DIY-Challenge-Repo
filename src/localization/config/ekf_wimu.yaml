@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # ekf_wimu.yaml  —  EKF1: Wheel + IMU only  (100 Hz)
 # ─────────────────────────────────────────────────────────────────────────────
-# SUPERSEDED for the main pipeline (2026-09-04): diy_localization/launch/
+# SUPERSEDED for the main pipeline (2026-09-04): localization/launch/
 # localization.launch.py now uses a single EKF (ekf_odom.yaml) instead of
 # this file cascaded into ekf_local.yaml — see ekf_odom.yaml's header for why.
 # This file is NOT deleted because scripts/test_step2_fused_odom.sh and

@@ -258,7 +258,7 @@ def section_clone_build(s):
     story.append(H('2.1&nbsp;&nbsp;Clone at the Recommended Path', 'h2', s))
     story.append(note_box(
         'profiles/jetson.env&rsquo;s DIY_ROS_WS defaults to ${HOME}/ros2_ws, and '
-        'diy_localization&rsquo;s map_pcd_path launch argument defaults to '
+        'localization&rsquo;s map_pcd_path launch argument defaults to '
         '$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/refined_map.pcd. Clone elsewhere '
         'and you must pass map_pcd_path explicitly every time you launch.', s))
     story += code_block('Clone with submodules, then build', '''\
@@ -326,7 +326,7 @@ def section_launching(s):
         'Isolates FAST-LIO2 + EKF + map_localizer without Nav2 / zone_nav / motor '
         'control &mdash; much easier to debug on a first run.', s))
     story += code_block('Run directly', '''\
-ros2 launch diy_localization localization.launch.py \\
+ros2 launch localization localization.launch.py \\
     mode:=runtime \\
     use_rviz:=true \\
     map_pcd_path:=/absolute/path/to/your/refined_map.pcd''', s)
@@ -520,7 +520,7 @@ bash setup.sh jetson''', s)
     story += code_block('Every new terminal', 'source scripts/env.sh jetson', s)
 
     story += code_block('Test localization in isolation', '''\
-ros2 launch diy_localization localization.launch.py \\
+ros2 launch localization localization.launch.py \\
     mode:=runtime use_rviz:=true''', s)
 
     story += code_block('Full stack (after localization checks out)', 'scripts/run_robot.sh jetson', s)

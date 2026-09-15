@@ -43,7 +43,7 @@ DIY-Challenge-Repo/
 │   ├── challenge_bringup/      ← Top-level launch, Nav2 config, maps, RViz configs
 │   ├── diy_cmd_vel_mux/        ← Priority-based velocity multiplexer (joy / nav / e-stop)
 │   ├── diy_estop_controller/   ← STM32 heartbeat watchdog / e-stop
-│   ├── diy_localization/       ← FAST-LIO2 + single EKF fusion (wheel+IMU rate+lidar → /odometry/filtered)
+│   ├── localization/       ← FAST-LIO2 + single EKF fusion (wheel+IMU rate+lidar → /odometry/filtered)
 │   ├── diy_motor_control_legacy/ ← Differential drive motor controller (wheel odometry)
 │   ├── diy_robot_description/  ← URDF / robot_state_publisher
 │   ├── diy_sim/                ← Gazebo simulation world and plugins

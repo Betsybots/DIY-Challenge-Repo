@@ -69,7 +69,7 @@ Launch arguments (all correspond to DIY_* profile variables):
                            and e-stop wiring); false on every other device.
   use_rviz           bool  Launch RViz2                         (default false)
   mux_mode           str   cmd_vel_mux startup mode             (default AUTONOMOUS)
-  fastlio_config     str   FAST-LIO2 config filename            (see diy_localization/config/)
+  fastlio_config     str   FAST-LIO2 config filename            (see localization/config/)
   waypoints_file     str   Override zone_waypoints.yaml path    (default: package default)
 """
 
@@ -356,7 +356,7 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(
-                    get_package_share_directory('diy_localization'),
+                    get_package_share_directory('localization'),
                     'launch',
                     'localization.launch.py',
                 )

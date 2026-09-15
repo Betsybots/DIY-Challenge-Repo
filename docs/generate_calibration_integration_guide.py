@@ -334,7 +334,7 @@ Acc:
     acc_w:  0.00031   # ← this is B_a (bias instability m/s²/√Hz)
 ''')
     story.append(H2('2.4  Write Values into fast_lio_hesai_qt64.yaml'))
-    story += CB('src/diy_localization/config/fast_lio_hesai_qt64.yaml — mapping section:', '''\
+    story += CB('src/localization/config/fast_lio_hesai_qt64.yaml — mapping section:', '''\
 # Replace these placeholder values with imu_utils output:
 acc_cov:   0.018      # <- acc_n^2 from imu_param.yaml Acc.avg-axis.acc_n
 gyr_cov:   0.0034     # <- gyr_n^2 from imu_param.yaml Gyr.avg-axis.gyr_n
@@ -374,7 +374,7 @@ bash scripts/calibrate_extrinsics.sh
     story.append(SP(4))
 
     story.append(H2('3.2  Write Extrinsics into FAST-LIO2 Config'))
-    story += CB('src/diy_localization/config/fast_lio_hesai_qt64.yaml — mapping section:', '''\
+    story += CB('src/localization/config/fast_lio_hesai_qt64.yaml — mapping section:', '''\
 # Replace placeholder identity with lidar_imu_calib output:
 extrinsic_T: [ 0.012, -0.003, 0.131 ]   # <- T from calibration (example)
 extrinsic_R: [ 0.9998,  0.0021, -0.0198,  # <- R row-major (example)
@@ -478,7 +478,7 @@ bash scripts/calibrate_cam_lidar.sh
     story.append(SP(4))
 
     story.append(H2('5.3  Magnetic Declination'))
-    story += CB('src/diy_localization/config/navsat_transform.yaml:', '''\
+    story += CB('src/localization/config/navsat_transform.yaml:', '''\
 # CALIB: Look up the competition site magnetic declination from NOAA:
 # https://ngdc.noaa.gov/geomag/calculators/magcalc.shtml
 # Enter: competition venue lat/lon, current date; copy "Declination" in radians
@@ -514,7 +514,7 @@ yaw_offset: 1.5707963267948966       # <- replace with measured value
         'Too large = filter over-trusts measurements, becomes jumpy.'
     ))
     story.append(H2('6.1  Current Values (Starting Point)'))
-    story += CB('src/diy_localization/config/ekf_local.yaml — key diagonal values:', '''\
+    story += CB('src/localization/config/ekf_local.yaml — key diagonal values:', '''\
 # Q matrix diagonal (position, orientation, linear velocity)
 # x=0.05, y=0.05, z=0.06   — position uncertainty per cycle
 # yaw=0.06                  — heading uncertainty per cycle
@@ -556,7 +556,7 @@ ros2 topic echo /odometry/filtered | grep -A 36 "pose.*covariance"
     story.append(H2('7.1  After Any YAML Change'))
     checks_yaml = [
         'Confirm YAML syntax is valid: python3 -c "import yaml; yaml.safe_load(open(\'config/fast_lio_hesai_qt64.yaml\'))"',
-        'Rebuild diy_localization package: colcon build --packages-select diy_localization',
+        'Rebuild localization package: colcon build --packages-select localization',
         'Re-source ROS overlay: source install/setup.bash',
         'Launch localization with use_rviz:=true and confirm no error messages at startup',
         'Confirm FAST-LIO2 prints convergence message (not "IMU not ready")',
@@ -604,12 +604,12 @@ ros2 topic echo /odometry/filtered | grep -A 36 "pose.*covariance"
     story.append(H2('7.5  Final Pre-Competition CALIB Audit'))
     story += CB('Search for remaining placeholder markers in all config files:', '''\
 # Check fast_lio config for placeholder values (0.1 is placeholder for acc/gyr_cov)
-grep -n "CALIB" src/diy_localization/config/fast_lio_hesai_qt64.yaml
-grep -n "CALIB" src/diy_localization/config/navsat_transform.yaml
+grep -n "CALIB" src/localization/config/fast_lio_hesai_qt64.yaml
+grep -n "CALIB" src/localization/config/navsat_transform.yaml
 grep -n "CALIB" src/diy_robot_description/urdf/robot.urdf.xacro
 
 # Check for identity extrinsics (still placeholder):
-grep -n "extrinsic_T: \\[ 0.0, 0.0, 0.0" src/diy_localization/config/fast_lio_hesai_qt64.yaml
+grep -n "extrinsic_T: \\[ 0.0, 0.0, 0.0" src/localization/config/fast_lio_hesai_qt64.yaml
 
 # Expected: zero remaining CALIB lines with 0.0 placeholder values
 ''')

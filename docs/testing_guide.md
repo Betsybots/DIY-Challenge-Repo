@@ -63,7 +63,7 @@ first so you don't get tripped up.
    the inline note above `extrinsic_R:` in `fast_lio_hesai_qt64.yaml`.
    Re-verify with a live accelerometer reading before fully trusting this
    for autonomous nav. Run `python3 src/fast_lio_ros2/tools/check_config.py
-   --config src/diy_localization/config/fast_lio_hesai_qt64.yaml` after any
+   --config src/localization/config/fast_lio_hesai_qt64.yaml` after any
    change here.
 5. **Two devices, two roles — do not run the same flags on both.** The RPi
    owns `cmd_vel_mux` + motor driver + the IMU (see caveat #7); the Jetson
@@ -142,7 +142,7 @@ first so you don't get tripped up.
    `cd third_party_ws && colcon list` if third-party packages ever seem to
    vanish.
 9. **The custom A* + PD/pure-pursuit controller (`diy_planning`,
-   `diy_motion_planner`) is a SEPARATE navigation stack from Nav2 — it
+   `motion_planner`) is a SEPARATE navigation stack from Nav2 — it
    uses only `nav2_map_server`/`nav2_lifecycle_manager` for map serving,
    not the full Nav2 navigation system.** It publishes `/cmd_vel_nav`
    (same topic `cmd_vel_mux` already reads for AUTONOMOUS mode — no mux
@@ -349,7 +349,7 @@ source scripts/env.sh jetson
 
 ros2 run fast_lio_ros2 fastlio_mapping \
     --ros-args \
-    --params-file src/diy_localization/config/fast_lio_hesai_qt64.yaml \
+    --params-file src/localization/config/fast_lio_hesai_qt64.yaml \
     -r /Odometry:=/lidar_odometry \
     -p mapping.map_file_path:="$HOME/ros2_ws/src/DIY-Challenge-Repo/maps/fastlio_raw.pcd"
 ```
@@ -409,16 +409,16 @@ them directly, but useful to know they exist:
 | File | Included by | Purpose |
 |---|---|---|
 | `src/diy_robot_description/launch/description.launch.py` | `challenge_master.launch.py` (BLOCK 2, always) | `robot_state_publisher` from the URDF — runs independently on both Jetson and RPi (safe to duplicate, see §2) |
-| `src/diy_localization/launch/localization.launch.py` | `challenge_master.launch.py` (BLOCK 8), `test_step3`/`test_step4` | FAST-LIO2 (`fast_lio_ros2`) + single EKF (`ekf_odom.yaml`) + `map_localizer` (VGICP) — `mode:=runtime` always launches all three (plus a one-shot `trigger_map_relocalize.py` to load the map), there is no FAST-LIO2-only mode |
-| `src/diy_localization/launch/offline_mapping.launch.py` | run directly, standalone | LIO-SAM offline prior-map generation from a recorded bag |
+| `src/localization/launch/localization.launch.py` | `challenge_master.launch.py` (BLOCK 8), `test_step3`/`test_step4` | FAST-LIO2 (`fast_lio_ros2`) + single EKF (`ekf_odom.yaml`) + `map_localizer` (VGICP) — `mode:=runtime` always launches all three (plus a one-shot `trigger_map_relocalize.py` to load the map), there is no FAST-LIO2-only mode |
+| `src/localization/launch/offline_mapping.launch.py` | run directly, standalone | LIO-SAM offline prior-map generation from a recorded bag |
 | `src/diy_ndt_localization/launch/ndt_localization.launch.py` | **not launched by anything anymore** — DEPRECATED | NDT-OMP map→odom scan matching; replaced by `map_localizer` after a real TF-composition bug was found (see caveat #4/reuse_plan_step1.md Step 11) — kept in the repo for reference/rollback only |
 | `src/diy_zone_nav/launch/zone_nav.launch.py` | `challenge_master.launch.py` (BLOCK 12, via `_zone_nav_launch`) | Zone-aware nav state machine. **ORPHANED in the custom A*/PD architecture** (see caveat #9/reuse_plan_step1.md Step 13) — its `/speed_limit` and costmap-layer `SetParameters` calls target full-Nav2 services that don't exist in that setup; already fails gracefully (`service_is_ready()` checked), but nothing consumes its outputs either. Safe to not run at all with the custom controller stack. |
-| `src/diy_motion_planner/launch/pd_navigation.launch.py` | run directly, standalone (not yet in `challenge_master.launch.py`) | `nav2_map_server` + `nav2_lifecycle_manager` (map serving ONLY, not full Nav2) + `a_star_planner_node` + `pd_motion_planner_node` → `/cmd_vel_nav`. `cmd_vel_topic` now defaults to `/cmd_vel_nav` (hardware) — pass `cmd_vel_topic:=/cmd_vel` for sim. |
-| `src/diy_motion_planner/launch/pure_pursuit_navigation.launch.py` | run directly, standalone | Same map_server + A* stack, with `pure_pursuit_motion_planner_node` instead of PD. Same `cmd_vel_topic` default fix applied. |
+| `src/motion_planner/launch/pd_navigation.launch.py` | run directly, standalone (not yet in `challenge_master.launch.py`) | `nav2_map_server` + `nav2_lifecycle_manager` (map serving ONLY, not full Nav2) + `a_star_planner_node` + `pd_motion_planner_node` → `/cmd_vel_nav`. `cmd_vel_topic` now defaults to `/cmd_vel_nav` (hardware) — pass `cmd_vel_topic:=/cmd_vel` for sim. |
+| `src/motion_planner/launch/pure_pursuit_navigation.launch.py` | run directly, standalone | Same map_server + A* stack, with `pure_pursuit_motion_planner_node` instead of PD. Same `cmd_vel_topic` default fix applied. |
 | `src/diy_waypoint_sequencer/launch/waypoint_sequencer.launch.py` | run directly, standalone, **optional** | NEW — auto-publishes `/goal_pose` in sequence from a waypoints YAML, waits for `/green_light`, advances on `/pd/goal_reached`. Not running this is completely safe — `/goal_pose` just needs to be published manually instead (RViz "2D Goal Pose"). See reuse_plan_step1.md Step 13 for the full design rationale. |
 | `src/challenge_bringup/launch/joystick_drive.launch.py` | `challenge_master.launch.py` (BLOCK 9), `test_step1`-`3` | `joy_node` + `teleop_twist_joy` only — **does not itself launch a motor node** |
 | `src/challenge_bringup/launch/motion_plan_executor.launch.py` | `test_step4` (indirectly, via `plan_b`) | Standalone `plan_b` executor launch |
-| `src/fast_lio_ros2/launch/lio_localizer.launch.py` | not used by this repo | The `fast_lio_ros2` package's own launch file (upstream) — this repo's `diy_localization/launch/localization.launch.py` launches the node directly with its own params instead |
+| `src/fast_lio_ros2/launch/lio_localizer.launch.py` | not used by this repo | The `fast_lio_ros2` package's own launch file (upstream) — this repo's `localization/launch/localization.launch.py` launches the node directly with its own params instead |
 
 **Not in this repo at all:** the ACEINNA IMU driver (`imu_can_interface`) is launched independently on the RPi as its own separate process, outside `DIY-Challenge-Repo` entirely — no vendored package, no launch file, no `DIY_USE_IMU` flag here. It just needs to publish `/imu/data` so FAST-LIO2/EKF on the Jetson can consume it over the Zenoh bridge.
 

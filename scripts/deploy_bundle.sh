@@ -7,7 +7,7 @@
 #
 # Bundle contents deployed to robot:
 #   calibration/                       IMU + extrinsic YAML results
-#   src/diy_localization/config/       FAST-LIO2 + EKF configs (with calibration)
+#   src/localization/config/       FAST-LIO2 + EKF configs (with calibration)
 #   src/diy_robot_description/urdf/    Updated URDF with real extrinsic transforms
 #   src/challenge_bringup/config/      nav2_params + collision monitor
 #   src/challenge_bringup/maps/        Static map YAML + PGM
@@ -96,7 +96,7 @@ _deploy() {
 _deploy "calibration/" "calibration/" "Calibration results"
 
 # FAST-LIO2 + EKF + navsat configs
-_deploy "src/diy_localization/config/" "src/diy_localization/config/" "Localization configs"
+_deploy "src/localization/config/" "src/localization/config/" "Localization configs"
 
 # URDF (updated extrinsics)
 _deploy "src/diy_robot_description/urdf/" "src/diy_robot_description/urdf/" "URDF"
@@ -112,6 +112,6 @@ echo "[deploy_bundle] ✓ Deployment complete."
 echo ""
 echo "Next steps on the robot (${REMOTE}):"
 echo "  1. cd ~/ros2_ws"
-echo "  2. colcon build --packages-select diy_localization diy_robot_description challenge_bringup"
+echo "  2. colcon build --packages-select localization diy_robot_description challenge_bringup"
 echo "  3. source install/setup.bash"
 echo "  4. ./ros2_ws/src/DIY-Challenge-Repo/scripts/health_check.sh jetson"

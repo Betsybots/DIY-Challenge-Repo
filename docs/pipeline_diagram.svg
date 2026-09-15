@@ -274,7 +274,7 @@
 <g id="node18" class="node">
 <title>pd_ctrl</title>
 <path fill="#fff59d" stroke="black" d="M860.5,-675.85C860.5,-675.85 679.5,-675.85 679.5,-675.85 673.5,-675.85 667.5,-669.85 667.5,-663.85 667.5,-663.85 667.5,-631.85 667.5,-631.85 667.5,-625.85 673.5,-619.85 679.5,-619.85 679.5,-619.85 860.5,-619.85 860.5,-619.85 866.5,-619.85 872.5,-625.85 872.5,-631.85 872.5,-631.85 872.5,-663.85 872.5,-663.85 872.5,-669.85 866.5,-675.85 860.5,-675.85"/>
-<text text-anchor="middle" x="770" y="-663.05" font-family="Helvetica,sans-Serif" font-size="11.00">diy_motion_planner</text>
+<text text-anchor="middle" x="770" y="-663.05" font-family="Helvetica,sans-Serif" font-size="11.00">motion_planner</text>
 <text text-anchor="middle" x="770" y="-651.05" font-family="Helvetica,sans-Serif" font-size="11.00">pd / pure_pursuit</text>
 <text text-anchor="middle" x="770" y="-639.05" font-family="Helvetica,sans-Serif" font-size="11.00">motion_planner_node</text>
 <text text-anchor="middle" x="770" y="-627.05" font-family="Helvetica,sans-Serif" font-size="11.00">→ /cmd_vel_nav, /pd/goal_reached</text>

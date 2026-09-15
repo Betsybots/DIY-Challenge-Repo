@@ -141,7 +141,7 @@ colcon build --symlink-install "${BASE_PATHS_ARGS[@]}" \
     fast_lio_ros2 \
     slam_interfaces \
     map_localizer \
-    diy_localization 2>&1 | tail -20
+    localization 2>&1 | tail -20
 
 info ""
 info "============================================="

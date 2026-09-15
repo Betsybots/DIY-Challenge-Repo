@@ -23,6 +23,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     rviz_use = LaunchConfiguration('rviz')
     rviz_cfg = LaunchConfiguration('rviz_cfg')
+    pcd_save_en = LaunchConfiguration('pcd_save_en')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time', default_value='false',
@@ -36,13 +37,20 @@ def generate_launch_description():
         'rviz_cfg', default_value=default_rviz_config_path,
         description='RViz config file path'
     )
+    declare_pcd_save_en_cmd = DeclareLaunchArgument(
+        'pcd_save_en', default_value='true',
+        description='Overrides pcd_save.pcd_save_en in qt64.yaml'
+    )
 
     fast_lio_node = Node(
         package='fast_lio_ros2',
         executable='fastlio_mapping',
         parameters=[
             os.path.join(default_config_path, 'qt64.yaml'),
-            {'use_sim_time': use_sim_time}
+            {
+                'use_sim_time': use_sim_time,
+                'pcd_save.pcd_save_en': pcd_save_en,
+            }
         ],
         output='screen'
     )
@@ -57,6 +65,7 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_rviz_config_path_cmd)
+    ld.add_action(declare_pcd_save_en_cmd)
     ld.add_action(fast_lio_node)
     # ld.add_action(rviz_node)
 

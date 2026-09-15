@@ -2,7 +2,7 @@
 
 Companion doc to [jetson_bringup_guide.md](jetson_bringup_guide.md) — covers
 the custom A* + PD/pure-pursuit navigation stack (`diy_planning`,
-`diy_motion_planner`) built by the teammate, why it is already decoupled
+`motion_planner`) built by the teammate, why it is already decoupled
 from `diy_zone_nav`, the two real bugs found while verifying that, and the
 new `diy_waypoint_sequencer` package built for automated goal sequencing.
 
@@ -55,7 +55,7 @@ did not assume.
 
 | Check | Method | Result |
 |---|---|---|
-| Does `diy_planning`/`diy_motion_planner` reference `/nav_mode`, `/speed_limit`, or `zone_nav` anywhere? | `grep -rn` across both packages | **Zero hits** — no existing coupling at all |
+| Does `diy_planning`/`motion_planner` reference `/nav_mode`, `/speed_limit`, or `zone_nav` anywhere? | `grep -rn` across both packages | **Zero hits** — no existing coupling at all |
 | Does the A* planner crash/hang with no `/goal_pose`? | Read `goal_callback`'s guard clauses directly | No — early-return, idles safely, no timeout/crash |
 | Does `cmd_vel_mux`'s AUTONOMOUS mode depend on zone_nav? | Read `cmd_vel_mux_node.py`'s mode logic | No — reads `/cmd_vel_nav` unconditionally; BLIND_DRIVE only activates via an explicit service call only `zone_nav_manager_node` makes |
 | Does zone_nav crash if Nav2's costmap/controller services don't exist? | Read `zone_nav_manager_node.cpp`'s service-call sites | No — already checks `service_is_ready()` before every call, skips gracefully with a warn log |
@@ -100,7 +100,7 @@ is clicking RViz goals.
 
 **Key design decision:** built as a brand-new, standalone, minimal
 package — **not** added inside `diy_zone_nav`, `diy_planning`, or
-`diy_motion_planner`. Putting it inside `diy_zone_nav` would have
+`motion_planner`. Putting it inside `diy_zone_nav` would have
 re-coupled "can I remove zone_nav" with "do I still get automated
 sequencing" — exactly the ambiguity this whole task was about avoiding.
 
@@ -145,7 +145,7 @@ rebuild, and its launch file's arguments resolve correctly
 
 ```bash
 # Hardware, PD controller, with automated sequencing:
-ros2 launch diy_motion_planner pd_navigation.launch.py \
+ros2 launch motion_planner pd_navigation.launch.py \
     map_yaml:=/absolute/path/to/map.yaml
 
 ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \
@@ -179,11 +179,11 @@ So switching maps needs no launch-file edits — just one of:
 export DIY_MAP_YAML=/absolute/path/to/new_map.yaml
 
 # Or override for a single run without exporting anything:
-ros2 launch diy_motion_planner pd_navigation.launch.py \
+ros2 launch motion_planner pd_navigation.launch.py \
     map_yaml:=/absolute/path/to/new_map.yaml
 ```
 
-This mirrors how `diy_localization`'s `map_pcd_path` already works for
+This mirrors how `localization`'s `map_pcd_path` already works for
 `map_localizer`'s map (see `jetson_bringup_guide.md` §2/§3) — but note
 these are two **separate, unrelated maps**: `map_yaml` is a 2D occupancy
 grid consumed only by `nav2_map_server`/the A\* planner; `map_pcd_path` is
@@ -224,7 +224,7 @@ at the **map frame's own origin**, not at wp1's position. If you actually
 place the robot at wp1's real-world spot before starting, pass that
 printed override to `localization.launch.py`:
 ```bash
-ros2 launch diy_localization localization.launch.py \
+ros2 launch localization localization.launch.py \
     mode:=runtime \
     initial_x:=9.7610 initial_y:=5.6980 initial_yaw:=-1.3259
 ```
@@ -251,5 +251,5 @@ ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \
   orphaned-but-present) was not decided — no urgency since it is already
   proven harmless to leave in place.
 - `tf_transformations` is not installed in this sandbox (no `sudo`) —
-  affects verifying this and the pre-existing `diy_motion_planner` package
+  affects verifying this and the pre-existing `motion_planner` package
   identically; not a new gap introduced by this work.

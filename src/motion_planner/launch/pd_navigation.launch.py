@@ -276,7 +276,7 @@ def generate_launch_description():
             arguments=[
                 '-d',
                 os.path.join(
-                    get_package_share_directory('diy_motion_planner'),
+                    get_package_share_directory('motion_planner'),
                     'rviz',
                     'config.rviz',
                 ),
@@ -291,7 +291,7 @@ def generate_launch_description():
         # ========================================================
 
         Node(
-            package='diy_motion_planner',
+            package='motion_planner',
             executable='pd_motion_planner_node',
             name='pd_motion_planner_node',
             output='screen',

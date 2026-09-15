@@ -21,7 +21,7 @@ digraph DIYRobot {
 
     // ── LOCALIZATION ─────────────────────────────────────────────────────────
     subgraph cluster_loc {
-        label="LOCALIZATION  (diy_localization)"
+        label="LOCALIZATION  (localization)"
         style=filled fillcolor="#FDFEE8" color="#F39C12" penwidth=2
         fontsize=13 fontcolor="#F39C12"
 

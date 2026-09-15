@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 verify_imu_gyr_unit.py — On-robot spin test to resolve the imu_gyr_unit
-question for src/diy_localization/config/fast_lio_hesai_qt64.yaml.
+question for src/localization/config/fast_lio_hesai_qt64.yaml.
 
 WHY THIS EXISTS
 ───────────────

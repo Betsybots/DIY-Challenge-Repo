@@ -224,7 +224,7 @@ def section_zone_nav_findings(s):
         'did not assume.', s))
 
     rows = [
-        ['Does diy_planning/diy_motion_planner reference /nav_mode, '
+        ['Does diy_planning/motion_planner reference /nav_mode, '
          '/speed_limit, or zone_nav anywhere?',
          'grep -rn across both packages',
          'Zero hits — no existing coupling at all'],
@@ -306,7 +306,7 @@ def section_sequencer(s):
     story.append(H('Key Design Decision', 'h2', s))
     story.append(note_box(
         'Built as a brand-new, standalone, minimal package &mdash; NOT added inside '
-        'diy_zone_nav, diy_planning, or diy_motion_planner. Putting it inside '
+        'diy_zone_nav, diy_planning, or motion_planner. Putting it inside '
         'diy_zone_nav would have re-coupled "can I remove zone_nav" with "do I '
         'still get automated sequencing" &mdash; exactly the ambiguity this whole '
         'task was about avoiding.', s))
@@ -361,7 +361,7 @@ def section_launch(s):
     story.append(hr(s))
 
     story += code_block('Hardware, PD controller, with automated sequencing', '''\
-ros2 launch diy_motion_planner pd_navigation.launch.py \\
+ros2 launch motion_planner pd_navigation.launch.py \\
     map_yaml:=/absolute/path/to/map.yaml
 
 ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \\
@@ -391,7 +391,7 @@ ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped \\
 export DIY_MAP_YAML=/absolute/path/to/new_map.yaml
 
 # Or override for a single run without exporting anything:
-ros2 launch diy_motion_planner pd_navigation.launch.py \\
+ros2 launch motion_planner pd_navigation.launch.py \\
     map_yaml:=/absolute/path/to/new_map.yaml''', s)
 
     story.append(note_box(
@@ -453,7 +453,7 @@ ros2 launch diy_waypoint_sequencer waypoint_sequencer.launch.py \\
         'orphaned-but-present) was not decided &mdash; no urgency since it is '
         'already proven harmless to leave in place.',
         'tf_transformations is not installed in this sandbox (no sudo) &mdash; '
-        'affects verifying this and the pre-existing diy_motion_planner package '
+        'affects verifying this and the pre-existing motion_planner package '
         'identically; not a new gap introduced by this work.',
     ], s)
 

@@ -228,7 +228,7 @@ bash scripts/deploy_bundle.sh
 
 # What it does:
 #  1. rsync src/challenge_bringup/maps/         → jetson:~/robot_ws/maps/
-#  2. rsync src/diy_localization/config/*.yaml  → jetson:~/robot_ws/config/
+#  2. rsync src/localization/config/*.yaml  → jetson:~/robot_ws/config/
 #  3. rsync scripts/                            → jetson:~/robot_ws/scripts/
 #  Skips .pcd files >100 MB unless --maps flag passed
 ''')
@@ -351,7 +351,7 @@ ros2 launch challenge_bringup challenge_master.launch.py \\
   mux_mode:=AUTONOMOUS
 ''')
     story += CB('Or start localization only for a pre-run check:', '''\
-ros2 launch diy_localization localization.launch.py \\
+ros2 launch localization localization.launch.py \\
   mode:=runtime use_gps:=true
 ''')
     story.append(SP(4))

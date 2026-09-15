@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-diy_localization — localization.launch.py
+localization — localization.launch.py
 ══════════════════════════════════════════
 Brings up the full localisation stack for DIY Robot Challenge 2026.
 
@@ -31,7 +31,7 @@ DATA FLOW (runtime):
                         one-shot /relocalize call at startup — no auto-load)
 
   Replaces the old NDT-OMP (diy_ndt_localization) approach — see
-  diy_localization/config/map_localizer.yaml's header for the full
+  localization/config/map_localizer.yaml's header for the full
   rationale (NDT-OMP had a real TF-composition bug: it broadcast the raw
   scan-matched map→base_link pose directly as "map→odom", without ever
   composing against the actual odom→base_link transform).
@@ -78,7 +78,7 @@ from launch.conditions import IfCondition
 # context.perform() resolves lazy LaunchConfiguration values into plain strings.
 # ─────────────────────────────────────────────────────────────────────────────
 def launch_setup(context, *args, **kwargs):
-    pkg_loc    = get_package_share_directory("diy_localization")
+    pkg_loc    = get_package_share_directory("localization")
     config_dir = os.path.join(pkg_loc, "config")
 
     mode        = LaunchConfiguration("mode").perform(context)
@@ -138,7 +138,7 @@ def launch_setup(context, *args, **kwargs):
     # BLOCK 3 — map_localizer  (map → odom TF via VGICP against a saved map)
     # ─────────────────────────────────────────────────────────────────────────
     # Replaces the old NDT-OMP (diy_ndt_localization) approach — see
-    # diy_localization/config/map_localizer.yaml's header for the full
+    # localization/config/map_localizer.yaml's header for the full
     # rationale. Short version: NDT-OMP's publishTF() had a real TF-
     # composition bug (broadcast raw map→base_link as if it were map→odom,
     # with no odom→base_link lookup/composition at all — verified by
@@ -168,7 +168,7 @@ def launch_setup(context, *args, **kwargs):
         ))
 
         nodes.append(Node(
-            package="diy_localization",
+            package="localization",
             executable="trigger_map_relocalize.py",
             name="trigger_map_relocalize",
             output="screen",
@@ -224,7 +224,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "config_file",
             default_value="fast_lio_hesai_qt64.yaml",
-            description="FAST-LIO2 config YAML filename inside diy_localization/config/",
+            description="FAST-LIO2 config YAML filename inside localization/config/",
         ),
         DeclareLaunchArgument(
             "use_rviz",

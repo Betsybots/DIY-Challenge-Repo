@@ -93,7 +93,7 @@ This document maps reusable legacy code to the 2026 SAD in [docs/diy-sad.html](d
 stale — the design has moved on since it was written (GPS/navsat_transform was
 dropped in favor of NDT-OMP for `map→odom`, the controller moved from MPPI to
 RPP, and the camera is now a ZED2i rather than the RealSense D435i described
-in the SAD). Treat this section, `src/diy_localization/launch/localization.launch.py`'s
+in the SAD). Treat this section, `src/localization/launch/localization.launch.py`'s
 docstring, and direct teammate confirmation as more current than the SAD text.
 
 1. FAST-LIO2, Hesai QT64-specific fork:
@@ -111,8 +111,8 @@ docstring, and direct teammate confirmation as more current than the SAD text.
      supported `lidar_type: 2` (Velodyne-style parsing); this fork adds a
      dedicated `lidar_type: 3` case that parses the real Hesai QT64
      PointCloud2 layout (x/y/z/intensity/ring/timestamp).
-   - Wired in `src/diy_localization/launch/localization.launch.py` (BLOCK 1) and
-     `src/diy_localization/config/fast_lio_hesai_qt64.yaml` (synced verbatim
+   - Wired in `src/localization/launch/localization.launch.py` (BLOCK 1) and
+     `src/localization/config/fast_lio_hesai_qt64.yaml` (synced verbatim
      from `develop`'s `config/qt64.yaml` — see that file's own header comment
      for the full list of open items found during the sync, summarized below).
    - **Real bug found and fixed:** BLOCK 1's `Node(...)` was passing
@@ -389,7 +389,7 @@ IMU entirely: keep direct IMU angular-rate fusion (not full 6-DOF) so the
 single EKF's own predict step stays accurate on wheel-slip terrain
 (gravel/pothole/bumps) between FAST-LIO2's ~10 Hz lidar corrections.
 
-**Change:** new `src/diy_localization/config/ekf_odom.yaml` — one
+**Change:** new `src/localization/config/ekf_odom.yaml` — one
 `ekf_filter_node_odom`, `odom0=/wheel_odom` (velocity only), `imu0=/imu/data`
 (angular-rate fields only), `odom1=/lidar_odometry_gated` (position+yaw+
 velocity), 50 Hz output, keeping EKF2's proven output-stage tuning.
@@ -508,7 +508,7 @@ inspection-only):
   in `scripts/env.sh` under `set -u` prevented testing via that wrapper
   specifically in this sandbox shell — reproduced identically with the
   older `DIY_USE_HESAI` var, confirming it's not new).
-- Actually ran `ros2 launch diy_localization localization.launch.py
+- Actually ran `ros2 launch localization localization.launch.py
   mode:=runtime` end-to-end — confirmed FAST-LIO2 and the EKF start cleanly;
   confirmed NDT-OMP's pre-existing `GlobalMap.pcd`-not-found crash is real
   and immediate (already flagged red in the pipeline diagram, not new).
@@ -697,7 +697,7 @@ matrix to plain identity:
 Verified with `python3 -c "import numpy as np; ..."`: old det=-1.0 (a
 reflection), new det=+1.0 (a valid rotation). Also confirmed via the
 vendored checker: `python3 src/fast_lio_ros2/tools/check_config.py --config
-src/diy_localization/config/fast_lio_hesai_qt64.yaml` — extrinsic_R line
+src/localization/config/fast_lio_hesai_qt64.yaml` — extrinsic_R line
 flips from FAIL to `[PASS] mapping.extrinsic_R valid rotation (det=1.0000)`.
 **Important open caveat, documented inline in the YAML and in
 testing_guide.md caveat #4**: this new value is plain IDENTITY, which does
@@ -708,7 +708,7 @@ derivation), but flagged clearly that this discrepancy needs on-robot
 re-verification (live accelerometer reading) before fully trusting it for
 autonomous nav — not blindly trusted just because it's a valid rotation.
 - Applied to both the actively-used
-  `src/diy_localization/config/fast_lio_hesai_qt64.yaml` and the vendored
+  `src/localization/config/fast_lio_hesai_qt64.yaml` and the vendored
   reference copy `src/fast_lio_ros2/config/qt64.yaml` (kept in sync, per
   this repo's existing convention of treating the latter as a faithful
   vendored mirror).
@@ -737,7 +737,7 @@ rejections that looked like real IMU dropouts but weren't. Fixed by:
 
 **Verification performed** (real tooling, not inspection-only):
 - `python3 src/fast_lio_ros2/tools/check_config.py --config
-  src/diy_localization/config/fast_lio_hesai_qt64.yaml` — extrinsic_R now
+  src/localization/config/fast_lio_hesai_qt64.yaml` — extrinsic_R now
   PASSes (det=1.0000); pre-existing scan_line=32 FAIL and map_file_path WARN
   unchanged (both already-documented, intentional/known items, not
   regressions from this change).
@@ -860,9 +860,9 @@ backlog item off the shelf). Full integration performed:
    `fast_lio_hesai_qt64.yaml`): `src/map_localizer/config/map_localizer.yaml`
    stays an untouched, faithful mirror of upstream; the real, customized
    config with all of the above fixes and reasoning lives at
-   `src/diy_localization/config/map_localizer.yaml`.
+   `src/localization/config/map_localizer.yaml`.
 5. **Wrote `trigger_map_relocalize.py`** (new,
-   `src/diy_localization/scripts/`): `map_localizer` does NOT auto-load a
+   `src/localization/scripts/`): `map_localizer` does NOT auto-load a
    map at startup — confirmed by reading `localizer_node.cpp`'s
    constructor — it only loads a `.pcd` (and sets the initial pose guess)
    in response to a `slam_interfaces/srv/Relocalize` service call. Without
@@ -901,7 +901,7 @@ YAML int/float issue from Step 6 — caught only by actually running it.
   VGICP path needs no CUDA toolkit.
 - Full workspace rebuild: 14 packages clean (`colcon build --symlink-install
   --base-paths src --packages-skip differential-drive`).
-- Real end-to-end launch: `ros2 launch diy_localization
+- Real end-to-end launch: `ros2 launch localization
   localization.launch.py mode:=runtime map_pcd_path:=<real path to
   maps/refined_map.pcd>` — `fastlio_mapping`, `ekf_node`,
   `map_localizer_node`, and `trigger_map_relocalize.py` all start cleanly;
@@ -968,10 +968,10 @@ setup.sh uses) and found it was missing packages needed at runtime:
   before today's changes either — a pre-existing gap, not something
   today's work introduced.
 - **`fast_lio_ros2`, `slam_interfaces`, `map_localizer`** — all needed at
-  runtime by `diy_localization/launch/localization.launch.py` (today's
+  runtime by `localization/launch/localization.launch.py` (today's
   Step 11 changes), same gap: colcon's `--packages-select` does NOT
   auto-include a package's `exec_depend`s the way `--packages-up-to` does,
-  so listing only `diy_localization` builds its launch/config files fine
+  so listing only `localization` builds its launch/config files fine
   but never builds what those launch files actually try to run.
 
 Net effect: a fresh `bash setup.sh jetson` followed by `scripts/run_robot.sh
@@ -987,7 +987,7 @@ documented build+launch sequence, not just reading the list and assuming
 it's complete). Verified by literally doing that: removed
 `install/{fast_lio_ros2,slam_interfaces,map_localizer,diy_zone_nav}`, ran
 the corrected package list, confirmed all 9 packages build, then re-ran
-the full `ros2 launch diy_localization localization.launch.py` end-to-end
+the full `ros2 launch localization localization.launch.py` end-to-end
 test from Step 11 again to confirm nothing broke.
 
 **Also fixed while in this file:** `challenge_bringup/package.xml` still
@@ -1009,7 +1009,7 @@ for consistency). Rebuilt `map_localizer` clean after the fix.
 `challenge_bringup`'s `package.xml` doesn't declare `exec_depend` on ANY
 of the repo-local packages its own launch file `Node()`-launches
 (`diy_cmd_vel_mux`, `diy_estop_controller`, `diy_robot_description`,
-`diy_zone_nav`, `diy_localization`). Switching `setup.sh` to
+`diy_zone_nav`, `localization`). Switching `setup.sh` to
 `colcon build --packages-up-to challenge_bringup` instead of an explicit
 list would be more robust long-term (confirmed empirically that
 `--packages-up-to` correctly resolves `exec_depend` — that's how this
@@ -1025,14 +1025,14 @@ again if a future change adds another new runtime-only package dependency.
 User's teammate is building a custom navigation stack (nav2_map_server-only
 + a custom A* planner + PD/pure-pursuit path follower — NOT full Nav2) that
 already exists in this repo via an earlier rebase (`src/diy_planning`,
-`src/diy_motion_planner`) but was never investigated until now. User asked:
+`src/motion_planner`) but was never investigated until now. User asked:
 design things so `diy_zone_nav` can be removed entirely with zero impact,
 since the plan is for the controller to consume "info from the zone
 navigator" and they want that dependency to be optional/safe-to-remove
 from day one, not bolted on and only discovered to be load-bearing later.
 
 **Investigated the actual code (not assumed) before designing anything:**
-- Grepped `diy_planning`/`diy_motion_planner` for any reference to
+- Grepped `diy_planning`/`motion_planner` for any reference to
   `zone_nav`, `/nav_mode`, `/speed_limit`, `SpeedLimit` — **zero hits**.
   The custom controller already has NO existing coupling to zone_nav at
   all. `a_star_planner_node`'s `goal_callback` idles gracefully (early
@@ -1089,7 +1089,7 @@ design ask (an automated `/goal_pose` publisher for competition runs where
 no human clicks RViz goals), designed from the start to be safely
 removable:
 - Deliberately a brand-new, separate, minimal package — NOT added inside
-  `diy_zone_nav` or `diy_planning`/`diy_motion_planner`. This was a real
+  `diy_zone_nav` or `diy_planning`/`motion_planner`. This was a real
   design decision: putting it inside `diy_zone_nav` would re-couple "can I
   remove zone_nav" with "do I still get automated goal sequencing",
   exactly the ambiguity this whole task was about avoiding.
@@ -1117,7 +1117,7 @@ correct):**
 - **Real functional test** (not just syntax/build): wrote a throwaway
   rclpy test harness (`tf_transformations` isn't installed in this sandbox
   and there's no `sudo` access to add the tiny apt package — stubbed just
-  that one function with equivalent pure-math since `diy_motion_planner`
+  that one function with equivalent pure-math since `motion_planner`
   has the exact same pre-existing sandbox dependency gap) that actually
   ran the node and verified, via real published/subscribed ROS messages:
   no premature publish before `/green_light`; first waypoint published
@@ -1137,7 +1137,7 @@ generic "Nav2 (never run)" placeholder with the real architecture
 explanatory label so this doesn't need re-investigating later.
 
 **Still open / not addressed this pass:**
-- The custom controller stack (`diy_planning`, `diy_motion_planner`,
+- The custom controller stack (`diy_planning`, `motion_planner`,
   `diy_waypoint_sequencer`) is not yet wired into
   `challenge_master.launch.py` at all — currently only launchable
   standalone via `pd_navigation.launch.py`/`pure_pursuit_navigation.launch.py`.
@@ -1148,7 +1148,7 @@ explanatory label so this doesn't need re-investigating later.
   orphaned-but-present) wasn't decided — no urgency since it's already
   proven harmless to leave in place.
 - `tf_transformations` is not installed in this sandbox (no `sudo`) —
-  affects verifying this AND the pre-existing `diy_motion_planner` package
+  affects verifying this AND the pre-existing `motion_planner` package
   identically; not a new gap introduced by this pass.
 
 ## Reuse Plan Step 14 — Re-verified URDF status: lidar/imu genuinely fixed, camera still missing, no GPS at all
@@ -1937,10 +1937,10 @@ without the header comments/other files being updated to match.
 
 **Cosmetic-only fixes** (comments/docstrings/echo statements, no
 functional effect either way, fixed for accuracy anyway):
-`src/diy_localization/config/fast_lio_hesai_qt64.yaml` header comment
+`src/localization/config/fast_lio_hesai_qt64.yaml` header comment
 (open item rewritten as RESOLVED with today's date),
 `src/challenge_bringup/launch/challenge_master.launch.py` BLOCK 6
-comment, `src/diy_localization/launch/localization.launch.py` and
+comment, `src/localization/launch/localization.launch.py` and
 `offline_mapping.launch.py` docstring data-flow diagrams,
 `scripts/test_step3_fastlio.sh` echo statement.
 

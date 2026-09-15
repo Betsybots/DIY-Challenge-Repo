@@ -3,7 +3,7 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-package_name = 'diy_motion_planner'
+package_name = 'motion_planner'
 
 setup(
     name=package_name,
@@ -15,6 +15,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,8 +25,8 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            'pd_motion_planner_node = diy_motion_planner.pd_motion_planner_node:main',
-            'pure_pursuit_motion_planner_node = diy_motion_planner.pure_pursuit_motion_planner_node:main',
+            'pd_motion_planner_node = src.pd_motion_planner_node:main',
+            'pure_pursuit_motion_planner_node = src.pure_pursuit_motion_planner_node:main',
         ],
     },
 )

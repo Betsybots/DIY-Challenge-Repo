@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-diy_localization — offline_mapping.launch.py
+localization — offline_mapping.launch.py
 ═════════════════════════════════════════════
 Wrapper for LIO-SAM prior-map generation sessions.
 
@@ -28,7 +28,7 @@ FOUR-NODE PIPELINE
 WORKFLOW
 ────────
   1. Source all overlays  (source scripts/env.sh [profile])
-  2. Start mapping:        ros2 launch diy_localization offline_mapping.launch.py
+  2. Start mapping:        ros2 launch localization offline_mapping.launch.py
   3. Drive the full mapping area at moderate speed
   4. Save the map:         ros2 service call /lio_sam/save_map ...
   5. Copy output:          cp -r ~/Documents/lio_sam_directory/  \

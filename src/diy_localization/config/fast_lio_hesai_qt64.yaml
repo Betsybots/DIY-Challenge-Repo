@@ -63,7 +63,7 @@
 #
 # Re-validate after any edit:
 #   python3 src/fast_lio_ros2/tools/check_config.py \
-#     --config src/diy_localization/config/fast_lio_hesai_qt64.yaml
+#     --config src/localization/config/fast_lio_hesai_qt64.yaml
 
 /**:
     ros__parameters:
@@ -237,6 +237,6 @@
         # fall back to <ROOT_DIR>/PCD/scans.pcd.
         # OPEN ITEM: this path is specific to the original dev's machine
         # (/home/juggernauts/...) and won't exist elsewhere -- override with a
-        # per-machine launch argument once diy_localization exposes one, or set
+        # per-machine launch argument once localization exposes one, or set
         # to "" to use the package-relative default.
         map_file_path: "/home/juggernauts/localizer/src/map/fast_lio_map.pcd"

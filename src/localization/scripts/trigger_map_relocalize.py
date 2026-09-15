@@ -14,9 +14,9 @@ This script makes that call exactly once, waiting for the service to become
 available first (map_localizer_node needs a moment to come up), then exits.
 It does not stay running — it is not a long-lived node in the pipeline.
 
-Usage (normally launched by diy_localization/launch/localization.launch.py,
+Usage (normally launched by localization/launch/localization.launch.py,
 not run directly):
-    ros2 run diy_localization trigger_map_relocalize.py \
+    ros2 run localization trigger_map_relocalize.py \
         --ros-args -p pcd_path:=/path/to/refined_map.pcd \
         -p initial_x:=0.0 -p initial_y:=0.0 -p initial_z:=0.0 \
         -p initial_yaw:=0.0 -p initial_pitch:=0.0 -p initial_roll:=0.0

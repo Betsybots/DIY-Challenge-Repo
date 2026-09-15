@@ -557,11 +557,11 @@ def build_pdf():
     story.append(H2('6.4  Applying Results to EKF Config'))
     story.append(Pb(
         'Once the script outputs ekf_tuning_results.yaml, copy the values into '
-        '<b>src/diy_localization/config/ekf_local.yaml</b>. '
+        '<b>src/localization/config/ekf_local.yaml</b>. '
         'The relevant parameters are the process_noise_covariance and '
         'observation_model_type entries:'
     ))
-    story += CB('src/diy_localization/config/ekf_local.yaml  (update these values)',
+    story += CB('src/localization/config/ekf_local.yaml  (update these values)',
         '# ── EKF Process Noise (Q matrix diagonal) ───────────────────────────\n'
         '# Update with values from calibration/ekf_tuning_results.yaml\n'
         'process_noise_covariance: [\n'
@@ -719,7 +719,7 @@ def build_pdf():
     story += CB('Archive tuning results with git',
         'git add calibration/tag_survey.json \\\n'
         '         calibration/ekf_tuning_results.yaml \\\n'
-        '         src/diy_localization/config/ekf_local.yaml\n'
+        '         src/localization/config/ekf_local.yaml\n'
         'git commit -m "calib: AprilTag EKF tuning session YYYYMMDD"'
     )
     story.append(NOTE(

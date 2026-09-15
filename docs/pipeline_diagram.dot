@@ -46,7 +46,7 @@ digraph DIY_Challenge_Pipeline {
 
     map_server [label="nav2_map_server +\nnav2_lifecycle_manager\n(ONLY Nav2 piece used —\nnot the full nav stack)\n→ /map" fillcolor="#fff59d"];
     a_star     [label="diy_planning\na_star_planner_node\n(idles safely with no\n/goal_pose — verified in code)" fillcolor="#fff59d"];
-    pd_ctrl    [label="diy_motion_planner\npd / pure_pursuit\nmotion_planner_node\n→ /cmd_vel_nav, /pd/goal_reached" fillcolor="#fff59d"];
+    pd_ctrl    [label="motion_planner\npd / pure_pursuit\nmotion_planner_node\n→ /cmd_vel_nav, /pd/goal_reached" fillcolor="#fff59d"];
     wp_seq     [label="diy_waypoint_sequencer\n(NEW — optional, standalone)\nauto-publishes /goal_pose in\nsequence; if not run, /goal_pose\nstill settable manually (RViz)" fillcolor="#fff59d" style="rounded,filled,dashed"];
 
     zonenav [label="diy_zone_nav\nstate machine\n⚠ ORPHANED in this architecture —\nits costmap/speed_limit/controller\nSetParameters calls target full-Nav2\nservices that don't exist here;\nfails gracefully (service_is_ready()\nchecked) but nothing consumes its\noutputs — safe to not run at all" fillcolor="#e0e0e0" style="rounded,filled,dashed"];

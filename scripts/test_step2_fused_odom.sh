@@ -34,7 +34,7 @@ viz_parse_args "$@"
 
 source "${SCRIPT_DIR}/env.sh" "${REMAINING_ARGS[0]:-}"
 
-EKF_CONFIG="${REPO_ROOT}/src/diy_localization/config/ekf_odom.yaml"
+EKF_CONFIG="${REPO_ROOT}/src/localization/config/ekf_odom.yaml"
 RVIZ_CONFIG="${REPO_ROOT}/src/challenge_bringup/rviz/step2_fused_odom.rviz"
 
 echo ""

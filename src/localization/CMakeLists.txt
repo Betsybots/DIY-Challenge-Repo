@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(diy_localization)
+project(localization)
 
 find_package(ament_cmake REQUIRED)
 

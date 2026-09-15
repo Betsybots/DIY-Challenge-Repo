@@ -54,7 +54,7 @@
 #   --preview-only         Just run pcd_to_pgm.py's z-histogram preview and
 #                           exit (use this first to choose --z-min/--z-max)
 #
-# Output (final, ready for nav2_map_server / diy_motion_planner):
+# Output (final, ready for nav2_map_server / motion_planner):
 #   <output>_traced_smooth.pgm
 #   <output>_traced_smooth.yaml
 # Intermediate artifacts (kept for inspection/debugging, safe to ignore):

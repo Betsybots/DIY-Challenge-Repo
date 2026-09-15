@@ -54,7 +54,7 @@ OUTPUT
              robot — same idea as register_zones_to_map.py's --overlay
 
 Also prints a ready-to-copy `initial_x`/`initial_y`/`initial_yaw` override
-for `diy_localization`'s localization.launch.py, matching wp1 exactly.
+for `localization`'s localization.launch.py, matching wp1 exactly.
 map_localizer's own relocalization initial pose defaults to (0,0,0) —
 i.e. it assumes the robot starts at the MAP FRAME's origin, NOT at wp1 —
 so if you actually place the robot at wp1's real-world position before
@@ -289,7 +289,7 @@ def draw_overlay(pgm, meta, points_world, yaws, out_path):
 
 def print_initial_pose_hint(points_world, yaws):
     """map_localizer's initial_x/initial_y/initial_yaw (see
-    diy_localization/scripts/trigger_map_relocalize.py) default to
+    localization/scripts/trigger_map_relocalize.py) default to
     (0.0, 0.0, 0.0) -- i.e. they assume the robot physically starts at the
     MAP FRAME's own origin, not at wherever wp1 happens to be. If you
     actually place the robot at wp1's real-world position before pressing
@@ -306,7 +306,7 @@ def print_initial_pose_hint(points_world, yaws):
           "yaw default to 0.0/0.0/0.0, which assumes the robot starts at "
           "the MAP's origin, not at wp1):")
     print(
-        "  ros2 launch diy_localization localization.launch.py \\\n"
+        "  ros2 launch localization localization.launch.py \\\n"
         "      mode:=runtime \\\n"
         f"      initial_x:={x0:.4f} initial_y:={y0:.4f} "
         f"initial_yaw:={yaw0:.4f}"

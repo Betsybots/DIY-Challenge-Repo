@@ -5,8 +5,8 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # Brings up the WHOLE Jetson-side autonomy chain in one terminal, backgrounding
 # each node the same way test_step3_fastlio.sh / test_step4_motion_plan.sh do:
-#   1. diy_localization localization.launch.py   (FAST-LIO2 + EKF + map_localizer)
-#   2. diy_motion_planner pd_navigation.launch.py (nav2_map_server + A* + PD)
+#   1. localization localization.launch.py   (FAST-LIO2 + EKF + map_localizer)
+#   2. motion_planner pd_navigation.launch.py (nav2_map_server + A* + PD)
 #   3. diy_cmd_vel_mux cmd_vel_mux_node            (set to AUTONOMOUS automatically)
 #   4. diy_waypoint_sequencer waypoint_sequencer.launch.py
 #
@@ -159,14 +159,14 @@ cleanup() {
 trap cleanup INT TERM
 
 # Node 1: localization (FAST-LIO2 + EKF + map_localizer + relocalize trigger)
-ros2 launch diy_localization localization.launch.py \
+ros2 launch localization localization.launch.py \
     mode:=runtime \
     map_pcd_path:="${MAP_PCD_PATH}" \
     initial_x:="${INITIAL_X}" initial_y:="${INITIAL_Y}" initial_yaw:="${INITIAL_YAW}" &
 PID_LOCALIZATION=$!
 
 # Node 2: controller (nav2_map_server + A* planner + PD motion planner)
-ros2 launch diy_motion_planner pd_navigation.launch.py \
+ros2 launch motion_planner pd_navigation.launch.py \
     map_yaml:="${MAP_YAML}" &
 PID_CONTROLLER=$!
 

@@ -473,7 +473,7 @@ DIY-Challenge-Repo/
 │   ├── diy_cmd_vel_mux/     ← cmd_vel arbitration node
 │   ├── diy_estop_controller/← STM32 E-stop mirror node
 │   ├── diy_robot_description/← URDF / TF tree
-│   └── diy_localization/    ← FAST-LIO2 + EKF1 + EKF2 + navsat
+│   └── localization/    ← FAST-LIO2 + EKF1 + EKF2 + navsat
 └── third_party_ws/          ← Pre-built SLAM & sensor packages
     ├── src/FAST_LIO/
     ├── src/LIO-SAM/
@@ -638,8 +638,8 @@ DIY-Challenge-Repo/
         'Run calibrate_extrinsics.sh and copy the resulting transforms into '
         'the URDF before any mapping session.', styles))
 
-    # ── 2.5 diy_localization ─────────────────────────────────────────────
-    story.append(H('2.5  diy_localization', 'h2', styles))
+    # ── 2.5 localization ─────────────────────────────────────────────
+    story.append(H('2.5  localization', 'h2', styles))
     story.append(P(
         '<b>Type:</b> ament_cmake (configs + launch) | '
         '<b>Depends on:</b> fast_lio, robot_localization, diy_robot_description', styles))
@@ -665,7 +665,7 @@ DIY-Challenge-Repo/
 
     story.append(H('3.1  FAST-LIO2 Config: fast_lio_hesai_qt64.yaml', 'h2', styles))
     story.append(P(
-        'Located at <b>src/diy_localization/config/fast_lio_hesai_qt64.yaml</b>. '
+        'Located at <b>src/localization/config/fast_lio_hesai_qt64.yaml</b>. '
         'Configures FAST-LIO2 for the Hesai QT64 lidar.', styles))
 
     fastlio_params = [
@@ -775,7 +775,7 @@ source ~/ros2_ws/src/DIY-Challenge-Repo/scripts/env.sh""", styles)
         ['DIY_USE_NAV2', 'bool', 'Enable Nav2 autonomous navigation stack'],
         ['DIY_USE_LOCALIZATION', 'bool', 'Enable FAST-LIO2 + EKF1/EKF2'],
         ['DIY_MUX_MODE', 'string', 'Startup mode for cmd_vel_mux: JOYSTICK | AUTONOMOUS'],
-        ['DIY_FASTLIO_CONFIG', 'string', 'YAML filename in diy_localization/config/'],
+        ['DIY_FASTLIO_CONFIG', 'string', 'YAML filename in localization/config/'],
         ['DIY_HESAI_IP', 'string', 'Lidar IP address (default: 192.168.1.201)'],
         ['DIY_MICRO_ROS_SERIAL', 'string', 'Serial device for micro-ROS (e.g. /dev/ttyACM0)'],
         ['DIY_BAG_OUTPUT_DIR', 'path', 'Directory for rosbag recordings'],
@@ -871,7 +871,7 @@ colcon build --symlink-install \\
         diy_cmd_vel_mux \\
         diy_estop_controller \\
         diy_robot_description \\
-        diy_localization
+        localization
 
 # 7. Run preflight health check
 ~/ros2_ws/src/DIY-Challenge-Repo/scripts/health_check.sh jetson""", styles)
@@ -1217,7 +1217,7 @@ source ~/ros2_ws/src/DIY-Challenge-Repo/scripts/env.sh jetson
 
 # After completion, find the result YAML in calibration/
 # Copy gyr_n, gyr_w, acc_n, acc_w into:
-#   src/diy_localization/config/fast_lio_hesai_qt64.yaml""", styles)
+#   src/localization/config/fast_lio_hesai_qt64.yaml""", styles)
     story.append(calib_box(
         'After IMU calibration, set extrinsic_est_en: false only AFTER '
         'completing Step 2 (extrinsics). Leave it true until both calibrations '
@@ -1239,7 +1239,7 @@ source ~/ros2_ws/src/DIY-Challenge-Repo/scripts/env.sh jetson
 # 2. Copy extrinsic_T and extrinsic_R into fast_lio_hesai_qt64.yaml
 # 3. Update joint xyz/rpy in urdf/robot.urdf.xacro
 # 4. Set extrinsic_est_en: false in fast_lio_hesai_qt64.yaml
-# 5. Rebuild: colcon build --packages-select diy_localization diy_robot_description""", styles)
+# 5. Rebuild: colcon build --packages-select localization diy_robot_description""", styles)
 
     story.append(H('6.3  Prior Map Generation', 'h2', styles))
     story.append(P(
@@ -1249,7 +1249,7 @@ source ~/ros2_ws/src/DIY-Challenge-Repo/scripts/env.sh jetson
     story += code_block('Offline mapping session', """\
 # Start the offline_mapping.launch.py (LIO-SAM with RViz)
 source scripts/env.sh jetson
-ros2 launch diy_localization offline_mapping.launch.py use_rviz:=true
+ros2 launch localization offline_mapping.launch.py use_rviz:=true
 
 # Drive the entire competition course manually
 # Watch RViz to confirm loop-closure events (green segments)
@@ -1325,7 +1325,7 @@ ros2 param set /cmd_vel_mux_node mode AUTONOMOUS""", styles)
         '<b>Nav2 stuck / loop:</b> Switch to JOYSTICK mode, manually drive clear, '
         'then switch back to AUTONOMOUS.',
         '<b>FAST-LIO2 diverged (map drifting):</b> Restart the localisation launch '
-        'with <code>ros2 launch diy_localization localization.launch.py</code>. '
+        'with <code>ros2 launch localization localization.launch.py</code>. '
         'FAST-LIO2 will reinitialise from the next lidar scan.',
         '<b>micro-ROS connection lost:</b> Reconnect USB, then '
         '<code>ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0</code>.',
@@ -1377,7 +1377,7 @@ ros2 topic echo /mux_mode""", styles)
 
 # After deploy, rebuild on the robot:
 ssh ubuntu@jetson.local 'cd ~/ros2_ws && colcon build --symlink-install \\
-    --packages-select diy_localization diy_robot_description challenge_bringup'""", styles)
+    --packages-select localization diy_robot_description challenge_bringup'""", styles)
     story.append(PageBreak())
 
     # ════════════════════════════════════════════════════════════════════════
@@ -1501,7 +1501,7 @@ ssh ubuntu@jetson.local 'cd ~/ros2_ws && colcon build --symlink-install \\
             ]
         ),
         (
-            'colcon build fails on diy_localization / diy_robot_description',
+            'colcon build fails on localization / diy_robot_description',
             [
                 'Source environment before building: source scripts/env.sh jetson',
                 'Check third_party_ws is built: ls third_party_ws/install/',

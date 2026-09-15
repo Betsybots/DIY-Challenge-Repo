@@ -30,9 +30,10 @@ def generate_launch_description():
     )
     goal_tolerance = LaunchConfiguration('goal_tolerance')
     use_rviz = LaunchConfiguration('use_rviz')
+    params_file = LaunchConfiguration('params_file')
 
     rviz_config = os.path.join(
-        get_package_share_directory('diy_motion_planner'),
+        get_package_share_directory('motion_planner'),
         'rviz',
         'config.rviz',
     )
@@ -111,6 +112,17 @@ def generate_launch_description():
             'use_rviz', default_value='true',
             description='Whether to launch RViz.',
         ),
+        DeclareLaunchArgument(
+            'params_file',
+            default_value=os.path.join(
+                get_package_share_directory('motion_planner'), 'config', 'pure_pursuit.yaml'
+            ),
+            description=(
+                'YAML file (ros__parameters) fed directly to the A* planner and '
+                'pure-pursuit motion planner nodes, overriding the individual '
+                'arguments above for those two nodes.'
+            ),
+        ),
         Node(
             package='nav2_map_server',
             executable='map_server',
@@ -137,11 +149,7 @@ def generate_launch_description():
             executable='a_star_planner_node',
             name='a_star_planner_node',
             output='screen',
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'base_frame': base_frame,
-                'robot_clearance': robot_clearance,
-            }],
+            parameters=[params_file],
         ),
         Node(
             package='rviz2',
@@ -153,21 +161,10 @@ def generate_launch_description():
             parameters=[{'use_sim_time': use_sim_time}],
         ),
         Node(
-            package='diy_motion_planner',
+            package='motion_planner',
             executable='pure_pursuit_motion_planner_node',
             name='pure_pursuit_motion_planner_node',
             output='screen',
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'odom_frame': odom_frame,
-                'base_frame': base_frame,
-                'cmd_vel_topic': cmd_vel_topic,
-                'lookahead_distance': lookahead_distance,
-                'linear_velocity': linear_velocity,
-                'max_angular_velocity': max_angular_velocity,
-                'rotate_in_place_threshold': rotate_in_place_threshold,
-                'minimum_turning_velocity': minimum_turning_velocity,
-                'goal_tolerance': goal_tolerance,
-            }],
+            parameters=[params_file],
         ),
     ])

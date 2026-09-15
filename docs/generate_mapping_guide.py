@@ -367,7 +367,7 @@ bash scripts/health_check.sh
     story.append(H2('3.1  Start the Mapping Session'))
     story += CB('Terminal 1 — start mapping:', '''\
 source scripts/env.sh jetson
-ros2 launch diy_localization offline_mapping.launch.py use_rviz:=true
+ros2 launch localization offline_mapping.launch.py use_rviz:=true
 ''')
     story += CB('Terminal 2 — start hardware drivers (lidar + IMU) separately if not already up:', '''\
 # Hesai lidar driver
@@ -470,13 +470,13 @@ pcl_viewer ~/Documents/lio_sam_directory/global_map.pcd
     story.append(H2('5.1  Launch Localization'))
     story += CB('Start runtime localization (GPS enabled):', '''\
 source scripts/env.sh jetson
-ros2 launch diy_localization localization.launch.py \\
+ros2 launch localization localization.launch.py \\
   mode:=runtime \\
   use_gps:=true \\
   config_file:=fast_lio_hesai_qt64.yaml
 ''')
     story += CB('GPS-denied environment (indoor / tunnel):', '''\
-ros2 launch diy_localization localization.launch.py \\
+ros2 launch localization localization.launch.py \\
   mode:=runtime \\
   use_gps:=false
 # FAST-LIO2 PGO provides map→odom without GPS
@@ -512,7 +512,7 @@ ros2 launch diy_localization localization.launch.py \\
     story += [H2('Runtime Topic Flow'), SP(4), df_table, SP(8)]
 
     story.append(H2('5.3  FAST-LIO2 Configuration Key Parameters'))
-    story += CB('src/diy_localization/config/fast_lio_hesai_qt64.yaml (excerpt):', '''\
+    story += CB('src/localization/config/fast_lio_hesai_qt64.yaml (excerpt):', '''\
 common:
   lid_topic: /hesai/points
   imu_topic: /imu/data
@@ -544,7 +544,7 @@ mapping:
     ))
 
     story.append(H2('6.1  navsat_transform Configuration'))
-    story += CB('src/diy_localization/config/navsat_transform.yaml:', '''\
+    story += CB('src/localization/config/navsat_transform.yaml:', '''\
 navsat_transform_node:
   ros__parameters:
     delay: 3.0                        # seconds to wait for valid heading
@@ -565,7 +565,7 @@ navsat_transform_node:
     story.append(SP(4))
 
     story.append(H2('6.2  EKF2 (Global Frame) Configuration'))
-    story += CB('src/diy_localization/config/ekf_global.yaml (key settings):', '''\
+    story += CB('src/localization/config/ekf_global.yaml (key settings):', '''\
 ekf_filter_node_map:
   ros__parameters:
     frequency: 30.0
@@ -598,7 +598,7 @@ ekf_filter_node_map:
     story.append(H1('7  Verifying Localization in RViz2'))
     story.append(H2('7.1  Launch RViz'))
     story += CB('Run localization with RViz enabled:', '''\
-ros2 launch diy_localization localization.launch.py use_rviz:=true
+ros2 launch localization localization.launch.py use_rviz:=true
 # Uses challenge_bringup/rviz/localization.rviz config
 ''')
 
