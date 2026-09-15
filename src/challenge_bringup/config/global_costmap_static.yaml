@@ -1,0 +1,55 @@
+# =============================================================================
+# global_costmap_static.yaml — standalone Nav2 global costmap for VISUALIZING
+# the static, refined_map.pcd-derived course map (course_traced_smooth.yaml)
+# with obstacle inflation, in RViz.
+#
+# This is NOT part of the active custom nav stack. a_star_planner_node
+# subscribes directly to the raw /map OccupancyGrid and does its own internal
+# binary-radius inflation (robot_clearance param, default 0.25m) — it never
+# reads this costmap. This file/node exists purely as a sanity-check
+# visualization tool (scripts/view_global_costmap.sh), separate from
+# nav2_params.yaml's own global_costmap block, which is unrelated leftover
+# config from the older, now-unused zone_nav/NDT-OMP design (costmaps live
+# lidar directly, no static_layer, comment: "static_layer removed").
+#
+# inflation_radius below (0.30m, slightly above robot_radius to satisfy
+# nav2_costmap_2d's inscribed-radius check) approximately matches
+# a_star_planner_node's own default robot_clearance (0.25m) so this
+# visualization is a reasonable proxy for what the planner treats as
+# unsafe — though the actual falloff shape differs (Nav2's inflation_layer
+# uses an exponential cost gradient via cost_scaling_factor; a_star's own
+# inflation is a hard binary cutoff at robot_clearance meters, no gradient).
+# Treat this as an approximation, not an exact match.
+#
+# NODE IDENTITY GOTCHA (verified empirically, 2026-09-11): the standalone
+# `nav2_costmap_2d` executable self-namespaces to "/costmap/costmap"
+# regardless of any launch-level name=/namespace= override you pass it — this
+# is NOT a typo, it's the real, confirmed runtime identity (`ros2 node list`
+# shows exactly "/costmap/costmap", not "/global_costmap/global_costmap").
+# The top-level YAML keys below MUST match that real identity, or ROS2 will
+# silently ignore this entire file (confirmed: without this fix, `ros2 param
+# get /costmap/costmap resolution` returned nav2's built-in default 0.1, not
+# this file's 0.025 — no error, no warning, just silently wrong).
+# =============================================================================
+
+costmap:
+  costmap:
+    ros__parameters:
+      use_sim_time: false
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_link
+      rolling_window: false
+      track_unknown_space: true
+      resolution: 0.025          # matches course_traced_smooth.yaml
+      robot_radius: 0.25         # matches a_star_planner_node's default robot_clearance
+      plugins: ["static_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.05
+      always_send_full_costmap: true

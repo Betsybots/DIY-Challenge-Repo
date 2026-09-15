@@ -17,7 +17,7 @@ Visualization Manager:
     - Class: rviz_default_plugins/PointCloud2
       Name: Hesai Points
       Enabled: true
-      Topic: /hesai/points
+      Topic: /lidar_points
       Queue Size: 1
       Color Transformer: FlatColor
       Color: 100; 200; 255
