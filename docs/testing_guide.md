@@ -141,7 +141,7 @@ first so you don't get tripped up.
    `third_party_ws` at all — removed again; always verify with
    `cd third_party_ws && colcon list` if third-party packages ever seem to
    vanish.
-9. **The custom A* + PD/pure-pursuit controller (`diy_planning`,
+9. **The custom A* + PD/pure-pursuit controller (`planning`,
    `motion_planner`) is a SEPARATE navigation stack from Nav2 — it
    uses only `nav2_map_server`/`nav2_lifecycle_manager` for map serving,
    not the full Nav2 navigation system.** It publishes `/cmd_vel_nav`

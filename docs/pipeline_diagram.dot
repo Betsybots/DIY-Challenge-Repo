@@ -45,7 +45,7 @@ digraph DIY_Challenge_Pipeline {
     reloc_trigger [label="trigger_map_relocalize.py\n(one-shot /relocalize call\nat startup, then exits)" shape=hexagon fillcolor="#fff59d"];
 
     map_server [label="nav2_map_server +\nnav2_lifecycle_manager\n(ONLY Nav2 piece used —\nnot the full nav stack)\n→ /map" fillcolor="#fff59d"];
-    a_star     [label="diy_planning\na_star_planner_node\n(idles safely with no\n/goal_pose — verified in code)" fillcolor="#fff59d"];
+    a_star     [label="planning\na_star_planner_node\n(idles safely with no\n/goal_pose — verified in code)" fillcolor="#fff59d"];
     pd_ctrl    [label="motion_planner\npd / pure_pursuit\nmotion_planner_node\n→ /cmd_vel_nav, /pd/goal_reached" fillcolor="#fff59d"];
     wp_seq     [label="diy_waypoint_sequencer\n(NEW — optional, standalone)\nauto-publishes /goal_pose in\nsequence; if not run, /goal_pose\nstill settable manually (RViz)" fillcolor="#fff59d" style="rounded,filled,dashed"];
 

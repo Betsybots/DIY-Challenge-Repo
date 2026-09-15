@@ -15,7 +15,7 @@ separate, minimal package (diy_waypoint_sequencer) — NOT part of
 zone_nav, which has a much larger surface (BLIND_DRIVE tunnel handling,
 Nav2 costmap/speed-limit modulation) that this simpler A*+PD stack has never
 consumed (confirmed: no reference to /nav_mode or /speed_limit anywhere in
-diy_planning or motion_planner).
+planning or motion_planner).
 
 If this node is not run at all:
   - a_star_planner_node simply never receives a /goal_pose message and idles

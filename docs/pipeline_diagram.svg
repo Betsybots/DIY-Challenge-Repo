@@ -299,7 +299,7 @@
 <g id="node17" class="node">
 <title>a_star</title>
 <path fill="#fff59d" stroke="black" d="M754.5,-835.85C754.5,-835.85 595.5,-835.85 595.5,-835.85 589.5,-835.85 583.5,-829.85 583.5,-823.85 583.5,-823.85 583.5,-791.85 583.5,-791.85 583.5,-785.85 589.5,-779.85 595.5,-779.85 595.5,-779.85 754.5,-779.85 754.5,-779.85 760.5,-779.85 766.5,-785.85 766.5,-791.85 766.5,-791.85 766.5,-823.85 766.5,-823.85 766.5,-829.85 760.5,-835.85 754.5,-835.85"/>
-<text text-anchor="middle" x="675" y="-823.05" font-family="Helvetica,sans-Serif" font-size="11.00">diy_planning</text>
+<text text-anchor="middle" x="675" y="-823.05" font-family="Helvetica,sans-Serif" font-size="11.00">planning</text>
 <text text-anchor="middle" x="675" y="-811.05" font-family="Helvetica,sans-Serif" font-size="11.00">a_star_planner_node</text>
 <text text-anchor="middle" x="675" y="-799.05" font-family="Helvetica,sans-Serif" font-size="11.00">(idles safely with no</text>
 <text text-anchor="middle" x="675" y="-787.05" font-family="Helvetica,sans-Serif" font-size="11.00">/goal_pose — verified in code)</text>

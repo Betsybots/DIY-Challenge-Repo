@@ -224,7 +224,7 @@ def section_zone_nav_findings(s):
         'did not assume.', s))
 
     rows = [
-        ['Does diy_planning/motion_planner reference /nav_mode, '
+        ['Does planning/motion_planner reference /nav_mode, '
          '/speed_limit, or zone_nav anywhere?',
          'grep -rn across both packages',
          'Zero hits — no existing coupling at all'],
@@ -306,7 +306,7 @@ def section_sequencer(s):
     story.append(H('Key Design Decision', 'h2', s))
     story.append(note_box(
         'Built as a brand-new, standalone, minimal package &mdash; NOT added inside '
-        'zone_nav, diy_planning, or motion_planner. Putting it inside '
+        'zone_nav, planning, or motion_planner. Putting it inside '
         'zone_nav would have re-coupled "can I remove zone_nav" with "do I '
         'still get automated sequencing" &mdash; exactly the ambiguity this whole '
         'task was about avoiding.', s))

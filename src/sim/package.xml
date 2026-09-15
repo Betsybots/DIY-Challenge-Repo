@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>diy_sim</name>
+  <name>sim</name>
   <version>1.0.0</version>
   <description>Ignition Gazebo Fortress simulation for DIY Robot Challenge 2026.
   Provides simple_loop and competition_arena worlds, robot spawn + ROS-IGN bridge

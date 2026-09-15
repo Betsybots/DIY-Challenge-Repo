@@ -250,7 +250,7 @@ def generate_launch_description():
         # ========================================================
 
         Node(
-            package='diy_planning',
+            package='planning',
             executable='a_star_planner_node',
             name='a_star_planner_node',
             output='screen',

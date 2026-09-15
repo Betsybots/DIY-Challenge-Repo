@@ -10,13 +10,13 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description():
     # 1. Setup paths to required packages
     pkg_robot_description = get_package_share_directory('robot_description')
-    pkg_sim = get_package_share_directory('diy_sim')
+    pkg_sim = get_package_share_directory('sim')
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
     pkg_challenge_bringup = get_package_share_directory('challenge_bringup')
-    fast_lio_dir = get_package_share_directory('fast_lio')
+    #fast_lio_dir = get_package_share_directory('fast_lio')
     
     # 2. Combine the path with the actual launch file name
-    fast_lio_launch_file = os.path.join(fast_lio_dir, 'launch', 'mapping.launch.py')
+    #fast_lio_launch_file = os.path.join(fast_lio_dir, 'launch', 'mapping.launch.py')
 
     # 2. Declare configurations/arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
@@ -134,11 +134,11 @@ def generate_launch_description():
         ]
     )
     
-    #11. Run FAST_LIO algorithm (Needed for both SIM and live hardware)
-    fast_lio_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(fast_lio_launch_file),
-        launch_arguments={'use_sim_time': use_sim_time}.items() # Optional arguments
-    )
+    # 11. Run FAST_LIO algorithm (Needed for both SIM and live hardware)
+    #fast_lio_launch = IncludeLaunchDescription(
+    #    PythonLaunchDescriptionSource(fast_lio_launch_file),
+    #    launch_arguments={'use_sim_time': use_sim_time}.items() # Optional arguments
+    #)
     
     body_to_base_link_bridge = Node(
             package='tf2_ros',
@@ -173,6 +173,6 @@ def generate_launch_description():
         ros_gz_lidar_bridge_node,
         rviz_node,
         #static_transform_publisher_node,
-        fast_lio_launch,
+        #fast_lio_launch,
         run_python_script
     ])

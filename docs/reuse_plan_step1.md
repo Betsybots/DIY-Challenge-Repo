@@ -1024,7 +1024,7 @@ again if a future change adds another new runtime-only package dependency.
 
 User's teammate is building a custom navigation stack (nav2_map_server-only
 + a custom A* planner + PD/pure-pursuit path follower — NOT full Nav2) that
-already exists in this repo via an earlier rebase (`src/diy_planning`,
+already exists in this repo via an earlier rebase (`src/planning`,
 `src/motion_planner`) but was never investigated until now. User asked:
 design things so `zone_nav` can be removed entirely with zero impact,
 since the plan is for the controller to consume "info from the zone
@@ -1032,7 +1032,7 @@ navigator" and they want that dependency to be optional/safe-to-remove
 from day one, not bolted on and only discovered to be load-bearing later.
 
 **Investigated the actual code (not assumed) before designing anything:**
-- Grepped `diy_planning`/`motion_planner` for any reference to
+- Grepped `planning`/`motion_planner` for any reference to
   `zone_nav`, `/nav_mode`, `/speed_limit`, `SpeedLimit` — **zero hits**.
   The custom controller already has NO existing coupling to zone_nav at
   all. `a_star_planner_node`'s `goal_callback` idles gracefully (early
@@ -1089,7 +1089,7 @@ design ask (an automated `/goal_pose` publisher for competition runs where
 no human clicks RViz goals), designed from the start to be safely
 removable:
 - Deliberately a brand-new, separate, minimal package — NOT added inside
-  `zone_nav` or `diy_planning`/`motion_planner`. This was a real
+  `zone_nav` or `planning`/`motion_planner`. This was a real
   design decision: putting it inside `zone_nav` would re-couple "can I
   remove zone_nav" with "do I still get automated goal sequencing",
   exactly the ambiguity this whole task was about avoiding.
@@ -1137,7 +1137,7 @@ generic "Nav2 (never run)" placeholder with the real architecture
 explanatory label so this doesn't need re-investigating later.
 
 **Still open / not addressed this pass:**
-- The custom controller stack (`diy_planning`, `motion_planner`,
+- The custom controller stack (`planning`, `motion_planner`,
   `diy_waypoint_sequencer`) is not yet wired into
   `challenge_master.launch.py` at all — currently only launchable
   standalone via `pd_navigation.launch.py`/`pure_pursuit_navigation.launch.py`.

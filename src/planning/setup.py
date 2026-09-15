@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'diy_planning'
+package_name = 'planning'
 
 setup(
     name=package_name,
@@ -19,7 +19,7 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            'a_star_planner_node = diy_planning.a_star_planner_node:main',
+            'a_star_planner_node = planning.a_star_planner_node:main',
         ],
     },
 )

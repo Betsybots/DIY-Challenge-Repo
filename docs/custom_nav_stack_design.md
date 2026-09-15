@@ -1,7 +1,7 @@
 # Custom Navigation Stack — Design & Zone Nav Decoupling
 
 Companion doc to [jetson_bringup_guide.md](jetson_bringup_guide.md) — covers
-the custom A* + PD/pure-pursuit navigation stack (`diy_planning`,
+the custom A* + PD/pure-pursuit navigation stack (`planning`,
 `motion_planner`) built by the teammate, why it is already decoupled
 from `zone_nav`, the two real bugs found while verifying that, and the
 new `diy_waypoint_sequencer` package built for automated goal sequencing.
@@ -55,7 +55,7 @@ did not assume.
 
 | Check | Method | Result |
 |---|---|---|
-| Does `diy_planning`/`motion_planner` reference `/nav_mode`, `/speed_limit`, or `zone_nav` anywhere? | `grep -rn` across both packages | **Zero hits** — no existing coupling at all |
+| Does `planning`/`motion_planner` reference `/nav_mode`, `/speed_limit`, or `zone_nav` anywhere? | `grep -rn` across both packages | **Zero hits** — no existing coupling at all |
 | Does the A* planner crash/hang with no `/goal_pose`? | Read `goal_callback`'s guard clauses directly | No — early-return, idles safely, no timeout/crash |
 | Does `cmd_vel_mux`'s AUTONOMOUS mode depend on zone_nav? | Read `cmd_vel_mux_node.py`'s mode logic | No — reads `/cmd_vel_nav` unconditionally; BLIND_DRIVE only activates via an explicit service call only `zone_nav_manager_node` makes |
 | Does zone_nav crash if Nav2's costmap/controller services don't exist? | Read `zone_nav_manager_node.cpp`'s service-call sites | No — already checks `service_is_ready()` before every call, skips gracefully with a warn log |
@@ -99,7 +99,7 @@ auto-publish `/goal_pose` in sequence for a competition run where no human
 is clicking RViz goals.
 
 **Key design decision:** built as a brand-new, standalone, minimal
-package — **not** added inside `zone_nav`, `diy_planning`, or
+package — **not** added inside `zone_nav`, `planning`, or
 `motion_planner`. Putting it inside `zone_nav` would have
 re-coupled "can I remove zone_nav" with "do I still get automated
 sequencing" — exactly the ambiguity this whole task was about avoiding.
