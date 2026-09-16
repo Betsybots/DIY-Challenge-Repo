@@ -41,7 +41,7 @@ def generate_launch_description():
     log_level = LaunchConfiguration('log_level')
     map_yaml = LaunchConfiguration('map_yaml')
 
-    lifecycle_nodes = ['planner_server', 'controller_server', 'map_server']
+    lifecycle_nodes = ['controller_server', 'map_server']
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -135,7 +135,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'use_sim_time': use_sim_time,
-                'yaml_filename': map_yaml,
+                # 'yaml_filename': map_yaml,
             }],
         ),
             Node(
@@ -157,16 +157,16 @@ def generate_launch_description():
                 # parameters=[configured_params],
                 # arguments=['--ros-args', '--log-level', log_level],
                 # remappings=remappings),
-            Node(
-                package='nav2_planner',
-                executable='planner_server',
-                name='planner_server',
-                output='screen',
-                respawn=use_respawn,
-                respawn_delay=2.0,
-                parameters=[configured_params],
-                arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings),
+            # Node(
+            #     package='nav2_planner',
+            #     executable='planner_server',
+            #     name='planner_server',
+            #     output='screen',
+            #     respawn=use_respawn,
+            #     respawn_delay=2.0,
+            #     parameters=[configured_params],
+            #     arguments=['--ros-args', '--log-level', log_level],
+            #     remappings=remappings),
             # Node(
                 # package='nav2_behaviors',
                 # executable='behavior_server',
@@ -245,12 +245,12 @@ def generate_launch_description():
                 # name='smoother_server',
                 # parameters=[configured_params],
                 # remappings=remappings),
-            ComposableNode(
-               package='nav2_planner',
-               plugin='nav2_planner::PlannerServer',
-               name='planner_server',
-               parameters=[configured_params],
-               remappings=remappings),
+            # ComposableNode(
+            #    package='nav2_planner',
+            #    plugin='nav2_planner::PlannerServer',
+            #    name='planner_server',
+            #    parameters=[configured_params],
+            #    remappings=remappings),
             # ComposableNode(
                 # package='nav2_behaviors',
                 # plugin='behavior_server::BehaviorServer',
