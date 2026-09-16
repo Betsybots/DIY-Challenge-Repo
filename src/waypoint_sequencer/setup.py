@@ -28,6 +28,7 @@ setup(
     entry_points={
         'console_scripts': [
             'waypoint_sequencer_node = diy_waypoint_sequencer.waypoint_sequencer_node:main',
+            'waypoint_recorder_node = diy_waypoint_sequencer.waypoint_recorder_node:main',
         ],
     },
 )

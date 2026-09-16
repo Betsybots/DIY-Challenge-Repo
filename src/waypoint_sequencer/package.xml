@@ -11,6 +11,11 @@
     if this node isn't run, /goal_pose can still be published manually
     (RViz "2D Goal Pose", or ros2 topic pub) with no code changes anywhere
     else in the stack. See docs/reuse_plan_step1.md for the design rationale.
+
+    Also hosts waypoint_recorder_node, a companion tool for the reverse
+    direction: recording a waypoints YAML live during an offline mapping
+    drive, using the joystick's LT/RT triggers, instead of picking points
+    after the fact from a finished map (see pick_waypoints.py).
   </description>
   <maintainer email="team@example.com">DIY Challenge Team</maintainer>
   <license>Apache-2.0</license>
@@ -20,6 +25,8 @@
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2_ros</depend>
   <depend>tf_transformations</depend>
 
   <export>
