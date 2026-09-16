@@ -141,13 +141,19 @@ def generate_launch_description():
                 'node_names': ['map_server'],
             }],
         ),
-        Node(
-            package='planning',
-            executable='a_star_planner_node',
-            name='a_star_planner_node',
-            output='screen',
-            parameters=[params_file],
-        ),
+        # DEPRECATED: 'planning' no longer builds a_star_planner_node as an
+        # executable — A* now runs as a Nav2 GlobalPlanner plugin loaded by
+        # planner_server (see challenge_bringup/launch/nav2_navigation_launch.py
+        # + config/nav2_params.yaml). This standalone launch file predates that
+        # change and needs a planner_server + action-to-topic bridge node to
+        # work again; left commented out rather than silently failing.
+        # Node(
+        #     package='planning',
+        #     executable='a_star_planner_node',
+        #     name='a_star_planner_node',
+        #     output='screen',
+        #     parameters=[params_file],
+        # ),
         Node(
             package='rviz2',
             executable='rviz2',
@@ -157,11 +163,18 @@ def generate_launch_description():
             arguments=['-d', rviz_config],
             parameters=[{'use_sim_time': use_sim_time}],
         ),
-        Node(
-            package='diy_motion_planner',
-            executable='pure_pursuit_motion_planner_node',
-            name='pure_pursuit_motion_planner_node',
-            output='screen',
-            parameters=[params_file],
-        ),
+        # DEPRECATED: 'diy_motion_planner' no longer builds
+        # pure_pursuit_motion_planner_node as an executable — pure pursuit now
+        # runs as a Nav2 Controller plugin loaded by controller_server (see
+        # challenge_bringup/launch/nav2_navigation_launch.py + config/nav2_params.yaml).
+        # This standalone launch file predates that change and needs a
+        # controller_server + action-to-topic bridge node to work again; left
+        # commented out rather than silently failing.
+        # Node(
+        #     package='diy_motion_planner',
+        #     executable='pure_pursuit_motion_planner_node',
+        #     name='pure_pursuit_motion_planner_node',
+        #     output='screen',
+        #     parameters=[params_file],
+        # ),
     ])

@@ -247,22 +247,25 @@ def generate_launch_description():
 
         # ========================================================
         # Custom A* planner
+        # DEPRECATED: 'planning' no longer builds a_star_planner_node as an
+        # executable — A* now runs as a Nav2 GlobalPlanner plugin loaded by
+        # planner_server (see challenge_bringup/launch/nav2_navigation_launch.py
+        # + config/nav2_params.yaml). This standalone launch file predates that
+        # change and needs a planner_server + action-to-topic bridge node to
+        # work again; left commented out rather than silently failing.
         # ========================================================
 
-        Node(
-            package='planning',
-            executable='a_star_planner_node',
-            name='a_star_planner_node',
-            output='screen',
-
-            parameters=[{
-                'use_sim_time': use_sim_time,
-
-                'base_frame': base_frame,
-
-                'robot_clearance': robot_clearance,
-            }],
-        ),
+        # Node(
+        #     package='planning',
+        #     executable='a_star_planner_node',
+        #     name='a_star_planner_node',
+        #     output='screen',
+        #     parameters=[{
+        #         'use_sim_time': use_sim_time,
+        #         'base_frame': base_frame,
+        #         'robot_clearance': robot_clearance,
+        #     }],
+        # ),
         #========================================================
         # RViz  
         #========================================================

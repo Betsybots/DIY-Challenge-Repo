@@ -1,0 +1,5 @@
+<library path="planning_astar_plugin">
+  <class type="nav2_astar_planner::AStarPlanner" base_class_type="nav2_core::GlobalPlanner">
+    <description>Fast A* global planner for the DIY Challenge robot (Nav2 GlobalPlanner plugin).</description>
+  </class>
+</library>

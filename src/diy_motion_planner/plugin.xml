@@ -1,0 +1,5 @@
+<library path="pure_pursuit_controller_plugin">
+  <class type="diy_motion_planner::PurePursuitController" base_class_type="nav2_core::Controller">
+    <description>Pure-pursuit path-following Nav2 Controller plugin for the DIY Challenge robot.</description>
+  </class>
+</library>
