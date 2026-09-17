@@ -149,21 +149,6 @@ def generate_launch_description():
         ),
     )
 
-    # ── BLOCK 2: Robot description launch (URDF → TF static transforms and joint transforms) ──
-    # MUST be first.  robot_state_publisher reads the URDF and broadcasts
-    # every joint as a static TF transform (base_link → lidar_link, imu_link,
-    # camera_link, etc.).  All downstream nodes depend on these transforms
-    # to project sensor data into robot-body coordinates.
-    
-    robot_description_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('robot_description'),
-                'launch',
-                'description.launch.py',
-            )
-        ),
-    )
 
     # ── BLOCK 3: Fast-LIO2 Launch  ──────────────────────────
     # Launches the Fast-LIO2 localizer, which performs real-time LiDAR-inertial odometry and mapping.
@@ -226,6 +211,22 @@ def generate_launch_description():
             )
         ),
         condition=UnlessCondition(autonomous),
+    )
+
+    # ── BLOCK : Robot description launch (URDF → TF static transforms and joint transforms) ──
+    # MUST be first.  robot_state_publisher reads the URDF and broadcasts
+    # every joint as a static TF transform (base_link → lidar_link, imu_link,
+    # camera_link, etc.).  All downstream nodes depend on these transforms
+    # to project sensor data into robot-body coordinates.
+    
+    robot_description_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('robot_description'),
+                'launch',
+                'description.launch.py',
+            )
+        ),
     )
     
     # ── BLOCK 6: Nav2 autonomous navigation stack ─────────────────────────────
