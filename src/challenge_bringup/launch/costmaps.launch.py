@@ -7,12 +7,19 @@ A*/pure-pursuit stack, gated independently so either can be run alone.
 WHY planner_server/controller_server: see costmaps_params.yaml's header
 comment. In short, they are the only pre-built Nav2 programs that host a
 correctly, distinctly-named costmap (nav2_costmap_2d's bare standalone
-executable hardcodes its own node name and cannot run twice). Their own
-NavfnPlanner/MPPI planning and control logic is never invoked -- no
-bt_navigator is launched, so nothing ever calls their action servers. The
-real planner/controller remain diy_planning's a_star_planner_node and
-motion_planner's pure_pursuit_motion_planner_node, launched separately
-(see navigation.launch.py / master.launch.py).
+executable hardcodes its own node name and cannot run twice).
+
+planner_server's GridBased plugin is still a placeholder -- nothing calls
+ComputePathToPose yet (a teammate is porting diy_planning's A* into a real
+nav2_core::GlobalPlanner plugin). controller_server's FollowPath plugin is
+now REAL: diy_motion_planner::PurePursuitController, a genuine
+nav2_core::Controller port of the same control law
+pure_pursuit_motion_planner_node has always used. Its cmd_vel output is
+remapped to /cmd_vel_nav so it flows through the existing cmd_vel_mux_node
+exactly like the standalone node always has. It only runs when something
+sends a FollowPath action goal though -- no bt_navigator is launched here,
+so use scripts/test_follow_path_action.py to test it directly until the
+planner side is wired up.
 
 Pipeline:
     map_yaml (course_traced_smooth.yaml, derived from refined_map.pcd)
@@ -21,6 +28,8 @@ Pipeline:
         -> planner_server's internal global_costmap -> /global_costmap/costmap
     live /lidar_points (rolling window around the robot)
         -> controller_server's internal local_costmap -> /local_costmap/costmap
+    FollowPath action goal (see scripts/test_follow_path_action.py)
+        -> controller_server's PurePursuitController -> /cmd_vel_nav
 
 Requires a real localization stack already running (map_localizer + EKF)
 publishing map->odom->base_link -- this file does NOT publish any TF itself.
@@ -162,8 +171,12 @@ def generate_launch_description():
         ),
 
         # ------------------------------------------------------------
-        # controller_server -- hosts local_costmap. Its own MPPIController
-        # plugin is configured but never invoked (see module docstring).
+        # controller_server -- hosts local_costmap. FollowPath's plugin is
+        # now the real diy_motion_planner::PurePursuitController (see
+        # costmaps_params.yaml's header) -- remap its cmd_vel output to
+        # /cmd_vel_nav so it flows through the existing cmd_vel_mux_node
+        # exactly like the standalone pure_pursuit_motion_planner_node
+        # always has (mux forwards /cmd_vel_nav only in AUTONOMOUS mode).
         # ------------------------------------------------------------
         Node(
             package='nav2_controller',
@@ -172,6 +185,7 @@ def generate_launch_description():
             output='screen',
             condition=IfCondition(use_local_costmap),
             parameters=[costmaps_params],
+            remappings=[('cmd_vel', 'cmd_vel_nav')],
         ),
 
         # ------------------------------------------------------------

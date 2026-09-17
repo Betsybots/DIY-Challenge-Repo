@@ -10,15 +10,22 @@
 # name=/namespace= overrides, both silently ignored, both instances collided
 # on the identical node name "costmap"). planner_server/controller_server are
 # simply the only two pre-built Nav2 programs that construct a Costmap2DROS
-# with a distinct, correct name ("global_costmap"/"local_costmap" respectively)
-# — we are NOT using their NavfnPlanner/MPPI planning or control logic at all.
-# Nothing ever calls their ComputePathToPose/FollowPath actions (no
-# bt_navigator is launched) — ONLY their internal costmaps are real, actively
-# used outputs. The GridBased/FollowPath plugin blocks below exist purely so
-# each server has a valid, loadable plugin to configure at startup; they never
-# actually plan or drive the robot. The real planner/controller are
-# diy_planning's a_star_planner_node and motion_planner's
-# pure_pursuit_motion_planner_node, launched separately.
+# with a distinct, correct name ("global_costmap"/"local_costmap" respectively).
+#
+# UPDATE 2026-09-15: FollowPath's plugin below is now the REAL, actively used
+# diy_motion_planner::PurePursuitController (see
+# src/diy_motion_planner/src/pure_pursuit_controller.cpp) — a genuine
+# nav2_core::Controller port of the same control law the standalone
+# pure_pursuit_motion_planner_node has always used. It only runs when
+# something sends a FollowPath action goal, though — nothing does yet (no
+# bt_navigator, and diy_planning's a_star_planner_node still just publishes
+# /a_star/path as a plain topic, not an action goal). Until that gap is
+# bridged, test this controller directly with a manually-published
+# FollowPath goal (see scripts/test_follow_path_action.py).
+#
+# GridBased (planner_server's plugin) is STILL a placeholder/unused --
+# nothing calls ComputePathToPose either; a teammate is separately porting
+# diy_planning's A* into a real nav2_core::GlobalPlanner plugin to replace it.
 #
 # REAL-HARDWARE DEFAULTS: use_sim_time: false, robot_base_frame: base_link
 # (not base_footprint/true — those were this file's sim-only counterpart in
@@ -118,50 +125,15 @@ controller_server:
       yaw_goal_tolerance: 3.14159
       stateful: true
     FollowPath:
-      plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 40
-      model_dt: 0.05
-      batch_size: 1000
-      vx_std: 0.2
-      vy_std: 0.0
-      wz_std: 0.3
-      vx_max: 0.3
-      vx_min: 0.0
-      vy_max: 0.0
-      wz_max: 0.8
-      ax_max: 1.0
-      ax_min: -1.0
-      az_max: 2.0
-      iteration_count: 1
-      prune_distance: 1.7
+      # Real controller plugin (see src/diy_motion_planner/src/pure_pursuit_controller.cpp),
+      # not a placeholder — this is diy_motion_planner's actual pure-pursuit
+      # control law, now loadable as a genuine nav2_core::Controller plugin.
+      # Same parameter names/defaults as the original standalone node.
+      plugin: "diy_motion_planner::PurePursuitController"
+      lookahead_distance: 0.2
+      linear_velocity: 0.3
+      max_angular_velocity: 1.0
+      rotate_in_place_threshold: 1.0
+      minimum_turning_velocity: 0.05
+      goal_tolerance: 0.15
       transform_tolerance: 0.1
-      temperature: 0.3
-      gamma: 0.015
-      motion_model: "DiffDrive"
-      visualize: false
-      critics: ["ConstraintCritic", "GoalCritic", "GoalAngleCritic", "ObstaclesCritic"]
-      ConstraintCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 4.0
-      GoalCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 5.0
-        threshold_to_consider: 1.4
-      GoalAngleCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 10.0
-        threshold_to_consider: 0.5
-      ObstaclesCritic:
-        enabled: true
-        cost_power: 1
-        repulsion_weight: 2.0
-        critical_weight: 20.0
-        consider_footprint: true
-        collision_cost: 10000.0
-        collision_margin_distance: 0.10
-        near_goal_distance: 0.5
-        inflation_radius: 0.22
-        cost_scaling_factor: 3.0

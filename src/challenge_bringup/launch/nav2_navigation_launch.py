@@ -80,7 +80,7 @@ def generate_launch_description():
                 or (
                     os.path.join(
                         os.environ.get('DIY_ROS_WS', ''),
-                        'src', 'DIY-Challenge-Repo', 'maps', 'global_map_2_smooth.yaml',
+                        'src', 'DIY-Challenge-Repo', 'maps', 'course_traced_smooth.yaml',
                     )
                     if os.environ.get('DIY_ROS_WS') else ''
                 )
@@ -88,7 +88,7 @@ def generate_launch_description():
             description=(
                 'Absolute path to the saved map YAML file (nav2_map_server format). '
                 'Defaults to $DIY_MAP_YAML if set, else '
-                '$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/global_map_2_smooth.yaml '
+                '$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/course_traced_smooth.yaml '
                 '(see profiles/*.env for DIY_ROS_WS) — this changes often as course '
                 'maps evolve, so override with map_yaml:=... or export DIY_MAP_YAML '
                 'rather than editing this default.'
