@@ -122,7 +122,7 @@ def generate_launch_description():
     # declare_use_micro_ros = DeclareLaunchArgument('use_micro_ros', default_value='false')
     # declare_use_localization = DeclareLaunchArgument('use_localization', default_value='true')
     # declare_use_cmd_vel_mux = DeclareLaunchArgument('use_cmd_vel_mux', default_value='true')
-    declare_use_rviz = DeclareLaunchArgument('use_rviz', default_value='false')
+    declare_use_rviz = DeclareLaunchArgument('use_rviz', default_value='true')
     # declare_mux_mode = DeclareLaunchArgument('mux_mode', default_value='AUTONOMOUS')
     declare_fastlio_config = DeclareLaunchArgument('fastlio_config', default_value='fast_lio_hesai_qt64.yaml')
     declare_autonomous = DeclareLaunchArgument('autonomous', default_value='true')
@@ -133,7 +133,7 @@ def generate_launch_description():
         description='Seconds to wait after starting the Hesai driver before '
                     'launching the rest of the stack (lets the sensor come online).',
     )
-
+    
     # ── BLOCK 1: Hesai QT64 lidar driver ──────────────────────────────────────
     # Connects to the lidar over UDP and publishes /hesai/points
     # (sensor_msgs/PointCloud2 @ ~10 Hz).  This is FAST-LIO2's primary
@@ -227,8 +227,7 @@ def generate_launch_description():
         ),
         condition=UnlessCondition(autonomous),
     )
-
-
+    
     # ── BLOCK 6: Nav2 autonomous navigation stack ─────────────────────────────
     # Nav2 planning + control stack: MPPI controller, SmacHybrid planner,
     # Behaviour Trees, global/local costmaps, lifecycle manager.
@@ -242,9 +241,9 @@ def generate_launch_description():
     # ros__parameters are read here and forwarded individually as
     # launch_arguments — edit that yaml to change map_yaml, velocities, etc.
     pure_pursuit_config = os.path.join(
-        get_package_share_directory('motion_planner'),
+        get_package_share_directory('challenge_bringup'),
         'config',
-        'pure_pursuit.yaml',
+        'nav2_params.yaml',
     )
     with open(pure_pursuit_config, 'r') as f:
         pure_pursuit_params = yaml.safe_load(f)['/**']['ros__parameters']
@@ -252,9 +251,9 @@ def generate_launch_description():
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
-                get_package_share_directory('motion_planner'),
+                get_package_share_directory('challenge_bringup'),
                 'launch',
-                'pure_pursuit_navigation.launch.py',   # no AMCL — NDT-OMP handles map→odom
+                'nav2_navigation_launch.py',
             )
         ),
         condition=IfCondition(autonomous),
@@ -271,6 +270,7 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         output='screen',
+        arguments=['-d', os.path.join(pkg_dir, 'config', 'master.rviz')],
         condition=IfCondition(use_rviz),
     )
 
@@ -329,6 +329,7 @@ def generate_launch_description():
         declare_fastlio_config,
         declare_startup_delay,
         declare_autonomous,
+        declare_use_rviz,
 
         # Launch sequence starts here
         robot_description_launch,
