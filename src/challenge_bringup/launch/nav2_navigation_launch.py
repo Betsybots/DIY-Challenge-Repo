@@ -73,25 +73,23 @@ def generate_launch_description():
         default_value='',
         description='Top-level namespace')
 
+    repo_root = os.path.expanduser('~/DIY-Challenge-Repo')
+    ros_ws_root = os.path.expanduser(os.environ.get('DIY_ROS_WS', '~/ros2_ws'))
+    repo_map_default = os.path.join(repo_root, 'maps', 'course_traced_smooth.yaml')
+    ros_ws_map_default = os.path.join(ros_ws_root, 'maps', 'course_traced_smooth.yaml')
+
+    default_map_yaml = (
+        os.environ.get('DIY_MAP_YAML')
+        or (repo_map_default if os.path.exists(repo_map_default) else ros_ws_map_default)
+    )
+
     declare_map_yaml_cmd = DeclareLaunchArgument(
         'map_yaml',
-        default_value=(
-            os.environ.get('DIY_MAP_YAML')
-            or (
-                os.path.join(
-                    os.environ.get('DIY_ROS_WS', ''),
-                    'src', 'DIY-Challenge-Repo', 'maps', 'course_traced_smooth.yaml',
-                )
-                if os.environ.get('DIY_ROS_WS') else ''
-            )
-        ),
+        default_value=default_map_yaml,
         description=(
             'Absolute path to the saved map YAML file (nav2_map_server format). '
-            'Defaults to $DIY_MAP_YAML if set, else '
-            '$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/course_traced_smooth.yaml '
-            '(see profiles/*.env for DIY_ROS_WS) — this changes often as course '
-            'maps evolve, so override with map_yaml:=... or export DIY_MAP_YAML '
-            'rather than editing this default.'
+            'Defaults to $DIY_MAP_YAML if set, else the repo-local map under '
+            '~/DIY-Challenge-Repo/maps, or the current DIY_ROS_WS if it contains a map.'
         ),
     )
 
@@ -135,7 +133,7 @@ def generate_launch_description():
                 output='screen',
                 parameters=[{
                     'use_sim_time': use_sim_time,
-                    # 'yaml_filename': map_yaml,
+                    'yaml_filename': map_yaml,
                 }],
             ),
             Node(
@@ -286,6 +284,7 @@ def generate_launch_description():
 
     # Declare the launch options
     ld.add_action(declare_namespace_cmd)
+    ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_params_file_cmd)
     ld.add_action(declare_autostart_cmd)

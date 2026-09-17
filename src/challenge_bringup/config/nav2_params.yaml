@@ -275,8 +275,8 @@ map_server:
   ros__parameters:
     use_sim_time: True
     # Overridden in launch by the "map" launch configuration or provided default value.
-    # To use in yaml, remove the default "map" value in the tb3_simulation_launch.py file & provide full path to map below.
-    yaml_filename: "/home/arun/DIY-Challenge-Repo/src/mapping/maps/small_house/global_map.yaml"
+    # Use a valid repo map path here or override it from the launch command.
+    yaml_filename: "/home/juggernauts/DIY-Challenge-Repo/maps/course_traced_smooth.yaml"
 
 map_saver:
   ros__parameters:
