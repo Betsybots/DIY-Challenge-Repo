@@ -220,13 +220,8 @@ local_costmap:
         z_voxels: 16
         max_obstacle_height: 2.0
         mark_threshold: 0
-<<<<<<< HEAD
         observation_sources: lidar_points
         lidar_points:
-=======
-        observation_sources: scan
-        scan:
->>>>>>> arun_develop
           topic: /lidar_points
           max_obstacle_height: 2.0
           clearing: True

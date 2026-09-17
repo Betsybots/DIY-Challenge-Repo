@@ -229,25 +229,17 @@ def generate_launch_description():
     )
     
     # ── BLOCK 6: Nav2 autonomous navigation stack ─────────────────────────────
-    # Nav2 planning + control stack: MPPI controller, SmacHybrid planner,
-    # Behaviour Trees, global/local costmaps, lifecycle manager.
-    # Does NOT start AMCL or map_server — per the Navigation Design Guide,
-    # NDT-OMP provides the map→odom TF directly from the 3D point cloud map.
-    # Requires use_localization=true for /tf and /odometry/filtered inputs.
+    # Nav2 planning + control stack: map_server + planner_server (hosts
+    # global_costmap) + controller_server (hosts local_costmap, running
+    # diy_motion_planner::PurePursuitController as its FollowPath plugin) +
+    # lifecycle_manager. No bt_navigator/behavior_server/AMCL — see
+    # nav2_navigation_launch.py's own commented-out node list.
     # Publishes /cmd_vel_nav which the mux forwards when in AUTONOMOUS mode.
     #
-    # pure_pursuit_navigation.launch.py takes plain DeclareLaunchArgument
-    # values (not a Nav2-style params_file), so pure_pursuit.yaml's
-    # ros__parameters are read here and forwarded individually as
-    # launch_arguments — edit that yaml to change map_yaml, velocities, etc.
-    pure_pursuit_config = os.path.join(
-        get_package_share_directory('challenge_bringup'),
-        'config',
-        'nav2_params.yaml',
-    )
-    with open(pure_pursuit_config, 'r') as f:
-        pure_pursuit_params = yaml.safe_load(f)['/**']['ros__parameters']
-
+    # nav2_navigation_launch.py already declares sensible defaults for
+    # everything it needs (params_file defaults to this package's own
+    # nav2_params.yaml; map_yaml defaults via $DIY_MAP_YAML/$DIY_ROS_WS) —
+    # no params need to be read/forwarded here.
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -257,9 +249,6 @@ def generate_launch_description():
             )
         ),
         condition=IfCondition(autonomous),
-        launch_arguments={
-            key: str(value) for key, value in pure_pursuit_params.items()
-        }.items(),
     )
 
     # ── BLOCK 13: RViz2  (developer / debug visualisation) ─────────────────────
