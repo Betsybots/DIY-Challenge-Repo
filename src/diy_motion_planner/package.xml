@@ -26,6 +26,8 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>nav2_lifecycle_manager</exec_depend>
   <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_planner</exec_depend>
+  <exec_depend>nav2_controller</exec_depend>
   <exec_depend>planning</exec_depend>
   <exec_depend>rviz2</exec_depend>
 
@@ -34,6 +36,6 @@
 
   <export>
     <build_type>ament_cmake</build_type>
-    <nav2_core plugin="${prefix}/plugin.xml" />
+    <nav2_core plugin="${prefix}/diy_motion_planner_plugins.xml" />
   </export>
 </package>

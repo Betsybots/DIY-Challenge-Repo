@@ -1,0 +1,12 @@
+<library path="diy_motion_planner_plugin">
+  <class type="diy_motion_planner::PurePursuitController" base_class_type="nav2_core::Controller">
+    <description>
+      Custom pure-pursuit controller, converted from diy_motion_planner's
+      standalone pure_pursuit_motion_planner_node into a real
+      nav2_core::Controller plugin for controller_server's FollowPath.
+      Preserves the original heading/lookahead/rotate-in-place control law
+      and the /pd/goal_reached, /pd/next_pose, /pd/lookahead_marker topics
+      diy_waypoint_sequencer and RViz already depend on.
+    </description>
+  </class>
+</library>
