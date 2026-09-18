@@ -139,12 +139,12 @@ controller_server:
       # yaw_goal_tolerance: 0.25
     # DWB parameters
     FollowPath:
-      plugin: "diy_motion_planner::PurePursuitController"
+      plugin: "motion_controller::PurePursuitController"
       use_sim_time: false
-      base_frame: base_link
-      odom_frame: odom
+      # base_frame: base_link
+      # odom_frame: odom
       robot_clearance: 0.25
-      cmd_vel_topic: "/cmd_vel"
+      # cmd_vel_topic: "/cmd_vel"
       lookahead_distance: 0.2
       linear_velocity: 0.3
       max_angular_velocity: 1.0
@@ -215,14 +215,14 @@ local_costmap:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
         publish_voxel_map: True
-        origin_z: 0.0
+        origin_z: -0.2
         z_resolution: 0.125
         z_voxels: 16
         max_obstacle_height: 2.0
         mark_threshold: 0
-        observation_sources: lidar_points
-        lidar_points:
-          topic: /lidar_points
+        observation_sources: cloud_registered_body
+        cloud_registered_body:
+          topic: /cloud_registered_body
           max_obstacle_height: 2.0
           clearing: True
           marking: True
@@ -251,9 +251,9 @@ global_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
-        observation_sources: lidar_points
-        lidar_points:
-          topic: /lidar_points
+        observation_sources: cloud_registered_body
+        cloud_registered_body:
+          topic: /cloud_registered_body
           max_obstacle_height: 2.0
           clearing: True
           marking: True
@@ -276,7 +276,7 @@ map_server:
     use_sim_time: True
     # Overridden in launch by the "map" launch configuration or provided default value.
     # To use in yaml, remove the default "map" value in the tb3_simulation_launch.py file & provide full path to map below.
-    yaml_filename: "/home/arun/DIY-Challenge-Repo/src/mapping/maps/small_house/global_map.yaml"
+    yaml_filename: "/home/juggernauts/DIY-Challenge-Repo/src/challenge_bringup/maps/global_map.yaml"
 
 map_saver:
   ros__parameters:

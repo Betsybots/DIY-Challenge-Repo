@@ -39,9 +39,13 @@ def generate_launch_description():
     container_name_full = (namespace, '/', container_name)
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
-    map_yaml = LaunchConfiguration('map_yaml')
 
-    lifecycle_nodes = ['controller_server', 'map_server']
+
+    lifecycle_nodes = ['controller_server',
+                       'planner_server',
+                       'behavior_server',
+                       'bt_navigator',
+                       'map_server']
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -72,28 +76,6 @@ def generate_launch_description():
         'namespace',
         default_value='',
         description='Top-level namespace')
-
-    declare_map_yaml_cmd = DeclareLaunchArgument(
-        'map_yaml',
-        default_value=(
-            os.environ.get('DIY_MAP_YAML')
-            or (
-                os.path.join(
-                    os.environ.get('DIY_ROS_WS', ''),
-                    'src', 'DIY-Challenge-Repo', 'maps', 'course_traced_smooth.yaml',
-                )
-                if os.environ.get('DIY_ROS_WS') else ''
-            )
-        ),
-        description=(
-            'Absolute path to the saved map YAML file (nav2_map_server format). '
-            'Defaults to $DIY_MAP_YAML if set, else '
-            '$DIY_ROS_WS/src/DIY-Challenge-Repo/maps/course_traced_smooth.yaml '
-            '(see profiles/*.env for DIY_ROS_WS) — this changes often as course '
-            'maps evolve, so override with map_yaml:=... or export DIY_MAP_YAML '
-            'rather than editing this default.'
-        ),
-    )
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time',
@@ -133,10 +115,7 @@ def generate_launch_description():
                 executable='map_server',
                 name='map_server',
                 output='screen',
-                parameters=[{
-                    'use_sim_time': use_sim_time,
-                    # 'yaml_filename': map_yaml,
-                }],
+                parameters=[configured_params],
             ),
             Node(
                 package='nav2_controller',
@@ -157,36 +136,36 @@ def generate_launch_description():
                 # parameters=[configured_params],
                 # arguments=['--ros-args', '--log-level', log_level],
                 # remappings=remappings),
-            # Node(
-            #     package='nav2_planner',
-            #     executable='planner_server',
-            #     name='planner_server',
-            #     output='screen',
-            #     respawn=use_respawn,
-            #     respawn_delay=2.0,
-            #     parameters=[configured_params],
-            #     arguments=['--ros-args', '--log-level', log_level],
-            #     remappings=remappings),
-            # Node(
-                # package='nav2_behaviors',
-                # executable='behavior_server',
-                # name='behavior_server',
-                # output='screen',
-                # respawn=use_respawn,
-                # respawn_delay=2.0,
-                # parameters=[configured_params],
-                # arguments=['--ros-args', '--log-level', log_level],
-                # remappings=remappings),
-            # Node(
-                # package='nav2_bt_navigator',
-                # executable='bt_navigator',
-                # name='bt_navigator',
-                # output='screen',
-                # respawn=use_respawn,
-                # respawn_delay=2.0,
-                # parameters=[configured_params],
-                # arguments=['--ros-args', '--log-level', log_level],
-                # remappings=remappings),
+            Node(
+                package='nav2_planner',
+                executable='planner_server',
+                name='planner_server',
+                output='screen',
+                respawn=use_respawn,
+                respawn_delay=2.0,
+                parameters=[configured_params],
+                arguments=['--ros-args', '--log-level', log_level],
+                remappings=remappings),
+            Node(
+                package='nav2_behaviors',
+                executable='behavior_server',
+                name='behavior_server',
+                output='screen',
+                respawn=use_respawn,
+                respawn_delay=2.0,
+                parameters=[configured_params],
+                arguments=['--ros-args', '--log-level', log_level],
+                remappings=remappings),
+            Node(
+                package='nav2_bt_navigator',
+                executable='bt_navigator',
+                name='bt_navigator',
+                output='screen',
+                respawn=use_respawn,
+                respawn_delay=2.0,
+                parameters=[configured_params],
+                arguments=['--ros-args', '--log-level', log_level],
+                remappings=remappings),
             # Node(
                 # package='nav2_waypoint_follower',
                 # executable='waypoint_follower',
@@ -226,6 +205,12 @@ def generate_launch_description():
         composable_node_descriptions=[
 
             ComposableNode(
+                package='nav2_map_server',
+                plugin='nav2_map_server::MapServer',
+                name='map_server',
+                parameters=[configured_params]),
+
+            ComposableNode(
                 package='nav2_controller',
                 plugin='nav2_controller::ControllerServer',
                 name='controller_server',
@@ -237,24 +222,24 @@ def generate_launch_description():
                 # name='smoother_server',
                 # parameters=[configured_params],
                 # remappings=remappings),
-            # ComposableNode(
-            #    package='nav2_planner',
-            #    plugin='nav2_planner::PlannerServer',
-            #    name='planner_server',
-            #    parameters=[configured_params],
-            #    remappings=remappings),
-            # ComposableNode(
-                # package='nav2_behaviors',
-                # plugin='behavior_server::BehaviorServer',
-                # name='behavior_server',
-                # parameters=[configured_params],
-                # remappings=remappings),
-            # ComposableNode(
-                # package='nav2_bt_navigator',
-                # plugin='nav2_bt_navigator::BtNavigator',
-                # name='bt_navigator',
-                # parameters=[configured_params],
-                # remappings=remappings),
+            ComposableNode(
+               package='nav2_planner',
+               plugin='nav2_planner::PlannerServer',
+               name='planner_server',
+               parameters=[configured_params],
+               remappings=remappings),
+            ComposableNode(
+                package='nav2_behaviors',
+                plugin='behavior_server::BehaviorServer',
+                name='behavior_server',
+                parameters=[configured_params],
+                remappings=remappings),
+            ComposableNode(
+                package='nav2_bt_navigator',
+                plugin='nav2_bt_navigator::BtNavigator',
+                name='bt_navigator',
+                parameters=[configured_params],
+                remappings=remappings),
             # ComposableNode(
                 # package='nav2_waypoint_follower',
                 # plugin='nav2_waypoint_follower::WaypointFollower',
