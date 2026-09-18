@@ -48,6 +48,7 @@ def generate_launch_description():
                     'wait_for_green_light': LaunchConfiguration('wait_for_green_light'),
                     'start_delay_s': LaunchConfiguration('start_delay_s'),
                     'loop': LaunchConfiguration('loop'),
+                    'loop_count': LaunchConfiguration('loop_count'),
                 }],
             )
         ]
@@ -82,6 +83,17 @@ def generate_launch_description():
             'loop',
             default_value='false',
             description='Wrap back to the first waypoint after the last one is reached.',
+        ),
+        DeclareLaunchArgument(
+            'loop_count',
+            default_value='-1',
+            description=(
+                '-1 (default): if loop:=true, loop forever, same as before. '
+                'N > 0: run the whole waypoint circuit N times then stop '
+                '(only meaningful together with loop:=true; ignored '
+                'otherwise). Leave at -1 to fall back to the waypoints '
+                'YAML\'s own loop_count: key instead.'
+            ),
         ),
         OpaqueFunction(function=launch_setup),
     ])

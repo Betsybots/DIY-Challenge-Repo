@@ -11,6 +11,11 @@
 
 frame_id: "map"   # must match nav2_map_server's published /map frame
 loop: false        # true = wrap back to the first waypoint after the last
+# loop_count: 3    # optional: only used when loop is true -- caps the
+                   # total number of full circuits before stopping instead
+                   # of looping forever. Omit (or leave unset) for
+                   # unlimited looping. Can also be set via the
+                   # loop_count launch argument instead of in this file.
 
 waypoints:
   - label: "wp1"

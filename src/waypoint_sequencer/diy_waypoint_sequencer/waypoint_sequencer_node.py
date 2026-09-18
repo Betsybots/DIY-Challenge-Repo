@@ -86,6 +86,7 @@ class WaypointSequencerNode(Node):
         self.declare_parameter('wait_for_green_light', True)
         self.declare_parameter('start_delay_s', 1.0)
         self.declare_parameter('loop', False)
+        self.declare_parameter('loop_count', -1)
 
         waypoints_file = self.get_parameter('waypoints_file').value
         self.goal_frame_id = self.get_parameter('goal_frame_id').value
@@ -97,6 +98,14 @@ class WaypointSequencerNode(Node):
         # argument is left at its ROS-parameter default (False) AND the
         # YAML explicitly sets loop: true — see _load_waypoints below.
         self._loop_override = bool(self.get_parameter('loop').value)
+        # -1 (default) = loop forever if loop:true, same as always. A
+        # positive value caps the total number of full passes through the
+        # waypoint list before stopping (e.g. 3 = run the whole circuit 3
+        # times then idle, instead of forever). Only meaningful when
+        # loop:true — ignored (single pass) when loop:false regardless.
+        # -1 on the launch arg means "not overridden here" -- fall back to
+        # the YAML's own loop_count: key, same pattern as loop above.
+        self._loop_count_override = int(self.get_parameter('loop_count').value)
 
         if not waypoints_file:
             self.get_logger().fatal(
@@ -105,15 +114,26 @@ class WaypointSequencerNode(Node):
             )
             raise SystemExit(1)
 
-        self.waypoints, self.loop = self._load_waypoints(waypoints_file)
+        self.waypoints, self.loop, self.loop_count = self._load_waypoints(waypoints_file)
         if not self.waypoints:
             self.get_logger().fatal(
                 f'No waypoints loaded from {waypoints_file} — check the file.'
             )
             raise SystemExit(1)
 
+        if self.loop_count > 0:
+            self.get_logger().info(
+                f'Looping enabled, capped at {self.loop_count} lap(s).'
+                if self.loop else
+                'loop_count is set but loop is false — ignored (single pass).'
+            )
+        elif self.loop:
+            self.get_logger().info('Looping enabled, unlimited laps.')
+
         self._index = 0
         self._started = False
+        self._laps_completed = 0
+        self._finished = False
 
         self.goal_pub = self.create_publisher(PoseStamped, '/goal_pose', 10)
 
@@ -144,7 +164,7 @@ class WaypointSequencerNode(Node):
                 data = yaml.safe_load(f) or {}
         except (OSError, yaml.YAMLError) as exc:
             self.get_logger().fatal(f'Failed to read {path}: {exc}')
-            return [], False
+            return [], False, -1
 
         raw_waypoints = data.get('waypoints', [])
         waypoints = []
@@ -164,7 +184,14 @@ class WaypointSequencerNode(Node):
         if 'frame_id' in data:
             self.goal_frame_id = data['frame_id']
         loop = self._loop_override or bool(data.get('loop', False))
-        return waypoints, loop
+        # -1 on the launch arg means "use the YAML's own loop_count: key
+        # instead" (same override precedence pattern as loop above);
+        # anything else on the launch arg wins outright.
+        if self._loop_count_override != -1:
+            loop_count = self._loop_count_override
+        else:
+            loop_count = int(data.get('loop_count', -1))
+        return waypoints, loop, loop_count
 
     # ── Start triggers ───────────────────────────────────────────────────
 
@@ -182,14 +209,29 @@ class WaypointSequencerNode(Node):
     # ── Sequencing ───────────────────────────────────────────────────────
 
     def _goal_reached_cb(self, msg: Bool):
-        if not msg.data or not self._started:
+        if not msg.data or not self._started or self._finished:
             return
         self._index += 1
         if self._index >= len(self.waypoints):
             if self.loop:
-                self.get_logger().info('Course complete — looping back to waypoint 0.')
+                self._laps_completed += 1
+                if self.loop_count > 0 and self._laps_completed >= self.loop_count:
+                    self._finished = True
+                    self.get_logger().info(
+                        f'Completed {self._laps_completed}/{self.loop_count} '
+                        'lap(s) — sequence complete, idling (no more '
+                        '/goal_pose messages will be published).'
+                    )
+                    return
+                lap_desc = (f'{self._laps_completed}/{self.loop_count}'
+                            if self.loop_count > 0
+                            else f'{self._laps_completed} (unlimited)')
+                self.get_logger().info(
+                    f'Lap {lap_desc} complete — looping back to waypoint 0.'
+                )
                 self._index = 0
             else:
+                self._finished = True
                 self.get_logger().info(
                     'All waypoints reached. Sequence complete — idling '
                     '(no more /goal_pose messages will be published).'

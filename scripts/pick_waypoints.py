@@ -28,6 +28,19 @@ HOW TO USE
       --output maps/test_waypoints.yaml \\
       --overlay maps/test_waypoints_preview.png
 
+By default, once you close the picker window, the map frame's own origin
+(0.0, 0.0) is auto-appended as the FINAL waypoint — PROVIDED that point
+actually lands in free space on this map (checked automatically; skipped
+if it doesn't, or if the origin is outside the image entirely). This
+closes the loop back to wherever the robot physically starts (which
+matches map_localizer's own default initial pose exactly, so as long as
+the robot is physically placed at the map's origin before pressing green
+light, no initial_x/y/yaw override is needed at all). It's added LAST,
+not first, because commanding the robot to "navigate to" its own current
+starting position as wp1 would be a trivial no-op — a meaningful finish
+line, not a meaningful first goal. Pass --no-seed-origin to disable this
+and get exactly the points you click.
+
 Click points on the map image IN THE ORDER the robot should visit them.
 Each click is validated against the map's own occupancy data immediately
 (a click on an occupied/unknown pixel prints a warning right away — fix it
@@ -132,6 +145,17 @@ def px_to_world(px, py, meta, img_h):
     return x, y
 
 
+def world_to_px(x, y, meta, img_h):
+    """Inverse of px_to_world() — same origin/resolution/row-flip
+    convention, used to seed the map-frame origin (0,0) as a pixel to
+    occupancy-check before auto-adding it as wp1."""
+    ox, oy = meta["origin"][0], meta["origin"][1]
+    res = meta["resolution"]
+    px = (x - ox) / res
+    py = img_h - 1 - (y - oy) / res
+    return px, py
+
+
 def occupancy_at_px(pgm, px, py):
     """Nearest-pixel lookup of the raw PGM value at a clicked point."""
     row = int(round(py))
@@ -175,10 +199,22 @@ def compute_headings(points_world, loop=False):
 
 # ─── Interactive picker ──────────────────────────────────────────────────────
 
-def interactive_pick(meta, pgm):
+def interactive_pick(meta, pgm, seed_origin=True):
     """Left-click to add a waypoint (in visit order); 'u' to undo the last
     one. Close the window when done. Prints an immediate free-space
-    warning for any click landing on an occupied/unknown pixel."""
+    warning for any click landing on an occupied/unknown pixel.
+
+    seed_origin: if True (default), auto-appends the map frame's own
+    origin (0.0, 0.0) as the FINAL waypoint (after everything you click)
+    — but ONLY if that point actually falls inside free space on this
+    map; otherwise it's skipped and you get exactly the points you
+    clicked. This closes the loop back to wherever the robot physically
+    starts (map_localizer's own default initial_x/y/yaw seed is also
+    (0,0,0) — see print_initial_pose_hint), which is the natural finish
+    line for a course, not a meaningful FIRST goal (commanding the robot
+    to "navigate to" its own current position is a trivial no-op). Returns
+    whether the origin was actually appended.
+    """
     fig, ax = plt.subplots(figsize=(9, 9))
     ax.imshow(pgm, cmap="gray", origin="upper", vmin=0, vmax=254)
     ax.set_title(
@@ -233,7 +269,27 @@ def interactive_pick(meta, pgm):
 
     img_h = pgm.shape[0]
     world = [px_to_world(px, py, meta, img_h) for px, py in px_list]
-    return world
+
+    appended_origin = False
+    if seed_origin:
+        ox_px, oy_px = world_to_px(0.0, 0.0, meta, img_h)
+        if 0 <= ox_px <= pgm.shape[1] - 1 and 0 <= oy_px <= pgm.shape[0] - 1:
+            value = occupancy_at_px(pgm, ox_px, oy_px)
+            label, is_bad = describe_occupancy(value)
+            if not is_bad:
+                world.append((0.0, 0.0))
+                appended_origin = True
+                print(f"\n  [{len(world)}] map origin (0,0) auto-appended as "
+                      "the FINAL waypoint (closes the loop back to start) "
+                      f"-- map value = {value} ({label}).")
+            else:
+                print(f"\n  NOTE: map origin (0,0) is {label} on this map -- "
+                      "NOT auto-appending it as the final waypoint.")
+        else:
+            print("\n  NOTE: map origin (0,0) falls outside this map's image "
+                  "bounds -- NOT auto-appending it as the final waypoint.")
+
+    return world, appended_origin
 
 
 # ─── Output ──────────────────────────────────────────────────────────────────
@@ -287,20 +343,33 @@ def draw_overlay(pgm, meta, points_world, yaws, out_path):
     print(f"Saved preview overlay → {out_path}")
 
 
-def print_initial_pose_hint(points_world, yaws):
+def print_initial_pose_hint(points_world, yaws, appended_origin=False):
     """map_localizer's initial_x/initial_y/initial_yaw (see
     localization/scripts/trigger_map_relocalize.py) default to
     (0.0, 0.0, 0.0) -- i.e. they assume the robot physically starts at the
-    MAP FRAME's own origin, not at wherever wp1 happens to be. If you
-    actually place the robot at wp1's real-world position before pressing
-    green light, map_localizer's VGICP relocalization needs to be told
-    that's the real starting pose -- otherwise it has to converge from
-    however far (0,0) is from wp1, which can be large enough to fail or
-    converge to the wrong local minimum. Print the exact override so
-    nobody has to copy these numbers by hand."""
+    MAP FRAME's own origin. This is entirely independent of the waypoint
+    ORDER in the output file (the robot's physical starting pose at
+    power-on/relocalize time is whatever it actually is, regardless of
+    which waypoint comes first or last in waypoints.yaml).
+
+    appended_origin: True if interactive_pick() confirmed (0,0) is free
+    on this map and appended it as the final waypoint -- in that case the
+    robot's real start position already matches map_localizer's default
+    seed exactly, so no override is needed. If False (origin wasn't free,
+    or --no-seed-origin was used), fall back to the older behavior: warn
+    that wp1's position needs to be told to map_localizer explicitly if
+    the robot will actually be physically placed there before start."""
+    print()
+    if appended_origin:
+        print("Robot's physical start == the map's own origin (0,0,0), "
+              "which is exactly map_localizer's own default initial_x/y/"
+              "yaw, and has been appended as the FINAL waypoint (closing "
+              "the loop back to start/finish) -- as long as the robot is "
+              "physically placed at the map's origin before pressing "
+              "green light, NO initial pose override is needed.")
+        return
     x0, y0 = points_world[0]
     yaw0 = yaws[0]
-    print()
     print("If the robot physically starts at wp1's position, tell "
           "map_localizer's relocalization the truth (its own initial_x/y/"
           "yaw default to 0.0/0.0/0.0, which assumes the robot starts at "
@@ -337,6 +406,10 @@ def parse_args():
     p.add_argument("--uniform-yaw", type=float, default=None,
                     help="Skip auto-heading and set every waypoint's yaw to "
                          "this fixed value (radians) instead")
+    p.add_argument("--no-seed-origin", action="store_false", dest="seed_origin",
+                    default=True,
+                    help="Don't auto-append the map origin (0,0,0) as the "
+                         "final waypoint -- output exactly the points you click")
     return p.parse_args()
 
 
@@ -346,12 +419,19 @@ def main():
     meta, pgm_path = load_map_yaml(args.map)
     pgm = load_pgm(pgm_path)
 
-    points_world = interactive_pick(meta, pgm)
+    points_world, appended_origin = interactive_pick(meta, pgm,
+                                                      seed_origin=args.seed_origin)
 
     if args.uniform_yaw is not None:
         yaws = [args.uniform_yaw] * len(points_world)
     else:
         yaws = compute_headings(points_world, loop=args.loop)
+        # No special-casing needed for the appended origin here -- it's
+        # the LAST point now, so compute_headings' existing last-point
+        # logic already does the right thing: with --loop it bears back
+        # toward wp1 (the real next stop after closing the loop), and
+        # without --loop it just keeps the arriving heading, same as any
+        # other waypoint.
 
     write_waypoints_yaml(args.output, points_world, yaws, args.loop,
                           args.label_prefix)
@@ -359,7 +439,7 @@ def main():
     if args.overlay:
         draw_overlay(pgm, meta, points_world, yaws, args.overlay)
 
-    print_initial_pose_hint(points_world, yaws)
+    print_initial_pose_hint(points_world, yaws, appended_origin=appended_origin)
 
 
 if __name__ == "__main__":

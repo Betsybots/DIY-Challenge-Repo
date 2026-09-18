@@ -291,7 +291,14 @@ def smooth_pipeline(orig, occupied_thresh, keep_walls, min_area,
     for a, i in areas:
         print(f"  comp {i:3d}: {a:7d} px  {'<-- KEPT' if i in kept_ids else 'removed'}")
 
+    # Track which of the kept components is the outer wall (largest by
+    # area) so its smoothed contour can also be drawn into its own mask —
+    # needed by _flood_and_assemble to tell the real navigable ring apart
+    # from an enclosed island's solid interior by adjacency, not area.
+    outer_id = max(((a, i) for a, i in areas if i in kept_ids), default=(0, None))[1]
+
     canvas = np.zeros(big.shape, dtype=np.uint8)
+    outer_wall_canvas = np.zeros(big.shape, dtype=np.uint8)
     for _, comp_id in areas:
         if comp_id not in kept_ids:
             continue
@@ -322,8 +329,12 @@ def smooth_pipeline(orig, occupied_thresh, keep_walls, min_area,
             smooth_pts = np.stack([xs, ys], axis=1).astype(np.int32).reshape(-1, 1, 2)
             cv2.polylines(canvas, [smooth_pts], isClosed=True,
                           color=255, thickness=wall_thickness)
+            if comp_id == outer_id:
+                cv2.polylines(outer_wall_canvas, [smooth_pts], isClosed=True,
+                              color=255, thickness=wall_thickness)
 
-    final = _flood_and_assemble(canvas, isolate_largest_free=isolate_largest_free)
+    final = _flood_and_assemble(canvas, isolate_largest_free=isolate_largest_free,
+                                outer_wall_mask=outer_wall_canvas)
 
     # Downsample to 2x original (0.025 m/px)
     OUT = SCALE // 2
@@ -365,13 +376,20 @@ def simple_pipeline(orig, occupied_thresh, keep_walls, min_area, close_kernel,
         if i in kept_ids:
             wall_mask[labels == i] = 1
 
+    # Largest kept component is treated as the outer wall — see
+    # _flood_and_assemble's outer_wall_mask docstring for why this is
+    # used for adjacency instead of picking the largest free blob by area.
+    outer_id = max(((a, i) for a, i in areas if i in kept_ids), default=(0, None))[1]
+    outer_wall_mask = np.where(labels == outer_id, 255, 0).astype(np.uint8)
+
     canvas = np.where(wall_mask == 1, 255, 0).astype(np.uint8)
-    return _flood_and_assemble(canvas, isolate_largest_free=isolate_largest_free)
+    return _flood_and_assemble(canvas, isolate_largest_free=isolate_largest_free,
+                               outer_wall_mask=outer_wall_mask)
 
 
 # ─── Shared: flood-fill exterior + assemble PGM ───────────────────────────────
 
-def _flood_and_assemble(canvas, isolate_largest_free=False):
+def _flood_and_assemble(canvas, isolate_largest_free=False, outer_wall_mask=None):
     """
     canvas: 0=free, 255=wall (pre-flood-fill working representation).
 
@@ -383,17 +401,32 @@ def _flood_and_assemble(canvas, isolate_largest_free=False):
     surrounded by a wall.
 
     isolate_largest_free: if True, ALSO finds every remaining connected
-    free-space blob after the border flood-fill and keeps only the
-    LARGEST one as actually free — any other enclosed free blob (e.g. the
-    solid interior of a closed inner ring/island, which is walled off and
-    genuinely unreachable, not a second real room) is marked
-    unknown/unavailable too, the same as the exterior. Off by default
-    since it would be WRONG for a map with multiple real, separately
-    navigable rooms/areas (this can't tell "unreachable island" apart
-    from "a second real room" — it just assumes the single largest
-    free-space blob is the only navigable one). Only enable this for maps
-    that are known to be a single closed loop/corridor with no other
-    intentionally-separate navigable area.
+    free-space blob after the border flood-fill and keeps only the one
+    that is actually reachable from the outer wall as free — any other
+    enclosed free blob (e.g. the solid interior of a closed inner
+    ring/island, which is walled off and genuinely unreachable, not a
+    second real room) is marked unknown/unavailable too, the same as the
+    exterior.
+
+    outer_wall_mask: a mask (same shape as canvas) containing ONLY the
+    outermost wall's own pixels (255 there, 0 elsewhere), as drawn by the
+    caller. When given, the "which free blob is real" question is
+    answered by adjacency — whichever free blob directly touches the
+    inside of the outer wall is the reachable one, regardless of its
+    pixel area. This fixes a real bug the old "keep the LARGEST free
+    blob" heuristic had: a thin navigable ring around a big central
+    island has FEWER free pixels than the island's own solid interior,
+    so picking by area picked the wrong (unreachable) blob as "free" and
+    grayed out the real corridor instead. Adjacency to the outer wall is
+    correct regardless of which blob happens to be bigger.
+
+    If outer_wall_mask is None (caller didn't track which component was
+    the outer wall), falls back to the old largest-area heuristic. Off by
+    default since it would be WRONG for a map with multiple real,
+    separately navigable rooms/areas that don't share one connected outer
+    wall — those would incorrectly get grayed out. Only enable this for
+    maps that are known to be a single outer boundary with no other
+    intentionally-separate navigable area outside it.
     """
     h, w = canvas.shape
     ff = np.zeros((h+2, w+2), np.uint8)
@@ -408,13 +441,29 @@ def _flood_and_assemble(canvas, isolate_largest_free=False):
         free_mask = (canvas == 0).astype(np.uint8)
         n, labels, stats, _ = cv2.connectedComponentsWithStats(free_mask, connectivity=8)
         if n > 1:
-            areas = [(stats[i, cv2.CC_STAT_AREA], i) for i in range(1, n)]
-            largest_id = max(areas)[1]
-            for area, i in areas:
-                if i != largest_id:
+            if outer_wall_mask is not None and np.any(outer_wall_mask):
+                # Dilate the outer wall a few px so it overlaps the free
+                # blob(s) directly touching its inner face, then read off
+                # which label(s) that overlap hits.
+                k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+                dilated_outer = cv2.dilate((outer_wall_mask > 0).astype(np.uint8), k)
+                touching = np.unique(labels[(dilated_outer > 0) & (free_mask > 0)])
+                reachable_ids = {i for i in touching.tolist() if i != 0}
+                if not reachable_ids:
+                    # Shouldn't normally happen (outer wall always borders
+                    # some free blob), but don't silently gray everything
+                    # out if it does — fall back to largest-area.
+                    areas = [(stats[i, cv2.CC_STAT_AREA], i) for i in range(1, n)]
+                    reachable_ids = {max(areas)[1]}
+            else:
+                areas = [(stats[i, cv2.CC_STAT_AREA], i) for i in range(1, n)]
+                reachable_ids = {max(areas)[1]}
+            for i in range(1, n):
+                if i not in reachable_ids:
+                    area = stats[i, cv2.CC_STAT_AREA]
                     canvas[labels == i] = 128
                     print(f"  Enclosed free blob {i}: {area} px marked unavailable "
-                          f"(not the largest connected free region)")
+                          f"(not reachable from the outer wall)")
 
     final = np.full(canvas.shape, UNKNOWN_VALUE, dtype=np.uint8)
     final[canvas == 255] = WALL_VALUE
