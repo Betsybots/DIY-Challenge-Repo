@@ -45,6 +45,7 @@ def generate_launch_description():
                        'planner_server',
                        'behavior_server',
                        'bt_navigator',
+                       'velocity_smoother',
                        'map_server']
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
@@ -155,7 +156,7 @@ def generate_launch_description():
                 respawn_delay=2.0,
                 parameters=[configured_params],
                 arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings),
+                remappings=remappings + [('cmd_vel', 'cmd_vel_nav')]),
             Node(
                 package='nav2_bt_navigator',
                 executable='bt_navigator',
@@ -176,17 +177,17 @@ def generate_launch_description():
                 # parameters=[configured_params],
                 # arguments=['--ros-args', '--log-level', log_level],
                 # remappings=remappings),
-            # Node(
-                # package='nav2_velocity_smoother',
-                # executable='velocity_smoother',
-                # name='velocity_smoother',
-                # output='screen',
-                # respawn=use_respawn,
-                # respawn_delay=2.0,
-                # parameters=[configured_params],
-                # arguments=['--ros-args', '--log-level', log_level],
-                # remappings=remappings +
-                        # [('cmd_vel', 'cmd_vel_nav'), ('cmd_vel_smoothed', 'cmd_vel')]),
+            Node(
+                package='nav2_velocity_smoother',
+                executable='velocity_smoother',
+                name='velocity_smoother',
+                output='screen',
+                respawn=use_respawn,
+                respawn_delay=2.0,
+                parameters=[configured_params],
+                arguments=['--ros-args', '--log-level', log_level],
+                remappings=remappings +
+                        [('cmd_vel', 'cmd_vel_nav'), ('cmd_vel_smoothed', 'cmd_vel')]),
             Node(
                 package='nav2_lifecycle_manager',
                 executable='lifecycle_manager',
@@ -223,17 +224,17 @@ def generate_launch_description():
                 # parameters=[configured_params],
                 # remappings=remappings),
             ComposableNode(
-               package='nav2_planner',
-               plugin='nav2_planner::PlannerServer',
-               name='planner_server',
-               parameters=[configured_params],
-               remappings=remappings),
+                package='nav2_planner',
+                plugin='nav2_planner::PlannerServer',
+                name='planner_server',
+                parameters=[configured_params],
+                remappings=remappings),
             ComposableNode(
                 package='nav2_behaviors',
                 plugin='behavior_server::BehaviorServer',
                 name='behavior_server',
                 parameters=[configured_params],
-                remappings=remappings),
+                remappings=remappings + [('cmd_vel', 'cmd_vel_nav')]),
             ComposableNode(
                 package='nav2_bt_navigator',
                 plugin='nav2_bt_navigator::BtNavigator',
@@ -246,13 +247,13 @@ def generate_launch_description():
                 # name='waypoint_follower',
                 # parameters=[configured_params],
                 # remappings=remappings),
-            # ComposableNode(
-                # package='nav2_velocity_smoother',
-                # plugin='nav2_velocity_smoother::VelocitySmoother',
-                # name='velocity_smoother',
-                # parameters=[configured_params],
-                # remappings=remappings +
-                        #    [('cmd_vel', 'cmd_vel_nav'), ('cmd_vel_smoothed', 'cmd_vel')]),
+            ComposableNode(
+                package='nav2_velocity_smoother',
+                plugin='nav2_velocity_smoother::VelocitySmoother',
+                name='velocity_smoother',
+                parameters=[configured_params],
+                remappings=remappings +
+                           [('cmd_vel', 'cmd_vel_nav'), ('cmd_vel_smoothed', 'cmd_vel')]),
             ComposableNode(
                 package='nav2_lifecycle_manager',
                 plugin='nav2_lifecycle_manager::LifecycleManager',
