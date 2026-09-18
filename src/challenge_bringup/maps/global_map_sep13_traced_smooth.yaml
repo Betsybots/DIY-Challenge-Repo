@@ -1,0 +1,6 @@
+image: global_map_sep13_traced_smooth.pgm
+resolution: 0.025
+origin: [-5.5, -6.3, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196

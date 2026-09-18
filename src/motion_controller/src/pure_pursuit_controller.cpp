@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include "motion_controller/pure_pursuit_controller.hpp"
@@ -309,7 +310,7 @@ geometry_msgs::msg::TwistStamped PurePursuitController::computeVelocityCommands(
   publishLookaheadMarker(target);
 
   if (isPathToTargetBlocked(robot_x, robot_y, target)) {
-    throw nav2_core::ControllerException(
+    throw std::runtime_error(
             "Pure pursuit lookahead segment is blocked in the local costmap");
   }
 

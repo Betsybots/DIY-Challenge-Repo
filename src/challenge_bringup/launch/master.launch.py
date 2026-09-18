@@ -82,7 +82,7 @@ def generate_launch_description():
     # Starts after the lidar/IMU producers have come online.
     slam_group = GroupAction(
         actions=[
-            SetRemap(src='/Odometry', dst='/odom'),
+            # SetRemap(src='/Odometry', dst='/odom'),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
@@ -175,10 +175,10 @@ def generate_launch_description():
         declare_autonomous,
         declare_use_rviz,
         ## 
-        robot_description_launch,
+        # robot_description_launch,
         hesai_launch,
         delayed_fast_lio,
         # delayed_hba_map,
-        delayed_nav2,
-        rviz_node,
+        # delayed_nav2,
+        # rviz_node,
     ])
