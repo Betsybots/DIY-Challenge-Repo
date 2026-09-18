@@ -10,6 +10,7 @@
 
 #include "diy_motion_planner/pure_pursuit_controller.hpp"
 
+#include "nav2_costmap_2d/cost_values.hpp"
 #include "nav2_core/exceptions.hpp"
 #include "nav2_util/node_utils.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
@@ -41,6 +42,8 @@ void PurePursuitController::configure(
   declare_parameter_if_not_declared(
     node, plugin_name_ + ".max_angular_velocity", rclcpp::ParameterValue(1.0));
   declare_parameter_if_not_declared(
+    node, plugin_name_ + ".minimum_angular_velocity", rclcpp::ParameterValue(0.12));
+  declare_parameter_if_not_declared(
     node, plugin_name_ + ".rotate_in_place_threshold", rclcpp::ParameterValue(1.0));
   declare_parameter_if_not_declared(
     node, plugin_name_ + ".minimum_turning_velocity", rclcpp::ParameterValue(0.05));
@@ -48,13 +51,30 @@ void PurePursuitController::configure(
     node, plugin_name_ + ".goal_tolerance", rclcpp::ParameterValue(0.15));
   declare_parameter_if_not_declared(
     node, plugin_name_ + ".transform_tolerance", rclcpp::ParameterValue(0.1));
+  declare_parameter_if_not_declared(
+    node, plugin_name_ + ".collision_check_enabled", rclcpp::ParameterValue(true));
+  declare_parameter_if_not_declared(
+    node, plugin_name_ + ".occupied_threshold", rclcpp::ParameterValue(253));
+  declare_parameter_if_not_declared(
+    node, plugin_name_ + ".unknown_is_occupied", rclcpp::ParameterValue(true));
+  declare_parameter_if_not_declared(
+    node, plugin_name_ + ".collision_check_resolution", rclcpp::ParameterValue(0.05));
 
   node->get_parameter(plugin_name_ + ".lookahead_distance", lookahead_distance_);
   node->get_parameter(plugin_name_ + ".linear_velocity", linear_velocity_);
   node->get_parameter(plugin_name_ + ".max_angular_velocity", max_angular_velocity_);
+  node->get_parameter(plugin_name_ + ".minimum_angular_velocity", minimum_angular_velocity_);
   node->get_parameter(plugin_name_ + ".rotate_in_place_threshold", rotate_in_place_threshold_);
   node->get_parameter(plugin_name_ + ".minimum_turning_velocity", minimum_turning_velocity_);
   node->get_parameter(plugin_name_ + ".goal_tolerance", goal_tolerance_);
+  node->get_parameter(plugin_name_ + ".collision_check_enabled", collision_check_enabled_);
+  node->get_parameter(plugin_name_ + ".occupied_threshold", occupied_threshold_);
+  node->get_parameter(plugin_name_ + ".unknown_is_occupied", unknown_is_occupied_);
+  node->get_parameter(plugin_name_ + ".collision_check_resolution", collision_check_resolution_);
+
+  if (collision_check_resolution_ <= 0.0) {
+    collision_check_resolution_ = 0.05;
+  }
 
   double transform_tolerance;
   node->get_parameter(plugin_name_ + ".transform_tolerance", transform_tolerance);
@@ -207,6 +227,49 @@ void PurePursuitController::publishLookaheadMarker(const geometry_msgs::msg::Pos
   lookahead_marker_pub_->publish(marker);
 }
 
+bool PurePursuitController::isPathToTargetBlocked(
+  double robot_x,
+  double robot_y,
+  const geometry_msgs::msg::PoseStamped & target) const
+{
+  if (!collision_check_enabled_ || !costmap_ros_) {
+    return false;
+  }
+
+  const auto * costmap = costmap_ros_->getCostmap();
+  if (!costmap) {
+    return false;
+  }
+
+  const double dx = target.pose.position.x - robot_x;
+  const double dy = target.pose.position.y - robot_y;
+  const double distance = std::hypot(dx, dy);
+  const int samples = std::max(1, static_cast<int>(std::ceil(distance / collision_check_resolution_)));
+
+  for (int sample = 1; sample <= samples; ++sample) {
+    const double ratio = static_cast<double>(sample) / samples;
+    const double x = robot_x + ratio * dx;
+    const double y = robot_y + ratio * dy;
+
+    unsigned int mx = 0;
+    unsigned int my = 0;
+    if (!costmap->worldToMap(x, y, mx, my)) {
+      return true;
+    }
+
+    const unsigned char cost = costmap->getCost(mx, my);
+    if (cost == nav2_costmap_2d::NO_INFORMATION) {
+      if (unknown_is_occupied_) {
+        return true;
+      }
+    } else if (cost >= occupied_threshold_) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 geometry_msgs::msg::TwistStamped PurePursuitController::computeVelocityCommands(
   const geometry_msgs::msg::PoseStamped & pose,
   const geometry_msgs::msg::Twist & velocity,
@@ -245,6 +308,11 @@ geometry_msgs::msg::TwistStamped PurePursuitController::computeVelocityCommands(
   next_pose_pub_->publish(target);
   publishLookaheadMarker(target);
 
+  if (isPathToTargetBlocked(robot_x, robot_y, target)) {
+    throw nav2_core::ControllerException(
+            "Pure pursuit lookahead segment is blocked in the local costmap");
+  }
+
   const auto & rotation = pose.pose.orientation;
   const double robot_yaw = std::atan2(
     2.0 * (rotation.w * rotation.z + rotation.x * rotation.y),
@@ -268,8 +336,17 @@ geometry_msgs::msg::TwistStamped PurePursuitController::computeVelocityCommands(
     1.0 - std::abs(heading_error) / M_PI);
   const double linear_velocity = linear_velocity_ * turning_scale;
 
-  const double angular_velocity = std::clamp(
+  double angular_velocity = std::clamp(
     linear_velocity * curvature, -max_angular_velocity_, max_angular_velocity_);
+
+  const double effective_minimum_angular_velocity = std::clamp(
+    minimum_angular_velocity_, 0.0, max_angular_velocity_);
+
+  if (std::abs(angular_velocity) > 1e-6 &&
+    std::abs(angular_velocity) < effective_minimum_angular_velocity)
+  {
+    angular_velocity = std::copysign(effective_minimum_angular_velocity, angular_velocity);
+  }
 
   cmd_vel.twist.linear.x = linear_velocity;
   cmd_vel.twist.angular.z = angular_velocity;

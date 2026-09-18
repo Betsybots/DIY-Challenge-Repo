@@ -35,6 +35,7 @@ public:
     lookahead_distance_ = declare_parameter("lookahead_distance", 0.2);
     linear_velocity_ = declare_parameter("linear_velocity", 0.3);
     max_angular_velocity_ = declare_parameter("max_angular_velocity", 1.0);
+    minimum_angular_velocity_ = declare_parameter("minimum_angular_velocity", 0.12);
     rotate_in_place_threshold_ = declare_parameter("rotate_in_place_threshold", 1.0);
     minimum_turning_velocity_ = declare_parameter("minimum_turning_velocity", 0.05);
     goal_tolerance_ = declare_parameter("goal_tolerance", 0.15);
@@ -134,8 +135,17 @@ private:
       1.0 - std::abs(heading_error) / M_PI);
     const double linear_velocity = linear_velocity_ * turning_scale;
 
-    const double angular_velocity = std::clamp(
+    double angular_velocity = std::clamp(
       linear_velocity * curvature, -max_angular_velocity_, max_angular_velocity_);
+
+    const double effective_minimum_angular_velocity = std::clamp(
+      minimum_angular_velocity_, 0.0, max_angular_velocity_);
+
+    if (std::abs(angular_velocity) > 1e-6 &&
+      std::abs(angular_velocity) < effective_minimum_angular_velocity)
+    {
+      angular_velocity = std::copysign(effective_minimum_angular_velocity, angular_velocity);
+    }
 
     geometry_msgs::msg::Twist command;
     command.linear.x = linear_velocity;
@@ -239,6 +249,7 @@ private:
   double lookahead_distance_;
   double linear_velocity_;
   double max_angular_velocity_;
+  double minimum_angular_velocity_;
   double rotate_in_place_threshold_;
   double minimum_turning_velocity_;
   double goal_tolerance_;

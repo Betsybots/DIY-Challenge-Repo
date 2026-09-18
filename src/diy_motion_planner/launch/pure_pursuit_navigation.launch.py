@@ -23,6 +23,7 @@ def generate_launch_description():
     lookahead_distance = LaunchConfiguration('lookahead_distance')
     linear_velocity = LaunchConfiguration('linear_velocity')
     max_angular_velocity = LaunchConfiguration('max_angular_velocity')
+    minimum_angular_velocity = LaunchConfiguration('minimum_angular_velocity')
     rotate_in_place_threshold = LaunchConfiguration('rotate_in_place_threshold')
     minimum_turning_velocity = LaunchConfiguration('minimum_turning_velocity')
     goal_tolerance = LaunchConfiguration('goal_tolerance')
@@ -94,6 +95,10 @@ def generate_launch_description():
             description='Maximum commanded angular velocity in rad/s.',
         ),
         DeclareLaunchArgument(
+            'minimum_angular_velocity', default_value='0.12',
+            description='Minimum nonzero commanded angular velocity in rad/s.',
+        ),
+        DeclareLaunchArgument(
             'rotate_in_place_threshold', default_value='1.0',
             description='Heading-error reference for slowing down in radians.',
         ),
@@ -162,6 +167,18 @@ def generate_launch_description():
             executable='pure_pursuit_motion_planner_node',
             name='pure_pursuit_motion_planner_node',
             output='screen',
-            parameters=[params_file],
+            parameters=[params_file, {
+                'use_sim_time': use_sim_time,
+                'base_frame': base_frame,
+                'odom_frame': odom_frame,
+                'cmd_vel_topic': cmd_vel_topic,
+                'lookahead_distance': lookahead_distance,
+                'linear_velocity': linear_velocity,
+                'max_angular_velocity': max_angular_velocity,
+                'minimum_angular_velocity': minimum_angular_velocity,
+                'rotate_in_place_threshold': rotate_in_place_threshold,
+                'minimum_turning_velocity': minimum_turning_velocity,
+                'goal_tolerance': goal_tolerance,
+            }],
         ),
     ])

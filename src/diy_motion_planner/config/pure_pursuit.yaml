@@ -10,6 +10,7 @@
         lookahead_distance: 0.2
         linear_velocity: 0.3
         max_angular_velocity: 1.0
+        minimum_angular_velocity: 0.12
         rotate_in_place_threshold: 1.0
         minimum_turning_velocity: 0.05
         goal_tolerance: 0.15

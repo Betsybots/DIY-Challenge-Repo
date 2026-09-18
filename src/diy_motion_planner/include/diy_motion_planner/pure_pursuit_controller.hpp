@@ -78,6 +78,11 @@ protected:
     const nav_msgs::msg::Path & transformed_plan,
     double robot_x, double robot_y) const;
 
+  bool isPathToTargetBlocked(
+    double robot_x,
+    double robot_y,
+    const geometry_msgs::msg::PoseStamped & target) const;
+
   void publishLookaheadMarker(const geometry_msgs::msg::PoseStamped & pose);
 
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
@@ -91,9 +96,14 @@ protected:
   double lookahead_distance_;
   double linear_velocity_;
   double max_angular_velocity_;
+  double minimum_angular_velocity_;
   double rotate_in_place_threshold_;
   double minimum_turning_velocity_;
   double goal_tolerance_;
+  bool collision_check_enabled_;
+  bool unknown_is_occupied_;
+  int occupied_threshold_;
+  double collision_check_resolution_;
   rclcpp::Duration transform_tolerance_{0, 0};
 
   nav_msgs::msg::Path global_plan_;
