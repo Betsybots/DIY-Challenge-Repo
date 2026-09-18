@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>diy_motion_planner</name>
+  <name>motion_controller</name>
   <version>0.1.0</version>
   <description>C++ port of the custom PD and pure-pursuit path-following motion planners for the DIY Challenge robot.</description>
   <maintainer email="team@example.com">DIY Challenge Team</maintainer>
@@ -36,6 +36,6 @@
 
   <export>
     <build_type>ament_cmake</build_type>
-    <nav2_core plugin="${prefix}/diy_motion_planner_plugins.xml" />
+    <nav2_core plugin="${prefix}/motion_controller_plugins.xml" />
   </export>
 </package>

@@ -1,4 +1,4 @@
-# Configuration for the diy_motion_planner PD navigation stack.
+# Configuration for the motion_controller PD navigation stack.
 /**:
     ros__parameters:
         map_yaml: "/home/juggernauts/DIY-Challenge-Repo/src/mapping/maps/small_house/smooth_map.yaml"

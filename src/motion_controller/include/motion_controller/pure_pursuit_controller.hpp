@@ -21,8 +21,8 @@
 // nav2_core::Controller interface, so they're published from auxiliary
 // lifecycle publishers created in configure()/activated in activate().
 
-#ifndef DIY_MOTION_PLANNER__PURE_PURSUIT_CONTROLLER_HPP_
-#define DIY_MOTION_PLANNER__PURE_PURSUIT_CONTROLLER_HPP_
+#ifndef MOTION_CONTROLLER__PURE_PURSUIT_CONTROLLER_HPP_
+#define MOTION_CONTROLLER__PURE_PURSUIT_CONTROLLER_HPP_
 
 #include <memory>
 #include <string>
@@ -40,7 +40,7 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "tf2_ros/buffer.h"
 
-namespace diy_motion_planner
+namespace motion_controller
 {
 
 class PurePursuitController : public nav2_core::Controller
@@ -108,6 +108,6 @@ protected:
     lookahead_marker_pub_;
 };
 
-}  // namespace diy_motion_planner
+}  // namespace motion_controller
 
-#endif  // DIY_MOTION_PLANNER__PURE_PURSUIT_CONTROLLER_HPP_
+#endif  // MOTION_CONTROLLER__PURE_PURSUIT_CONTROLLER_HPP_

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(diy_motion_planner)
+project(motion_controller)
 
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
@@ -26,42 +26,11 @@ find_package(pluginlib REQUIRED)
 
 include_directories(include)
 
-add_executable(pd_motion_planner_node src/pd_motion_planner_node.cpp)
-ament_target_dependencies(pd_motion_planner_node
-  rclcpp
-  geometry_msgs
-  nav_msgs
-  std_msgs
-  visualization_msgs
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
-)
-
-add_executable(pure_pursuit_motion_planner_node src/pure_pursuit_motion_planner_node.cpp)
-ament_target_dependencies(pure_pursuit_motion_planner_node
-  rclcpp
-  geometry_msgs
-  nav_msgs
-  std_msgs
-  visualization_msgs
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
-)
-
-install(TARGETS pd_motion_planner_node pure_pursuit_motion_planner_node
-  DESTINATION lib/${PROJECT_NAME}
-)
-
 # ── nav2_core::Controller plugin ─────────────────────────────────────────────
 # Real Nav2 controller_server plugin (loaded via pluginlib, not a standalone
-# executable) -- see include/diy_motion_planner/pure_pursuit_controller.hpp
-# for the architectural notes on how this differs from
-# pure_pursuit_motion_planner_node above, and the gap around who invokes it
-# (nothing does yet -- no bt_navigator, no action client). Both the old
-# standalone node and this new plugin currently coexist; nothing has been
-# removed.
+# executable) -- see include/motion_controller/pure_pursuit_controller.hpp
+# for the architectural notes and the current gap around who invokes it
+# (nothing does yet -- no bt_navigator, no action client).
 set(plugin_dependencies
   rclcpp
   rclcpp_lifecycle
@@ -78,13 +47,13 @@ set(plugin_dependencies
   pluginlib
 )
 
-add_library(diy_motion_planner_plugin SHARED
+add_library(motion_controller_plugin SHARED
   src/pure_pursuit_controller.cpp
 )
-target_compile_definitions(diy_motion_planner_plugin PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
-ament_target_dependencies(diy_motion_planner_plugin ${plugin_dependencies})
+target_compile_definitions(motion_controller_plugin PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
+ament_target_dependencies(motion_controller_plugin ${plugin_dependencies})
 
-install(TARGETS diy_motion_planner_plugin
+install(TARGETS motion_controller_plugin
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
@@ -94,14 +63,14 @@ install(DIRECTORY include/
   DESTINATION include/
 )
 
-install(DIRECTORY launch config rviz
+install(DIRECTORY config rviz
   DESTINATION share/${PROJECT_NAME}
 )
 
 ament_export_include_directories(include)
-ament_export_libraries(diy_motion_planner_plugin)
+ament_export_libraries(motion_controller_plugin)
 ament_export_dependencies(${plugin_dependencies})
 
-pluginlib_export_plugin_description_file(nav2_core diy_motion_planner_plugins.xml)
+pluginlib_export_plugin_description_file(nav2_core motion_controller_plugins.xml)
 
 ament_package()

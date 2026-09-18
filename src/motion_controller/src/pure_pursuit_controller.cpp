@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "diy_motion_planner/pure_pursuit_controller.hpp"
+#include "motion_controller/pure_pursuit_controller.hpp"
 
 #include "nav2_core/exceptions.hpp"
 #include "nav2_util/node_utils.hpp"
@@ -16,7 +16,7 @@
 
 using nav2_util::declare_parameter_if_not_declared;
 
-namespace diy_motion_planner
+namespace motion_controller
 {
 
 void PurePursuitController::configure(
@@ -76,7 +76,7 @@ void PurePursuitController::configure(
 void PurePursuitController::cleanup()
 {
   RCLCPP_INFO(
-    logger_, "Cleaning up controller: %s of type diy_motion_planner::PurePursuitController",
+    logger_, "Cleaning up controller: %s of type motion_controller::PurePursuitController",
     plugin_name_.c_str());
   goal_reached_pub_.reset();
   next_pose_pub_.reset();
@@ -86,7 +86,7 @@ void PurePursuitController::cleanup()
 void PurePursuitController::activate()
 {
   RCLCPP_INFO(
-    logger_, "Activating controller: %s of type diy_motion_planner::PurePursuitController",
+    logger_, "Activating controller: %s of type motion_controller::PurePursuitController",
     plugin_name_.c_str());
   goal_reached_pub_->on_activate();
   next_pose_pub_->on_activate();
@@ -96,7 +96,7 @@ void PurePursuitController::activate()
 void PurePursuitController::deactivate()
 {
   RCLCPP_INFO(
-    logger_, "Deactivating controller: %s of type diy_motion_planner::PurePursuitController",
+    logger_, "Deactivating controller: %s of type motion_controller::PurePursuitController",
     plugin_name_.c_str());
   goal_reached_pub_->on_deactivate();
   next_pose_pub_->on_deactivate();
@@ -277,7 +277,7 @@ geometry_msgs::msg::TwistStamped PurePursuitController::computeVelocityCommands(
   return cmd_vel;
 }
 
-}  // namespace diy_motion_planner
+}  // namespace motion_controller
 
 #include "pluginlib/class_list_macros.hpp"
-PLUGINLIB_EXPORT_CLASS(diy_motion_planner::PurePursuitController, nav2_core::Controller)
+PLUGINLIB_EXPORT_CLASS(motion_controller::PurePursuitController, nav2_core::Controller)
