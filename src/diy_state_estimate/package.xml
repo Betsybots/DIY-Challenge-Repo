@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>diy_state_estimate</name>
+  <version>0.1.0</version>
+  <description>
+    odom-frame state estimation for the DIY Challenge robot.
+
+    Runs a single robot_localization EKF that fuses wheel odometry
+    (/wheel_odom, velocities), the ACEINNA IMU (/imu/data, yaw rate) and
+    FAST-LIO2 lidar-inertial odometry (/Odometry, planar pose) into /odom and
+    the odom -> base_link TF consumed by Nav2. Because FAST-LIO2 already fuses
+    the same IMU internally, a small relay node (sensor_covariance_relay)
+    inflates the IMU and lidar covariances before they reach the EKF so the
+    wheel encoders carry real weight and a moving obstacle can no longer drag
+    the robot pose around while the wheels report zero motion.
+  </description>
+  <maintainer email="team@example.com">DIY Challenge Team</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <exec_depend>robot_localization</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

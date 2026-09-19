@@ -17,9 +17,27 @@ STARTUP ORDER
     1. robot_description — publishes the URDF / TF tree first
     2. Hesai lidar (hesai_ros_driver) — feeds FAST-LIO2
     3. Fast LIO2 — starts after a short delay for localization
-    4. Autonomous mode: map_localizer + Nav2 navigation stack
-    5. Manual mode: loop closure / map-refinement stack only
-    6. rviz2 — optional debug visualization
+    4. EKF (diy_state_estimate) — fuses /wheel_odom + /imu/data + FAST-LIO2
+       /Odometry into /odom and owns the odom→base_link TF
+    5. Autonomous mode: map_localizer + Nav2 navigation stack
+    6. Manual mode: loop closure / map-refinement stack only
+    7. rviz2 — optional debug visualization (use_rviz:=true)
+
+TF OWNERSHIP
+────────────
+    map  → odom       map_localizer (VGICP against the saved map)
+    odom → base_link  diy_state_estimate ekf_filter_node — ONLY this node.
+                      FAST-LIO2 also broadcasts odom→base_link and has no
+                      switch to stop it, so its /tf is remapped to a dead
+                      topic below. Its /Odometry message still flows to the
+                      EKF and to map_localizer unchanged.
+    base_link → *     robot_state_publisher (URDF)
+
+WHEEL ODOMETRY / MOTORS
+───────────────────────
+    /wheel_odom comes from driveStack's differential-drive node, launched
+    separately (driveStack bringup). It is NOT started here; the EKF just
+    waits for the topic.
 
 NOTE ON THE ACEINNA IMU:
 ────────────────────────
@@ -78,19 +96,44 @@ def generate_launch_description():
     )
 
 
-    # ── BLOCK 3: Fast-LIO2 Launch  ──────────────────────────
+    # ── BLOCK 3: Fast-LIO2 + EKF  ──────────────────────────
     # Starts after the lidar/IMU producers have come online.
     slam_group = GroupAction(
         actions=[
-            # SetRemap(src='/Odometry', dst='/odom'),
+            # FAST-LIO2 in its own scoped group so the /tf remap applies to it
+            # alone: it broadcasts odom→base_link unconditionally, and the EKF
+            # below must be the sole owner of that transform. /Odometry is
+            # NOT remapped — the EKF and map_localizer consume it directly.
+            GroupAction(
+                actions=[
+                    SetRemap(src='/tf', dst='/tf_fastlio_unused'),
+                    IncludeLaunchDescription(
+                        PythonLaunchDescriptionSource(
+                            os.path.join(
+                                get_package_share_directory('fast_lio_ros2'),
+                                'launch',
+                                'lio_localizer.launch.py',
+                            )
+                        ),
+                    ),
+                ]
+            ),
+            # EKF: /wheel_odom (vx, vyaw) + /imu/data (vyaw, down-weighted)
+            # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_link TF.
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
-                        get_package_share_directory('fast_lio_ros2'),
+                        get_package_share_directory('diy_state_estimate'),
                         'launch',
-                        'lio_localizer.launch.py',
+                        'ekf_fusion.launch.py',
                     )
                 ),
+                launch_arguments={
+                    'wheel_odom_topic': '/wheel_odom',
+                    'imu_topic': '/imu/data',
+                    'lidar_odom_topic': '/Odometry',
+                    'output_topic': '/odom',
+                }.items(),
             ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -147,7 +190,7 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         output='screen',
-        # condition=IfCondition(use_rviz),
+        condition=IfCondition(use_rviz),
         arguments=['-d', os.path.join(pkg_dir, 'rviz', 'master.rviz')],
     )
 
@@ -174,11 +217,10 @@ def generate_launch_description():
         declare_startup_delay,
         declare_autonomous,
         declare_use_rviz,
-        ## 
-        # robot_description_launch,
+        robot_description_launch,
         hesai_launch,
         delayed_fast_lio,
         # delayed_hba_map,
-        # delayed_nav2,
-        # rviz_node,
+        delayed_nav2,
+        rviz_node,
     ])
