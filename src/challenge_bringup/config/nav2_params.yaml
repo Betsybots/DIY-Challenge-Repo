@@ -159,6 +159,8 @@ controller_server:
       occupied_threshold: 253
       unknown_is_occupied: true
       collision_check_resolution: 0.05
+      collision_check_distance: 0.5
+      unknown_grace_period: 0.5
       # plugin: "dwb_core::DWBLocalPlanner"
       # debug_trajectory_details: True
       # min_vel_x: 0.0
@@ -362,8 +364,8 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.26, 0.0, 1.0]
-    min_velocity: [-0.26, 0.0, -1.0]
+    max_velocity: [1.0, 0.0, 1.0]
+    min_velocity: [-1.0, 0.0, -1.0]
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "odom"

@@ -78,10 +78,21 @@ protected:
     const nav_msgs::msg::Path & transformed_plan,
     double robot_x, double robot_y) const;
 
-  bool isPathToTargetBlocked(
+  // Distinguishes a confirmed obstacle from merely-unknown costmap cells so
+  // computeVelocityCommands() can grant unknown cells a brief grace period
+  // (unknown_grace_period_) right after a ClearEntireCostmap recovery wipes
+  // them, instead of instantly re-blocking before the next sensor scan lands.
+  enum class PathBlockStatus
+  {
+    CLEAR,
+    UNKNOWN_ONLY,
+    CONFIRMED_OBSTACLE
+  };
+
+  PathBlockStatus checkPathBlockStatus(
     double robot_x,
     double robot_y,
-    const geometry_msgs::msg::PoseStamped & target) const;
+    const nav_msgs::msg::Path & transformed_plan) const;
 
   void publishLookaheadMarker(const geometry_msgs::msg::PoseStamped & pose);
 
@@ -104,6 +115,10 @@ protected:
   bool unknown_is_occupied_;
   int occupied_threshold_;
   double collision_check_resolution_;
+  double collision_check_distance_;
+  double unknown_grace_period_;
+  bool has_blocked_before_ = false;
+  rclcpp::Time last_blocked_time_;
   rclcpp::Duration transform_tolerance_{0, 0};
 
   nav_msgs::msg::Path global_plan_;

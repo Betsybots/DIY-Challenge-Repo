@@ -60,6 +60,10 @@ void PurePursuitController::configure(
     node, plugin_name_ + ".unknown_is_occupied", rclcpp::ParameterValue(true));
   declare_parameter_if_not_declared(
     node, plugin_name_ + ".collision_check_resolution", rclcpp::ParameterValue(0.05));
+  declare_parameter_if_not_declared(
+    node, plugin_name_ + ".collision_check_distance", rclcpp::ParameterValue(0.5));
+  declare_parameter_if_not_declared(
+    node, plugin_name_ + ".unknown_grace_period", rclcpp::ParameterValue(0.5));
 
   node->get_parameter(plugin_name_ + ".lookahead_distance", lookahead_distance_);
   node->get_parameter(plugin_name_ + ".linear_velocity", linear_velocity_);
@@ -72,10 +76,22 @@ void PurePursuitController::configure(
   node->get_parameter(plugin_name_ + ".occupied_threshold", occupied_threshold_);
   node->get_parameter(plugin_name_ + ".unknown_is_occupied", unknown_is_occupied_);
   node->get_parameter(plugin_name_ + ".collision_check_resolution", collision_check_resolution_);
+  node->get_parameter(plugin_name_ + ".collision_check_distance", collision_check_distance_);
+  node->get_parameter(plugin_name_ + ".unknown_grace_period", unknown_grace_period_);
 
   if (collision_check_resolution_ <= 0.0) {
     collision_check_resolution_ = 0.05;
   }
+
+  if (collision_check_distance_ <= 0.0) {
+    collision_check_distance_ = 0.5;
+  }
+
+  if (unknown_grace_period_ < 0.0) {
+    unknown_grace_period_ = 0.0;
+  }
+
+  has_blocked_before_ = false;
 
   double transform_tolerance;
   node->get_parameter(plugin_name_ + ".transform_tolerance", transform_tolerance);
@@ -228,47 +244,73 @@ void PurePursuitController::publishLookaheadMarker(const geometry_msgs::msg::Pos
   lookahead_marker_pub_->publish(marker);
 }
 
-bool PurePursuitController::isPathToTargetBlocked(
+PurePursuitController::PathBlockStatus PurePursuitController::checkPathBlockStatus(
   double robot_x,
   double robot_y,
-  const geometry_msgs::msg::PoseStamped & target) const
+  const nav_msgs::msg::Path & transformed_plan) const
 {
   if (!collision_check_enabled_ || !costmap_ros_) {
-    return false;
+    return PathBlockStatus::CLEAR;
   }
 
   const auto * costmap = costmap_ros_->getCostmap();
   if (!costmap) {
-    return false;
+    return PathBlockStatus::CLEAR;
   }
 
-  const double dx = target.pose.position.x - robot_x;
-  const double dy = target.pose.position.y - robot_y;
-  const double distance = std::hypot(dx, dy);
-  const int samples = std::max(1, static_cast<int>(std::ceil(distance / collision_check_resolution_)));
+  double prev_x = robot_x;
+  double prev_y = robot_y;
+  double distance_walked = 0.0;
+  bool saw_unknown = false;
 
-  for (int sample = 1; sample <= samples; ++sample) {
-    const double ratio = static_cast<double>(sample) / samples;
-    const double x = robot_x + ratio * dx;
-    const double y = robot_y + ratio * dy;
+  for (const auto & stamped_pose : transformed_plan.poses) {
+    const double seg_dx = stamped_pose.pose.position.x - prev_x;
+    const double seg_dy = stamped_pose.pose.position.y - prev_y;
+    const double seg_length = std::hypot(seg_dx, seg_dy);
 
-    unsigned int mx = 0;
-    unsigned int my = 0;
-    if (!costmap->worldToMap(x, y, mx, my)) {
-      return true;
-    }
+    if (seg_length > 1e-6) {
+      const double remaining = collision_check_distance_ - distance_walked;
+      const double check_length = std::min(seg_length, remaining);
+      const int samples = std::max(
+        1, static_cast<int>(std::ceil(check_length / collision_check_resolution_)));
 
-    const unsigned char cost = costmap->getCost(mx, my);
-    if (cost == nav2_costmap_2d::NO_INFORMATION) {
-      if (unknown_is_occupied_) {
-        return true;
+      for (int sample = 1; sample <= samples; ++sample) {
+        const double ratio = (static_cast<double>(sample) / samples) * (check_length / seg_length);
+        const double x = prev_x + ratio * seg_dx;
+        const double y = prev_y + ratio * seg_dy;
+
+        unsigned int mx = 0;
+        unsigned int my = 0;
+        if (!costmap->worldToMap(x, y, mx, my)) {
+          // Outside the costmap's current bounds -- same "we have no data
+          // here" meaning as NO_INFORMATION, not an automatic hard block.
+          saw_unknown = true;
+          continue;
+        }
+
+        const unsigned char cost = costmap->getCost(mx, my);
+        if (cost == nav2_costmap_2d::NO_INFORMATION) {
+          saw_unknown = true;
+        } else if (cost >= occupied_threshold_) {
+          return PathBlockStatus::CONFIRMED_OBSTACLE;
+        }
       }
-    } else if (cost >= occupied_threshold_) {
-      return true;
+    }
+
+    distance_walked += seg_length;
+    prev_x = stamped_pose.pose.position.x;
+    prev_y = stamped_pose.pose.position.y;
+
+    if (distance_walked >= collision_check_distance_) {
+      break;
     }
   }
 
-  return false;
+  if (saw_unknown && unknown_is_occupied_) {
+    return PathBlockStatus::UNKNOWN_ONLY;
+  }
+
+  return PathBlockStatus::CLEAR;
 }
 
 geometry_msgs::msg::TwistStamped PurePursuitController::computeVelocityCommands(
@@ -309,8 +351,27 @@ geometry_msgs::msg::TwistStamped PurePursuitController::computeVelocityCommands(
   next_pose_pub_->publish(target);
   publishLookaheadMarker(target);
 
-  if (isPathToTargetBlocked(robot_x, robot_y, target)) {
-    throw std::runtime_error(
+  const PathBlockStatus block_status = checkPathBlockStatus(robot_x, robot_y, transformed_plan);
+  const rclcpp::Time now = clock_->now();
+  bool blocked = false;
+
+  if (block_status == PathBlockStatus::CONFIRMED_OBSTACLE) {
+    blocked = true;
+  } else if (block_status == PathBlockStatus::UNKNOWN_ONLY) {
+    // Right after a ClearEntireCostmap recovery, cells ahead sit at
+    // NO_INFORMATION until the next sensor scan repopulates them. Without
+    // this grace window, the very next tick would instantly re-block on
+    // "unknown" alone and burn the recovery retry before the obstacle could
+    // ever be re-observed. Confirmed obstacles are never granted grace.
+    const bool within_grace = has_blocked_before_ &&
+      (now - last_blocked_time_).seconds() < unknown_grace_period_;
+    blocked = !within_grace;
+  }
+
+  if (blocked) {
+    has_blocked_before_ = true;
+    last_blocked_time_ = now;
+    throw nav2_core::PlannerException(
             "Pure pursuit lookahead segment is blocked in the local costmap");
   }
 
