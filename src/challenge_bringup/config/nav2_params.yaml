@@ -303,7 +303,20 @@ planner_server:
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_astar_planner::AStarPlanner"
-      robot_clearance: 0.40
+      # AStarPlanner::buildSafeGrid() draws its OWN hard circular no-go halo
+      # of radius robot_clearance around every occupied/unknown cell -- this
+      # is completely separate from and in ADDITION to robot_radius (0.22m,
+      # which already creates a mandatory disk via the occupied_threshold=253
+      # / INSCRIBED_INFLATED_OBSTACLE check below). The two stack: total
+      # required clearance from a real wall was 0.22+0.40=0.62m. Measured
+      # directly against maps/sep13/global_map_sep13_traced_smooth.pgm, the
+      # ring corridor's median distance-to-nearest-wall is only 0.275m, and
+      # a connected-components check confirmed 0.40 fractures the "safe"
+      # region into 4 disconnected islands (no continuous path exists around
+      # the course at all) -- 0.05 restores a single connected region
+      # spanning the whole ring. Keep this small; it's meant to be a thin
+      # extra safety margin on top of robot_radius, not an independent buffer.
+      robot_clearance: 0.05
       occupied_threshold: 253
       unknown_is_occupied: true
       visited_publish_interval: 250
