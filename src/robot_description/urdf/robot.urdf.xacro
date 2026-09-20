@@ -216,7 +216,7 @@
       </gazebo>
     </xacro:if>
   </xacro:macro>
-<!--
+
   <link name="base_footprint"/>
 
   <joint name="base_footprint_to_base_link" type="fixed">
@@ -224,7 +224,7 @@
     <child link="base_link"/>
     <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
   </joint>
--->
+
   <link name="base_link">
       <inertial>
       <origin xyz="${AR_from_front-base_length/2} 0 ${base_height/2+base_off_ground-wheel_radius}" rpy="0 0 0"/> <!-- change based on TF -->

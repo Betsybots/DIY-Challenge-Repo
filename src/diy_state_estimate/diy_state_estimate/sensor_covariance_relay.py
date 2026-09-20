@@ -32,12 +32,14 @@ TUNING KNOBS (all ROS parameters)
                          0.001): equal → equal weight; larger → IMU trusted
                          less. Default 0.004 → wheels get ~4x the weight.
   imu_gyro_cov_scale     multiplier applied BEFORE the floor. Default 1.0.
-  lidar_pose_cov_floor   [x, y, yaw] minimum variances (m^2, m^2, rad^2) on
-                         the FAST-LIO2 pose. Default [0.04, 0.04, 0.02] →
-                         0.2 m / ~8 deg std. Raise if a moving obstacle still
+    lidar_pose_cov_floor   [x, y, yaw] minimum variances (m^2, m^2, rad^2) on
+                                                 the FAST-LIO2 pose. Default [0.09, 0.09, 0.04] →
+                                                 0.3 m / ~11 deg std. Raise if a moving obstacle still
                          drags the pose; lower if the pose lags the lidar.
   lidar_pose_cov_scale   multiplier applied BEFORE the floor. Default 1.0.
 """
+
+import math
 
 import rclpy
 from nav_msgs.msg import Odometry
@@ -47,6 +49,19 @@ from sensor_msgs.msg import Imu
 
 # Row-major index of the diagonal entries in a 6x6 pose covariance.
 _POSE_X, _POSE_Y, _POSE_YAW = 0, 7, 35
+
+
+def _all_finite(values):
+    """True iff every value is a real, finite number (no NaN/Inf).
+
+    robot_localization's EKF has no recovery from a NaN in its state: one
+    poisoned update latches NaN into the state/covariance forever, so every
+    later cycle keeps failing even once the raw sensor is healthy again
+    (e.g. FAST-LIO2 mid gravity-alignment, or a wheel-odom driver dividing
+    by a zero dt on its very first sample). Reject the sample instead of
+    forwarding it.
+    """
+    return all(math.isfinite(v) for v in values)
 
 
 class SensorCovarianceRelay(Node):
@@ -62,7 +77,7 @@ class SensorCovarianceRelay(Node):
         self.declare_parameter('lidar_odom_in', '/Odometry')
         self.declare_parameter('lidar_odom_out', '/lidar_odom_ekf')
         self.declare_parameter('lidar_pose_cov_scale', 1.0)
-        self.declare_parameter('lidar_pose_cov_floor', [0.04, 0.04, 0.02])
+        self.declare_parameter('lidar_pose_cov_floor', [0.09, 0.09, 0.04])
 
         p = self.get_parameter
         self._imu_scale = float(p('imu_gyro_cov_scale').value)
@@ -96,7 +111,14 @@ class SensorCovarianceRelay(Node):
     # ── callbacks ────────────────────────────────────────────────────────────
 
     def _on_imu(self, msg: Imu):
+        av = msg.angular_velocity
         cov = list(msg.angular_velocity_covariance)
+        if not _all_finite((av.x, av.y, av.z, *cov)):
+            self.get_logger().warn(
+                'Dropping non-finite IMU sample (NaN/Inf in angular_velocity '
+                'or its covariance) -- not forwarding to the EKF.',
+                throttle_duration_sec=5.0)
+            return
         # Scale the whole 3x3 block (keeps it positive semi-definite), then
         # floor the diagonal. A leading -1 means "unknown" per REP-145; treat
         # it like zero so the floor takes over.
@@ -109,7 +131,15 @@ class SensorCovarianceRelay(Node):
         self._imu_pub.publish(msg)
 
     def _on_lidar(self, msg: Odometry):
+        pos = msg.pose.pose.position
+        ori = msg.pose.pose.orientation
         cov = list(msg.pose.covariance)
+        if not _all_finite((pos.x, pos.y, pos.z, ori.x, ori.y, ori.z, ori.w, *cov)):
+            self.get_logger().warn(
+                'Dropping non-finite lidar odometry sample (NaN/Inf in pose '
+                'or its covariance) -- not forwarding to the EKF.',
+                throttle_duration_sec=5.0)
+            return
         cov = [c * self._lidar_scale for c in cov]
         cov[_POSE_X] = max(cov[_POSE_X], self._lidar_floor_x)
         cov[_POSE_Y] = max(cov[_POSE_Y], self._lidar_floor_y)

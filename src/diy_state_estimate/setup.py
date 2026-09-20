@@ -28,6 +28,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sensor_covariance_relay = diy_state_estimate.sensor_covariance_relay:main',
+            'localization_watchdog = diy_state_estimate.localization_watchdog:main',
         ],
     },
 )

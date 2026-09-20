@@ -2,10 +2,14 @@
 # ekf_fusion.yaml — single odom-frame EKF: wheel + IMU yaw-rate + FAST-LIO2
 # ─────────────────────────────────────────────────────────────────────────────
 # OUTPUT
-#   /odom                 (remapped from odometry/filtered in the launch file)
-#   TF odom -> base_link  (this node is the ONLY publisher of that transform;
-#                          FAST-LIO2's own TF is remapped away in
-#                          challenge_bringup/master.launch.py)
+#   /odom                       (remapped from odometry/filtered in the launch file)
+#   TF odom -> base_footprint  (this node is the ONLY publisher of that
+#                          transform; FAST-LIO2's own TF is remapped away in
+#                          challenge_bringup/master.launch.py). robot_state_
+#                          publisher then publishes the fixed base_footprint
+#                          -> base_link joint (see robot.urdf.xacro), giving
+#                          the full chain map -> odom -> base_footprint ->
+#                          base_link -> (sensors, wheels, etc.)
 #
 # INPUTS (topics are overridden from the launch file; values here are the
 # defaults that match it)
@@ -46,7 +50,7 @@ ekf_filter_node:
 
     map_frame: map
     odom_frame: odom
-    base_link_frame: base_link
+    base_link_frame: base_footprint
     world_frame: odom
 
     # ── odom0: wheel encoders — velocity only ──────────────────────────────
@@ -94,7 +98,7 @@ ekf_filter_node:
     # sigma is rejected outright. Only meaningful because the relay floors the
     # lidar covariance to something realistic. Lower → more aggressive
     # rejection (risk: reject real corrections after slip). Start here.
-    odom1_pose_rejection_threshold: 3.0
+    odom1_pose_rejection_threshold: 2.0
 
     use_control: false
 
@@ -102,10 +106,40 @@ ekf_filter_node:
     # Same starting point as the repo's previous EKF configs. Raise a
     # velocity entry (6, 11) if the estimate lags the wheels; raise a pose
     # entry (0, 1, 5) if it lags the lidar.
-    process_noise_covariance: [0.05, 0.05, 0.06, 0.03, 0.03,
-                               0.06, 0.025, 0.025, 0.04, 0.01,
-                               0.01, 0.02, 0.01, 0.01, 0.015]
+    process_noise_covariance: [0.05, 0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.05,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.06, 0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.03, 0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.03, 0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.06, 0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.025, 0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.025, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.04, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.01, 0.0,  0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.01, 0.0,  0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.02, 0.0,  0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.01, 0.0,  0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,
+                   0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.015]
 
-    initial_estimate_covariance: [1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9,
-                                  1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9,
-                                  1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9]
+    # NOTE: the robot_localization template ships this diagonal as 1e-9 (an
+    # extremely confident "I know the initial state exactly" prior). With
+    # two_d_mode: true that is a well-known trigger for immediate NaN on the
+    # very first update cycle -- confirmed here by launching this EKF alone
+    # (no sensors at all publishing) and still seeing NaN instantly. 1.0 is
+    # the standard, much safer starting uncertainty.
+    initial_estimate_covariance: [1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,
+                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0]

@@ -44,7 +44,7 @@ bt_navigator:
     use_sim_time: False
     global_frame: map
     robot_base_frame: base_link
-    odom_topic: /odom
+    odom_topic: /odom_ekf
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
@@ -55,53 +55,77 @@ bt_navigator:
     # nav2_bt_navigator/navigate_through_poses_w_replanning_and_recovery.xml
     # They can be set here or via a RewrittenYaml remap from a parent launch file to Nav2.
     plugin_lib_names:
+      # Path planning (core)
       - nav2_compute_path_to_pose_action_bt_node
       - nav2_compute_path_through_poses_action_bt_node
-      - nav2_smooth_path_action_bt_node
       - nav2_follow_path_action_bt_node
-      - nav2_spin_action_bt_node
+      - nav2_remove_passed_goals_action_bt_node  # For navigate_through_poses
+      
+      # Recovery/Clearing (your BTs use these)
       - nav2_wait_action_bt_node
-      - nav2_assisted_teleop_action_bt_node
       - nav2_back_up_action_bt_node
-      - nav2_drive_on_heading_bt_node
       - nav2_clear_costmap_service_bt_node
-      - nav2_is_stuck_condition_bt_node
-      - nav2_goal_reached_condition_bt_node
+      
+      # Conditions (core)
       - nav2_goal_updated_condition_bt_node
-      - nav2_globally_updated_goal_condition_bt_node
-      - nav2_is_path_valid_condition_bt_node
-      - nav2_initial_pose_received_condition_bt_node
-      - nav2_reinitialize_global_localization_service_bt_node
-      - nav2_rate_controller_bt_node
-      - nav2_distance_controller_bt_node
-      - nav2_speed_controller_bt_node
-      - nav2_truncate_path_action_bt_node
-      - nav2_truncate_path_local_action_bt_node
-      - nav2_goal_updater_node_bt_node
+      
+      # Control flow (core)
       - nav2_recovery_node_bt_node
       - nav2_pipeline_sequence_bt_node
-      - nav2_round_robin_node_bt_node
-      - nav2_transform_available_condition_bt_node
-      - nav2_time_expired_condition_bt_node
-      - nav2_path_expiring_timer_condition
-      - nav2_distance_traveled_condition_bt_node
-      - nav2_single_trigger_bt_node
-      - nav2_goal_updated_controller_bt_node
-      - nav2_is_battery_low_condition_bt_node
-      - nav2_navigate_through_poses_action_bt_node
-      - nav2_navigate_to_pose_action_bt_node
-      - nav2_remove_passed_goals_action_bt_node
-      - nav2_planner_selector_bt_node
-      - nav2_controller_selector_bt_node
-      - nav2_goal_checker_selector_bt_node
-      - nav2_controller_cancel_bt_node
-      - nav2_path_longer_on_approach_bt_node
-      - nav2_wait_cancel_bt_node
-      - nav2_spin_cancel_bt_node
-      - nav2_back_up_cancel_bt_node
-      - nav2_assisted_teleop_cancel_bt_node
-      - nav2_drive_on_heading_cancel_bt_node
-      - nav2_is_battery_charging_condition_bt_node
+      - nav2_rate_controller_bt_node
+      - nav2_is_stuck_condition_bt_node  # Detects if progress has stalled
+      - nav2_round_robin_node_bt_node  # REQUIRED: navigate_to_pose_no_spin.xml / navigate_through_poses_no_spin.xml RecoveryFallback uses <RoundRobin> to cycle ClearCostmaps/Wait/BackUp
+
+      # ============ OPTIONAL RECOVERY BEHAVIORS ============
+      # - nav2_spin_action_bt_node  # 360° rotation recovery (removed: caused backward wall collisions)
+      # - nav2_drive_on_heading_bt_node  # Move forward/backward in specific heading (useful for aligned recovery)
+      # - nav2_assisted_teleop_action_bt_node  # Manual teleop control during stuck (useful if manual recovery needed)
+
+      # ============ OPTIONAL CONDITIONS ============
+      # - nav2_goal_reached_condition_bt_node  # Check if goal position reached (FollowPath already checks this)
+      # - nav2_is_stuck_condition_bt_node  # Detect robot stuck (useful if frequent stalls)
+      # - nav2_is_path_valid_condition_bt_node  # Check if computed path is valid (useful for validation)
+      # - nav2_transform_available_condition_bt_node  # Check if TF frame available (useful for multi-robot)
+      # - nav2_time_expired_condition_bt_node  # Check if timeout reached (useful for deadline-based nav)
+      # - nav2_globally_updated_goal_condition_bt_node  # Check if new global goal received (for multi-goal scenarios)
+      # - nav2_initial_pose_received_condition_bt_node  # Check if initial pose set (useful for startup validation)
+      # - nav2_is_battery_low_condition_bt_node  # Monitor battery level (useful for power management)
+      # - nav2_is_battery_charging_condition_bt_node  # Monitor charging status (useful for docking)
+
+      # ============ OPTIONAL PATH SMOOTHING ============
+      # - nav2_smooth_path_action_bt_node  # Smooth path after planning (rarely needed if planner already smooth)
+
+      # ============ OPTIONAL CONTROL FLOW ============
+      # nav2_round_robin_node_bt_node moved to "Control flow (core)" above - it is
+      # REQUIRED by the active no_spin BTs' <RoundRobin> recovery cycling, not optional.
+      # - nav2_distance_controller_bt_node  # Throttle action by distance traveled (useful for sparse replan)
+      # - nav2_speed_controller_bt_node  # Throttle action by speed (useful for adaptive navigation)
+      # - nav2_truncate_path_action_bt_node  # Shorten path to local window (useful for MPC controllers)
+      # - nav2_truncate_path_local_action_bt_node  # Same but local-focused variant
+      # - nav2_goal_updater_node_bt_node  # Dynamically update goals (useful if goals change mid-nav)
+      # - nav2_single_trigger_bt_node  # Run action once then skip (useful for one-time operations)
+      # - nav2_planner_selector_bt_node  # Switch between multiple planners at runtime (useful if planner_id varies)
+      # - nav2_controller_selector_bt_node  # Switch between multiple controllers (useful if controller_id varies)
+      # - nav2_goal_checker_selector_bt_node  # Switch goal checkers (rarely used)
+
+      # ============ OPTIONAL NAVIGATION FLOW ============
+      # - nav2_navigate_to_pose_action_bt_node  # High-level navigate-to-pose (alternative to lower-level compose)
+      # - nav2_navigate_through_poses_action_bt_node  # High-level navigate-through-poses (alternative to lower-level)
+      # - nav2_path_longer_on_approach_condition_bt_node  # Detect if replanned path is longer near goal (safety check)
+      # - nav2_path_expiring_timer_condition  # Check if path is stale (useful for fast-moving environments)
+      # - nav2_distance_traveled_condition_bt_node  # Check distance traveled (useful for progress monitoring)
+
+      # ============ OPTIONAL SERVICE CALLS ============
+      # - nav2_reinitialize_global_localization_service_bt_node  # Reset AMCL particles (not needed: using custom localization)
+
+      # ============ CANCEL ACTIONS (for recovery sequences) ============
+      # - nav2_spin_cancel_bt_node  # Cancel spin action (use if adding nav2_spin_action_bt_node)
+      # - nav2_back_up_cancel_bt_node  # Cancel backup action (use if complex backup recovery)
+      # - nav2_assisted_teleop_cancel_bt_node  # Cancel teleop (use if adding assisted_teleop)
+      # - nav2_drive_on_heading_cancel_bt_node  # Cancel heading-based drive (use if adding drive_on_heading)
+      # - nav2_wait_cancel_bt_node  # Cancel wait (rarely needed)
+      # - nav2_controller_cancel_bt_node  # Cancel controller (rarely needed if using recovery node)
+
 
 bt_navigator_navigate_through_poses_rclcpp_node:
   ros__parameters:
@@ -119,34 +143,34 @@ controller_server:
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
-    # progress_checker_plugin: "progress_checker"
-    # goal_checker_plugins: ["general_goal_checker"] # "precise_goal_checker"
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"] # "precise_goal_checker"
     controller_plugins: ["FollowPath"]
 
     # Progress checker parameters
-    # progress_checker:
-      # plugin: "nav2_controller::SimpleProgressChecker"
-      # required_movement_radius: 0.5
-      # movement_time_allowance: 10.0
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.5
+      movement_time_allowance: 10.0
     # Goal checker parameters
-    # precise_goal_checker:
+    #precise_goal_checker:
     #  plugin: "nav2_controller::SimpleGoalChecker"
     #  xy_goal_tolerance: 0.25
     #  yaw_goal_tolerance: 0.25
     #  stateful: True
-    # general_goal_checker:
-      # stateful: True
-      # plugin: "nav2_controller::SimpleGoalChecker"
-      # xy_goal_tolerance: 0.25
-      # yaw_goal_tolerance: 0.25
-    # DWB parameters
+    general_goal_checker:
+      stateful: True
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.25
+      yaw_goal_tolerance: 0.25
+    # PurePursuitController parameters
     FollowPath:
       plugin: "motion_controller::PurePursuitController"
-      use_sim_time: false
-      # base_frame: base_link
-      # odom_frame: odom
+      use_sim_time: False
+      base_frame: base_link
+      odom_frame: odom
       robot_clearance: 0.25
-      # cmd_vel_topic: "/cmd_vel"
+      cmd_vel_topic: "/cmd_vel"
       lookahead_distance: 0.2
       linear_velocity: 0.3
       max_angular_velocity: 1.0
@@ -159,46 +183,7 @@ controller_server:
       occupied_threshold: 253
       unknown_is_occupied: true
       collision_check_resolution: 0.05
-      # plugin: "dwb_core::DWBLocalPlanner"
-      # debug_trajectory_details: True
-      # min_vel_x: 0.0
-      # min_vel_y: 0.0
-      # max_vel_x: 0.26
-      # max_vel_y: 0.0
-      # max_vel_theta: 1.0
-      # min_speed_xy: 0.0
-      # max_speed_xy: 0.26
-      # min_speed_theta: 0.0
-      # Add high threshold velocity for turtlebot 3 issue.
-      # https://github.com/ROBOTIS-GIT/turtlebot3_simulations/issues/75
-      # acc_lim_x: 2.5
-      # acc_lim_y: 0.0
-      # acc_lim_theta: 3.2
-      # decel_lim_x: -2.5
-      # decel_lim_y: 0.0
-      # decel_lim_theta: -3.2
-      # vx_samples: 20
-      # vy_samples: 5
-      # vtheta_samples: 20
-      # sim_time: 1.7
-      # linear_granularity: 0.05
-      # angular_granularity: 0.025
-      # transform_tolerance: 0.2
-      # xy_goal_tolerance: 0.25
-      # trans_stopped_velocity: 0.25
-      # short_circuit_trajectory_evaluation: True
-      # stateful: True
-      # critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      # BaseObstacle.scale: 0.02
-      # PathAlign.scale: 32.0
-      # PathAlign.forward_point_distance: 0.1
-      # GoalAlign.scale: 24.0
-      # GoalAlign.forward_point_distance: 0.1
-      # PathDist.scale: 32.0
-      # GoalDist.scale: 24.0
-      # RotateToGoal.scale: 32.0
-      # RotateToGoal.slowing_factor: 5.0
-      # RotateToGoal.lookahead_time: -1.0
+
 
 local_costmap:
   local_costmap:
@@ -213,31 +198,53 @@ local_costmap:
       height: 3
       resolution: 0.05
       robot_radius: 0.22
-      plugins: ["voxel_layer", "inflation_layer"]
+      plugins: ["stvl_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
         inflation_radius: 0.05
-      voxel_layer:
-        plugin: "nav2_costmap_2d::VoxelLayer"
-        enabled: True
-        publish_voxel_map: True
-        origin_z: -0.2
-        z_resolution: 0.125
-        z_voxels: 16
-        max_obstacle_height: 2.0
-        mark_threshold: 0
-        observation_sources: cloud_registered_body
-        cloud_registered_body:
+      stvl_layer:
+        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
+        enabled:                  true
+        voxel_decay:              1.0  # seconds if linear, e^n if exponential
+        decay_model:              0     # 0=linear, 1=exponential, -1=persistent
+        voxel_size:               0.05  # meters
+        track_unknown_space:      true  # default space is known
+        unknown_threshold:        15    # voxel height
+        mark_threshold:           0     # voxel height
+        update_footprint_enabled: true
+        combination_method:       1     # 1=max, 0=override
+        origin_z:                 0.0   # meters
+        publish_voxel_map:        true # default off
+        transform_tolerance:      0.3   # seconds
+        mapping_mode:             false # default off, saves map not for navigation
+        map_save_duration:        60.0  # default 60s, how often to autosave
+        observation_sources:      pointcloud_mark pointcloud_clear
+        pointcloud_mark:
+          data_type: PointCloud2
           topic: /cloud_registered_body
-          max_obstacle_height: 2.0
-          clearing: True
-          marking: True
-          data_type: "PointCloud2"
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 2.5
-          obstacle_min_range: 0.0
+          marking: true
+          clearing: false
+          obstacle_range: 3.0          # meters
+          min_obstacle_height: 0.02     # default 0, meters
+          max_obstacle_height: 1.5     # default 3, meters
+          expected_update_rate: 0.0    # default 0, 
+          observation_persistence: 0.0 # default 0, 
+          inf_is_valid: true          # default false, for laser scans
+          filter: "passthrough"        # default passthrough, a
+          voxel_min_points: 0          # default 0, minimum points per voxel for voxel filter
+          clear_after_reading: true    # default false,
+        pointcloud_clear:
+          data_type: PointCloud2
+          topic: /cloud_registered_body
+          marking: false
+          clearing: true
+          max_z: 7.0                  # default 0, meters
+          min_z: 0.1                  # default 10, meters
+          vertical_fov_angle: 0.218   # ~12.5 Degrees (Only 32 scanline using)
+          horizontal_fov_angle: 1.745 # 100 Degrees (330 deg to 214 deg)
+          decay_acceleration: 5.0     # default 0, 1/s^2. If laser scanner MUST be 0
+          model_type: 0                # default 0, model type for frustum.
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -254,21 +261,49 @@ global_costmap:
       robot_radius: 0.22
       resolution: 0.05
       track_unknown_space: true
-      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
-      obstacle_layer:
-        plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: True
-        observation_sources: cloud_registered_body
-        cloud_registered_body:
+      plugins: ["voxel_layer", "static_layer", "inflation_layer"]
+      voxel_layer:
+        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
+        enabled:                  true
+        voxel_decay:              1.0  # seconds if linear, e^n if exponential
+        decay_model:              0     # 0=linear, 1=exponential, -1=persistent
+        voxel_size:               0.05  # meters
+        track_unknown_space:      true  # default space is known
+        unknown_threshold:        15    # voxel height
+        mark_threshold:           0     # voxel height
+        update_footprint_enabled: true
+        combination_method:       1     # 1=max, 0=override
+        origin_z:                 0.0   # meters
+        publish_voxel_map:        true # default off
+        transform_tolerance:      0.3   # seconds
+        mapping_mode:             false # default off, saves map not for navigation
+        map_save_duration:        60.0  # default 60s, how often to autosave
+        observation_sources:      pointcloud_mark pointcloud_clear
+        pointcloud_mark:
+          data_type: PointCloud2
           topic: /cloud_registered_body
-          max_obstacle_height: 2.0
-          clearing: True
-          marking: True
-          data_type: "PointCloud2"
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 2.5
-          obstacle_min_range: 0.0
+          marking: true
+          clearing: false
+          obstacle_range: 3.0          # meters
+          min_obstacle_height: 0.02     # default 0, meters
+          max_obstacle_height: 1.5     # default 3, meters
+          expected_update_rate: 0.0    # default 0, 
+          observation_persistence: 0.0 # default 0, 
+          inf_is_valid: true          # default false, for laser scans
+          filter: "passthrough"        # default passthrough, a
+          voxel_min_points: 0          # default 0, minimum points per voxel for voxel filter
+          clear_after_reading: true    # default false,
+        pointcloud_clear:
+          data_type: PointCloud2
+          topic: /cloud_registered_body
+          marking: false
+          clearing: true
+          max_z: 7.0                  # default 0, meters
+          min_z: 0.1                  # default 10, meters
+          vertical_fov_angle: 0.218   # ~12.5 Degrees (Only 32 scanline using)
+          horizontal_fov_angle: 1.745 # 100 Degrees (330 deg to 214 deg)
+          decay_acceleration: 5.0    # default 0, 1/s^2. If laser scanner MUST be 0
+          model_type: 0                # default 0, model type for frustum.
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -280,12 +315,11 @@ global_costmap:
 
 map_server:
   ros__parameters:
-    use_sim_time: True
+    use_sim_time: False 
     # Overridden in launch by the "map" launch configuration or provided default value.
     # To use in yaml, remove the default "map" value in the tb3_simulation_launch.py file & provide full path to map below.
     yaml_filename: "/home/juggernauts/DIY-Challenge-Repo/src/challenge_bringup/maps/global_map.yaml"
-    #yaml_filename: "/home/juggernauts/DIY-Challenge-Repo/src/challenge_bringup/maps/global_map_sep13_traced_smooth.yaml"
-
+    
 map_saver:
   ros__parameters:
     use_sim_time: False
@@ -298,9 +332,9 @@ planner_server:
   ros__parameters:
     expected_planner_frequency: 20.0
     use_sim_time: False
-    planner_plugins: ["GridBased"]
-    GridBased:
-      plugin: "nav2_astar_planner::AStarPlanner"
+    planner_plugins: ["AStarPlanner"]
+    AStarPlanner:
+      plugin: "diy_astar_planner::AStarPlanner"
       robot_clearance: 0.40
       occupied_threshold: 253
       unknown_is_occupied: true
@@ -316,30 +350,35 @@ smoother_server:
       max_its: 1000
       do_refinement: True
 
-behavior_server:
   ros__parameters:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins: ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
-    spin:
-      plugin: "nav2_behaviors/Spin"
-    backup:
-      plugin: "nav2_behaviors/BackUp"
-    drive_on_heading:
-      plugin: "nav2_behaviors/DriveOnHeading"
+    behavior_plugins: ["wait", "backup"]  # Only these are used in your BTs
     wait:
-      plugin: "nav2_behaviors/Wait"
-    assisted_teleop:
-      plugin: "nav2_behaviors/AssistedTeleop"
+      plugin: "nav2_behaviors/Wait" # Usage: Pause navigation during recovery sequences (5s wait in your recovery_actions)
+    backup:
+      plugin: "nav2_behaviors/BackUp" # Usage: Move backward when stuck (0.15m backup_dist in your recovery_actions)
+    
+    # ============ OPTIONAL RECOVERY BEHAVIORS ============
+    # spin:
+    #   plugin: "nav2_behaviors/Spin"
+    #   # Usage: 360° rotation to escape narrow corridors (REMOVED: caused backward wall collisions in your case)
+    # drive_on_heading:
+    #   plugin: "nav2_behaviors/DriveOnHeading"
+    #   # Usage: Move forward/backward along specific heading without path planning (useful for aligned recovery, e.g., backing out of a hallway)
+    # assisted_teleop:
+    #   plugin: "nav2_behaviors/AssistedTeleop"
+    #   # Usage: Manual teleop control with collision checking (useful for manual recovery when autonomous is stuck)
+
     global_frame: odom
     robot_base_frame: base_link
     transform_tolerance: 0.1
     use_sim_time: False
-    simulate_ahead_time: 2.0
-    max_rotational_vel: 1.0
-    min_rotational_vel: 0.4
-    rotational_acc_lim: 3.2
+    simulate_ahead_time: 2.0  # Lookahead time for collision checking during behaviors
+    max_rotational_vel: 1.0   # Max rotation speed if spin is added (rad/s)
+    min_rotational_vel: 0.4   # Min rotation speed (keeps rotation smooth)
+    rotational_acc_lim: 3.2   # Rotation acceleration limit (rad/s²)
 
 robot_state_publisher:
   ros__parameters:
@@ -366,7 +405,7 @@ velocity_smoother:
     min_velocity: [-0.26, 0.0, -1.0]
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
-    odom_topic: "odom"
+    odom_topic: "/Odometry"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0

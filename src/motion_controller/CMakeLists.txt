@@ -63,9 +63,9 @@ install(DIRECTORY include/
   DESTINATION include/
 )
 
-install(DIRECTORY config rviz
-  DESTINATION share/${PROJECT_NAME}
-)
+# install(DIRECTORY config rviz
+#   DESTINATION share/${PROJECT_NAME}
+# )
 
 ament_export_include_directories(include)
 ament_export_libraries(motion_controller_plugin)

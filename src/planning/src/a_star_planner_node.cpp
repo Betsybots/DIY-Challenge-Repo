@@ -13,7 +13,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace nav2_astar_planner
+namespace diy_astar_planner
 {
 
 void AStarPlanner::configure(
@@ -412,7 +412,7 @@ geometry_msgs::msg::Pose AStarPlanner::gridToWorldXY(int x, int y) const
   return pose;
 }
 
-}  // namespace nav2_astar_planner
+}  // namespace diy_astar_planner
 
 #include "pluginlib/class_list_macros.hpp"
-PLUGINLIB_EXPORT_CLASS(nav2_astar_planner::AStarPlanner, nav2_core::GlobalPlanner)
+PLUGINLIB_EXPORT_CLASS(diy_astar_planner::AStarPlanner, nav2_core::GlobalPlanner)

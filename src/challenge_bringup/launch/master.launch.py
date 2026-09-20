@@ -18,20 +18,23 @@ STARTUP ORDER
     2. Hesai lidar (hesai_ros_driver) — feeds FAST-LIO2
     3. Fast LIO2 — starts after a short delay for localization
     4. EKF (diy_state_estimate) — fuses /wheel_odom + /imu/data + FAST-LIO2
-       /Odometry into /odom and owns the odom→base_link TF
+       /Odometry into /odom and owns the odom→base_footprint TF
     5. Autonomous mode: map_localizer + Nav2 navigation stack
     6. Manual mode: loop closure / map-refinement stack only
     7. rviz2 — optional debug visualization (use_rviz:=true)
 
 TF OWNERSHIP
 ────────────
-    map  → odom       map_localizer (VGICP against the saved map)
-    odom → base_link  diy_state_estimate ekf_filter_node — ONLY this node.
-                      FAST-LIO2 also broadcasts odom→base_link and has no
-                      switch to stop it, so its /tf is remapped to a dead
-                      topic below. Its /Odometry message still flows to the
-                      EKF and to map_localizer unchanged.
-    base_link → *     robot_state_publisher (URDF)
+    map  → odom            map_localizer (VGICP against the saved map)
+    odom → base_footprint  diy_state_estimate ekf_filter_node — ONLY this
+                           node. FAST-LIO2 also broadcasts odom→base_link
+                           and has no switch to stop it, so its /tf is
+                           remapped to a dead topic below. Its /Odometry
+                           message still flows to the EKF and to
+                           map_localizer unchanged.
+    base_footprint → *     robot_state_publisher (URDF): fixed joint
+                           base_footprint→base_link, then base_link→sensors/
+                           wheels.
 
 WHEEL ODOMETRY / MOTORS
 ───────────────────────
@@ -119,7 +122,7 @@ def generate_launch_description():
                 ]
             ),
             # EKF: /wheel_odom (vx, vyaw) + /imu/data (vyaw, down-weighted)
-            # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_link TF.
+            # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_footprint TF.
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
@@ -132,7 +135,7 @@ def generate_launch_description():
                     'wheel_odom_topic': '/wheel_odom',
                     'imu_topic': '/imu/data',
                     'lidar_odom_topic': '/Odometry',
-                    'output_topic': '/odom',
+                    'output_topic': '/odom_ekf',
                 }.items(),
             ),
             IncludeLaunchDescription(
@@ -190,7 +193,7 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         output='screen',
-        condition=IfCondition(use_rviz),
+        # condition=IfCondition(use_rviz),
         arguments=['-d', os.path.join(pkg_dir, 'rviz', 'master.rviz')],
     )
 
@@ -220,7 +223,7 @@ def generate_launch_description():
         robot_description_launch,
         hesai_launch,
         delayed_fast_lio,
-        # delayed_hba_map,
+        delayed_hba_map,
         delayed_nav2,
         rviz_node,
     ])

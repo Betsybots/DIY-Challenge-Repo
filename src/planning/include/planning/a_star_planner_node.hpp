@@ -21,7 +21,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "tf2_ros/buffer.h"
 
-namespace nav2_astar_planner
+namespace diy_astar_planner
 {
 
 struct GraphNode
@@ -96,7 +96,7 @@ private:
 
   // Parameters (declared under the plugin name, e.g. "GridPlanner.robot_clearance")
   double robot_clearance_ = 0.40;
-  int occupied_threshold_ = 253;
+  int occupied_threshold_ = nav2_costmap_2d::LETHAL_OBSTACLE;
   bool unknown_is_occupied_ = true;
   int visited_publish_interval_ = 250;
 
@@ -109,6 +109,6 @@ private:
   int clearance_cells_ = 0;
 };
 
-}  // namespace nav2_astar_planner
+}  // namespace diy_astar_planner
 
 #endif  // PLANNING__A_STAR_PLANNER_NODE_HPP_

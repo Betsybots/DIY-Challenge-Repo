@@ -62,7 +62,7 @@ the result on `/a_star/path`. It has been rewritten as a Nav2
 
 - `include/planning/a_star_planner_node.hpp` — plugin class declaration.
 - `plugin.xml` — pluginlib description, registers
-  `nav2_astar_planner::AStarPlanner` as a `nav2_core::GlobalPlanner`.
+  `diy_astar_planner::AStarPlanner` as a `nav2_core::GlobalPlanner`.
 - `CMakeLists.txt` — builds `planning_astar_plugin` as a shared library
   (not an executable) and exports the pluginlib description via
   `pluginlib_export_plugin_description_file()`.
@@ -75,7 +75,7 @@ tag so `planner_server` can discover the plugin.
 
 ## Remaining work
 
-- Wire `nav2_astar_planner::AStarPlanner` into `nav2_params.yaml`'s
+- Wire `diy_astar_planner::AStarPlanner` into `nav2_params.yaml`'s
   `planner_server.plugins` list (in `challenge_bringup`).
 - Update/remove the launch files that still reference the old
   `package='planning', executable='a_star_planner_node'` (that executable
