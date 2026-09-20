@@ -2,7 +2,10 @@
   navigate_to_pose_no_spin.xml
   Same as navigate_to_pose_w_replanning_and_recovery.xml but with Spin removed.
   Spin caused 180° flip recovery which drove the robot backward into walls.
-  Recovery sequence: ClearCostmaps → Wait → BackUp only.
+
+  FollowPath recovery: Wait 1s (moving obstacle, e.g. a pedestrian, gets a
+  chance to clear on its own) then ClearCostmap, retry up to 3 times, before
+  escalating to the heavier outer recovery (ClearCostmaps, Wait 5s, BackUp).
 -->
 <root main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
@@ -14,9 +17,12 @@
             <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
           </RecoveryNode>
         </RateController>
-        <RecoveryNode number_of_retries="1" name="FollowPath">
+        <RecoveryNode number_of_retries="3" name="FollowPath">
           <FollowPath path="{path}" controller_id="FollowPath"/>
-          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+          <Sequence name="WaitForMovingObstacle">
+            <Wait wait_duration="1.0"/>
+            <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+          </Sequence>
         </RecoveryNode>
       </PipelineSequence>
       <ReactiveFallback name="RecoveryFallback">
