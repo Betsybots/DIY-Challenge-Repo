@@ -30,6 +30,9 @@ class PurePursuitMotionPlanner(Node):
         self.declare_parameter('linear_velocity', 0.3)
         self.declare_parameter('max_angular_velocity', 1.0)
         self.declare_parameter('rotate_in_place_threshold', 1.0)
+        self.declare_parameter('rotate_in_place_angular_velocity', 0.5)
+        self.declare_parameter('max_angular_acceleration', 1.0)
+        self.declare_parameter('max_linear_acceleration', 0.5)
         self.declare_parameter('minimum_turning_velocity', 0.05)
         self.declare_parameter('goal_tolerance', 0.15)
 
@@ -48,6 +51,24 @@ class PurePursuitMotionPlanner(Node):
         )
         self.rotate_in_place_threshold = float(
             self.get_parameter('rotate_in_place_threshold').value
+        )
+        # Kept separate from max_angular_velocity: spinning in place at the
+        # full pursuit turning speed distorts the LiDAR-inertial odometry
+        # point cloud enough to make FAST-LIO2 lose tracking (the "robot
+        # flies in RViz" symptom). This is deliberately <= max_angular_velocity.
+        self.rotate_in_place_angular_velocity = min(
+            float(
+                self.get_parameter('rotate_in_place_angular_velocity').value
+            ),
+            self.max_angular_velocity,
+        )
+        # Slew-rate limits so cmd_vel never jumps instantly to a new speed,
+        # which is what triggers the odometry-loss failure described above.
+        self.max_angular_acceleration = float(
+            self.get_parameter('max_angular_acceleration').value
+        )
+        self.max_linear_acceleration = float(
+            self.get_parameter('max_linear_acceleration').value
         )
         self.minimum_turning_velocity = float(
             self.get_parameter(
@@ -76,7 +97,12 @@ class PurePursuitMotionPlanner(Node):
             Bool, '/pd/goal_reached', 10
         )
         self.global_plan = None
-        self.timer = self.create_timer(0.1, self.control_loop)
+        self.control_period = 0.1
+        self.last_linear_velocity = 0.0
+        self.last_angular_velocity = 0.0
+        self.timer = self.create_timer(
+            self.control_period, self.control_loop
+        )
 
         self.get_logger().info(
             f'Pure pursuit ready: {self.path_topic} -> {self.cmd_vel_topic}'
@@ -137,12 +163,11 @@ class PurePursuitMotionPlanner(Node):
         )
 
         if abs(heading_error) > self.rotate_in_place_threshold:
-            command = Twist()
-            command.angular.z = math.copysign(
-                self.max_angular_velocity,
+            angular_velocity = math.copysign(
+                self.rotate_in_place_angular_velocity,
                 heading_error,
             )
-            self.cmd_pub.publish(command)
+            self.publish_velocity(0.0, angular_velocity)
             return
 
         curvature = 2.0 * math.sin(heading_error) / max(distance, 1e-6)
@@ -159,6 +184,32 @@ class PurePursuitMotionPlanner(Node):
                 self.max_angular_velocity,
             ),
         )
+
+        self.publish_velocity(linear_velocity, angular_velocity)
+
+    def publish_velocity(self, linear_velocity, angular_velocity):
+        # Slew-rate limit both axes so cmd_vel never jumps instantly to a
+        # new speed (e.g. 0 -> full rotate-in-place speed in one tick). An
+        # instantaneous jump is what was causing FAST-LIO2 to lose tracking
+        # ("robot flies off in RViz") whenever a goal landed behind the
+        # robot and it snapped straight into a fast in-place spin.
+        max_linear_step = self.max_linear_acceleration * self.control_period
+        max_angular_step = self.max_angular_acceleration * self.control_period
+
+        linear_velocity = self.last_linear_velocity + max(
+            -max_linear_step,
+            min(linear_velocity - self.last_linear_velocity, max_linear_step),
+        )
+        angular_velocity = self.last_angular_velocity + max(
+            -max_angular_step,
+            min(
+                angular_velocity - self.last_angular_velocity,
+                max_angular_step,
+            ),
+        )
+
+        self.last_linear_velocity = linear_velocity
+        self.last_angular_velocity = angular_velocity
 
         command = Twist()
         command.linear.x = linear_velocity
@@ -239,6 +290,8 @@ class PurePursuitMotionPlanner(Node):
 
     def stop_robot(self):
         self.cmd_pub.publish(Twist())
+        self.last_linear_velocity = 0.0
+        self.last_angular_velocity = 0.0
 
 
 def main(args=None):

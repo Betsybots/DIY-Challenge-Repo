@@ -25,6 +25,15 @@ def generate_launch_description():
     rotate_in_place_threshold = LaunchConfiguration(
         'rotate_in_place_threshold'
     )
+    rotate_in_place_angular_velocity = LaunchConfiguration(
+        'rotate_in_place_angular_velocity'
+    )
+    max_angular_acceleration = LaunchConfiguration(
+        'max_angular_acceleration'
+    )
+    max_linear_acceleration = LaunchConfiguration(
+        'max_linear_acceleration'
+    )
     minimum_turning_velocity = LaunchConfiguration(
         'minimum_turning_velocity'
     )
@@ -99,6 +108,23 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'rotate_in_place_threshold', default_value='1.0',
             description='Heading-error reference for slowing down in radians.',
+        ),
+        DeclareLaunchArgument(
+            'rotate_in_place_angular_velocity', default_value='0.5',
+            description=(
+                'Angular velocity used while rotating in place, in rad/s. '
+                'Kept below max_angular_velocity: spinning at full speed '
+                'distorts LiDAR-inertial odometry (FAST-LIO2) enough to '
+                'lose tracking.'
+            ),
+        ),
+        DeclareLaunchArgument(
+            'max_angular_acceleration', default_value='1.0',
+            description='Slew-rate limit on angular velocity in rad/s^2.',
+        ),
+        DeclareLaunchArgument(
+            'max_linear_acceleration', default_value='0.5',
+            description='Slew-rate limit on linear velocity in m/s^2.',
         ),
         DeclareLaunchArgument(
             'minimum_turning_velocity', default_value='0.05',

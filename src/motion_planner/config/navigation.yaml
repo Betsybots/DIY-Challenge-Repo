@@ -13,6 +13,9 @@
         linear_velocity: 0.3
         max_angular_velocity: 1.0
         rotate_in_place_threshold: 1.0
+        rotate_in_place_angular_velocity: 0.5
+        max_angular_acceleration: 1.0
+        max_linear_acceleration: 0.5
         minimum_turning_velocity: 0.05
         goal_tolerance: 0.15
         use_rviz: true
