@@ -123,21 +123,21 @@ def generate_launch_description():
             ),
             # EKF: /wheel_odom (vx, vyaw) + /imu/data (vyaw, down-weighted)
             # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_footprint TF.
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(
-                        get_package_share_directory('diy_state_estimate'),
-                        'launch',
-                        'ekf_fusion.launch.py',
-                    )
-                ),
-                launch_arguments={
-                    'wheel_odom_topic': '/wheel_odom',
-                    'imu_topic': '/imu/data',
-                    'lidar_odom_topic': '/Odometry',
-                    'output_topic': '/odom_ekf',
-                }.items(),
-            ),
+            # IncludeLaunchDescription(
+            #     PythonLaunchDescriptionSource(
+            #         os.path.join(
+            #             get_package_share_directory('diy_state_estimate'),
+            #             'launch',
+            #             'ekf_fusion.launch.py',
+            #         )
+            #     ),
+            #     launch_arguments={
+            #         'wheel_odom_topic': '/wheel_odom',
+            #         'imu_topic': '/imu/data',
+            #         'lidar_odom_topic': '/Odometry',
+            #         'output_topic': '/odom_ekf',
+            #     }.items(),
+            # ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
@@ -223,7 +223,7 @@ def generate_launch_description():
         robot_description_launch,
         hesai_launch,
         delayed_fast_lio,
-        delayed_hba_map,
-        delayed_nav2,
+        # delayed_hba_map,
+        #delayed_nav2,
         rviz_node,
     ])

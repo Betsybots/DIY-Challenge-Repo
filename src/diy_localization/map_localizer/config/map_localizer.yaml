@@ -1,0 +1,53 @@
+cloud_topic: /cloud_registered_body
+odom_topic: /odom
+map_frame: map
+local_frame: odom
+update_hz: 2.0
+# AMCL-style transform_tolerance: map->odom is broadcast stamped this far
+# ahead of the sensor capture time, so Nav2 looking it up at "now()" (a bit
+# later, due to processing/network latency) doesn't reject it as stale.
+# Too small -> "old data"/timeout warnings; too large -> Nav2 accepts a more
+# stale correction without complaint. 0.2-0.5s is a reasonable range here.
+transform_tolerance: 0.3
+# Saved map to auto-load at startup (produced by map_hba). Leave empty to
+# require an explicit /relocalize service call (which also supplies a
+# pcd_path) before the node has any map to align against.
+map_path: /home/juggernauts/localizer/src/map/refined_map.pcd
+# Optional fixed start pose (map frame), applied once right after map_path
+# loads. Only takes effect if start_x is present -- omit all of these to
+# instead rely on /initialpose (RViz "2D Pose Estimate") or /relocalize, or
+# on odom origin already coinciding with map origin.
+start_x: 0.0 #-20.4
+start_y: 0.0 #-6.45
+start_z: 0.0
+start_yaw: 0.0
+start_roll: 0.0
+start_pitch: 0.0
+# Reject an ICP realignment whose implied map->odom offset jumps further than
+# this from the last accepted one (a good fitness score doesn't rule out a
+# wrong local minimum in corridors/flat walls/symmetric rooms). Does not apply
+# to the first alignment or to an explicit /relocalize call.
+max_offset_jump_dist: 0.5
+max_offset_jump_yaw: 0.3
+
+rough_scan_resolution: 0.25
+rough_map_resolution: 0.25
+# Fitness score of 0.018 was already well under rough_score_thresh (0.2) at
+# only 5 iterations, but hasConverged() (an iteration-delta-epsilon check,
+# NOT a fit-quality check) was still false -- it just needed more steps to
+# formally settle. Raised from 5.
+rough_max_iteration: 20
+rough_score_thresh: 0.2
+# VGICP's internal voxel covariance grid size (meters), separate from the
+# scan/map downsample resolution above.
+rough_vgicp_resolution: 1.0
+num_threads: 4
+
+refine_scan_resolution: 0.1
+refine_map_resolution: 0.1
+# Same reasoning as rough_max_iteration -- give the solver enough steps to
+# actually flip hasConverged() true. Raised from 10.
+refine_max_iteration: 30
+refine_score_thresh: 0.1
+refine_vgicp_resolution: 0.5
+

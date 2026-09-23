@@ -1,0 +1,22 @@
+scan_flattener_node:
+  ros__parameters:
+    input_topic: /lidar_points
+    output_topic: /scan
+    # Empty -> use the input cloud's own frame_id (e.g. the Hesai lidar frame).
+    output_frame_id: ""
+
+    # "Scan line" filter: only rings 10-41 contribute to the synthetic scan.
+    ring_min: 10
+    ring_max: 41
+
+    # Vertical FOV filter (degrees), independent of range unlike a height band.
+    vertical_fov_min_deg: -40.0
+    vertical_fov_max_deg: 20.0
+
+    # Full 360 degree horizontal FOV, ~0.2 deg bins.
+    angle_increment: 0.6
+
+    # QT64 blind zone / practical max range (see FAST_LIO_Hesai_ROS2/config/qt64.yaml).
+    range_min: 0.5
+    range_max: 30.0
+    use_inf: true

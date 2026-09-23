@@ -44,7 +44,7 @@ bt_navigator:
     use_sim_time: False
     global_frame: map
     robot_base_frame: base_link
-    odom_topic: /odom_ekf
+    odom_topic: /Odometry
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
@@ -198,53 +198,42 @@ local_costmap:
       height: 3
       resolution: 0.05
       robot_radius: 0.22
-      plugins: ["stvl_layer", "inflation_layer"]
+      plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.05
-      stvl_layer:
-        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
-        enabled:                  true
-        voxel_decay:              1.0  # seconds if linear, e^n if exponential
-        decay_model:              0     # 0=linear, 1=exponential, -1=persistent
-        voxel_size:               0.05  # meters
-        track_unknown_space:      true  # default space is known
-        unknown_threshold:        15    # voxel height
-        mark_threshold:           0     # voxel height
-        update_footprint_enabled: true
-        combination_method:       1     # 1=max, 0=override
-        origin_z:                 0.0   # meters
-        publish_voxel_map:        true # default off
-        transform_tolerance:      0.3   # seconds
-        mapping_mode:             false # default off, saves map not for navigation
-        map_save_duration:        60.0  # default 60s, how often to autosave
-        observation_sources:      pointcloud_mark pointcloud_clear
-        pointcloud_mark:
-          data_type: PointCloud2
+        # Must be >= robot_radius (0.22) so the InflationLayer's own
+        # "inscribed obstacle" zone actually extends to cover the robot's
+        # full body -- it was 0.05 (smaller than the robot itself), which
+        # meant recovery-behavior footprint checks and RViz's danger-zone
+        # display both understated how close the robot really was to a wall.
+        inflation_radius: 0.30
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: True
+        publish_voxel_map: True
+        origin_z: -0.2
+        z_resolution: 0.125
+        z_voxels: 16
+        max_obstacle_height: 2.0
+        # Require 2+ marked voxels in a column before projecting it as a
+        # lethal 2D cell. mark_threshold: 0 meant a single noisy/spurious
+        # lidar point (e.g. during FAST-LIO2 IMU-buffer-clear events) was
+        # enough to paint a phantom obstacle right next to the robot,
+        # triggering unnecessary backup recoveries.
+        mark_threshold: 2
+        observation_sources: cloud_registered_body
+        cloud_registered_body:
           topic: /cloud_registered_body
-          marking: true
-          clearing: false
-          obstacle_range: 3.0          # meters
-          min_obstacle_height: 0.02     # default 0, meters
-          max_obstacle_height: 1.5     # default 3, meters
-          expected_update_rate: 0.0    # default 0, 
-          observation_persistence: 0.0 # default 0, 
-          inf_is_valid: true          # default false, for laser scans
-          filter: "passthrough"        # default passthrough, a
-          voxel_min_points: 0          # default 0, minimum points per voxel for voxel filter
-          clear_after_reading: true    # default false,
-        pointcloud_clear:
-          data_type: PointCloud2
-          topic: /cloud_registered_body
-          marking: false
-          clearing: true
-          max_z: 7.0                  # default 0, meters
-          min_z: 0.1                  # default 10, meters
-          vertical_fov_angle: 0.218   # ~12.5 Degrees (Only 32 scanline using)
-          horizontal_fov_angle: 1.745 # 100 Degrees (330 deg to 214 deg)
-          decay_acceleration: 5.0     # default 0, 1/s^2. If laser scanner MUST be 0
-          model_type: 0                # default 0, model type for frustum.
+          min_obstacle_height: 0.10
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "PointCloud2"
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.3
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -256,62 +245,166 @@ global_costmap:
       update_frequency: 1.0
       publish_frequency: 1.0
       global_frame: map
-      robot_base_frame: base_link
+      robot_base_frame: base_footprint
       use_sim_time: False
       robot_radius: 0.22
       resolution: 0.05
       track_unknown_space: true
-      plugins: ["voxel_layer", "static_layer", "inflation_layer"]
-      voxel_layer:
-        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
-        enabled:                  true
-        voxel_decay:              1.0  # seconds if linear, e^n if exponential
-        decay_model:              0     # 0=linear, 1=exponential, -1=persistent
-        voxel_size:               0.05  # meters
-        track_unknown_space:      true  # default space is known
-        unknown_threshold:        15    # voxel height
-        mark_threshold:           0     # voxel height
-        update_footprint_enabled: true
-        combination_method:       1     # 1=max, 0=override
-        origin_z:                 0.0   # meters
-        publish_voxel_map:        true # default off
-        transform_tolerance:      0.3   # seconds
-        mapping_mode:             false # default off, saves map not for navigation
-        map_save_duration:        60.0  # default 60s, how often to autosave
-        observation_sources:      pointcloud_mark pointcloud_clear
-        pointcloud_mark:
-          data_type: PointCloud2
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: cloud_registered_body
+        cloud_registered_body:
           topic: /cloud_registered_body
-          marking: true
-          clearing: false
-          obstacle_range: 3.0          # meters
-          min_obstacle_height: 0.02     # default 0, meters
-          max_obstacle_height: 1.5     # default 3, meters
-          expected_update_rate: 0.0    # default 0, 
-          observation_persistence: 0.0 # default 0, 
-          inf_is_valid: true          # default false, for laser scans
-          filter: "passthrough"        # default passthrough, a
-          voxel_min_points: 0          # default 0, minimum points per voxel for voxel filter
-          clear_after_reading: true    # default false,
-        pointcloud_clear:
-          data_type: PointCloud2
-          topic: /cloud_registered_body
-          marking: false
-          clearing: true
-          max_z: 7.0                  # default 0, meters
-          min_z: 0.1                  # default 10, meters
-          vertical_fov_angle: 0.218   # ~12.5 Degrees (Only 32 scanline using)
-          horizontal_fov_angle: 1.745 # 100 Degrees (330 deg to 214 deg)
-          decay_acceleration: 5.0    # default 0, 1/s^2. If laser scanner MUST be 0
-          model_type: 0                # default 0, model type for frustum.
+          min_obstacle_height: 0.10
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "PointCloud2"
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.3
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.05
+        # Same reasoning as local_costmap's inflation_radius above: must be
+        # >= robot_radius (0.22) for the inscribed-obstacle zone to cover the
+        # robot's full body.
+        inflation_radius: 0.30
       always_send_full_costmap: True
+
+# local_costmap:
+#   local_costmap:
+#     ros__parameters:
+#       update_frequency: 5.0
+#       publish_frequency: 2.0
+#       global_frame: odom
+#       robot_base_frame: base_link
+#       use_sim_time: False
+#       rolling_window: true
+#       width: 3
+#       height: 3
+#       resolution: 0.05
+#       robot_radius: 0.22
+#       plugins: ["stvl_layer", "inflation_layer"]
+#       inflation_layer:
+#         plugin: "nav2_costmap_2d::InflationLayer"
+#         cost_scaling_factor: 3.0
+#         inflation_radius: 0.05
+#       stvl_layer:
+#         plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
+#         enabled:                  true
+#         voxel_decay:              1.0  # seconds if linear, e^n if exponential
+#         decay_model:              0     # 0=linear, 1=exponential, -1=persistent
+#         voxel_size:               0.05  # meters
+#         track_unknown_space:      true  # default space is known
+#         unknown_threshold:        15    # voxel height
+#         mark_threshold:           0     # voxel height
+#         update_footprint_enabled: true
+#         combination_method:       1     # 1=max, 0=override
+#         origin_z:                 0.0   # meters
+#         publish_voxel_map:        true # default off
+#         transform_tolerance:      0.3   # seconds
+#         mapping_mode:             false # default off, saves map not for navigation
+#         map_save_duration:        60.0  # default 60s, how often to autosave
+#         observation_sources:      pointcloud_mark pointcloud_clear
+#         pointcloud_mark:
+#           data_type: PointCloud2
+#           topic: /cloud_registered_body
+#           marking: true
+#           clearing: false
+#           obstacle_range: 3.0          # meters
+#           min_obstacle_height: 0.02     # default 0, meters
+#           max_obstacle_height: 1.5     # default 3, meters
+#           expected_update_rate: 0.0    # default 0, 
+#           observation_persistence: 0.0 # default 0, 
+#           inf_is_valid: true          # default false, for laser scans
+#           filter: "passthrough"        # default passthrough, a
+#           voxel_min_points: 0          # default 0, minimum points per voxel for voxel filter
+#           clear_after_reading: true    # default false,
+#         pointcloud_clear:
+#           data_type: PointCloud2
+#           topic: /cloud_registered_body
+#           marking: false
+#           clearing: true
+#           max_z: 7.0                  # default 0, meters
+#           min_z: 0.1                  # default 10, meters
+#           vertical_fov_angle: 0.218   # ~12.5 Degrees (Only 32 scanline using)
+#           horizontal_fov_angle: 1.745 # 100 Degrees (330 deg to 214 deg)
+#           decay_acceleration: 5.0     # default 0, 1/s^2. If laser scanner MUST be 0
+#           model_type: 0                # default 0, model type for frustum.
+#       static_layer:
+#         plugin: "nav2_costmap_2d::StaticLayer"
+#         map_subscribe_transient_local: True
+#       always_send_full_costmap: True
+
+# global_costmap:
+#   global_costmap:
+#     ros__parameters:
+#       update_frequency: 1.0
+#       publish_frequency: 1.0
+#       global_frame: map
+#       robot_base_frame: base_link
+#       use_sim_time: False
+#       robot_radius: 0.22
+#       resolution: 0.05
+#       track_unknown_space: true
+#       plugins: ["voxel_layer", "static_layer", "inflation_layer"]
+#       voxel_layer:
+#         plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
+#         enabled:                  true
+#         voxel_decay:              1.0  # seconds if linear, e^n if exponential
+#         decay_model:              0     # 0=linear, 1=exponential, -1=persistent
+#         voxel_size:               0.05  # meters
+#         track_unknown_space:      true  # default space is known
+#         unknown_threshold:        15    # voxel height
+#         mark_threshold:           0     # voxel height
+#         update_footprint_enabled: true
+#         combination_method:       1     # 1=max, 0=override
+#         origin_z:                 0.0   # meters
+#         publish_voxel_map:        true # default off
+#         transform_tolerance:      0.3   # seconds
+#         mapping_mode:             false # default off, saves map not for navigation
+#         map_save_duration:        60.0  # default 60s, how often to autosave
+#         observation_sources:      pointcloud_mark pointcloud_clear
+#         pointcloud_mark:
+#           data_type: PointCloud2
+#           topic: /cloud_registered_body
+#           marking: true
+#           clearing: false
+#           obstacle_range: 3.0          # meters
+#           min_obstacle_height: 0.02     # default 0, meters
+#           max_obstacle_height: 1.5     # default 3, meters
+#           expected_update_rate: 0.0    # default 0, 
+#           observation_persistence: 0.0 # default 0, 
+#           inf_is_valid: true          # default false, for laser scans
+#           filter: "passthrough"        # default passthrough, a
+#           voxel_min_points: 0          # default 0, minimum points per voxel for voxel filter
+#           clear_after_reading: true    # default false,
+#         pointcloud_clear:
+#           data_type: PointCloud2
+#           topic: /cloud_registered_body
+#           marking: false
+#           clearing: true
+#           max_z: 7.0                  # default 0, meters
+#           min_z: 0.1                  # default 10, meters
+#           vertical_fov_angle: 0.218   # ~12.5 Degrees (Only 32 scanline using)
+#           horizontal_fov_angle: 1.745 # 100 Degrees (330 deg to 214 deg)
+#           decay_acceleration: 5.0    # default 0, 1/s^2. If laser scanner MUST be 0
+#           model_type: 0                # default 0, model type for frustum.
+#       static_layer:
+#         plugin: "nav2_costmap_2d::StaticLayer"
+#         map_subscribe_transient_local: True
+#       inflation_layer:
+#         plugin: "nav2_costmap_2d::InflationLayer"
+#         cost_scaling_factor: 3.0
+#         inflation_radius: 0.05
+#       always_send_full_costmap: True
 
 map_server:
   ros__parameters:
@@ -350,6 +443,7 @@ smoother_server:
       max_its: 1000
       do_refinement: True
 
+behavior_server:
   ros__parameters:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
@@ -409,3 +503,46 @@ velocity_smoother:
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
+
+map_localizer:
+  ros__parameters:
+    cloud_topic: /cloud_registered_body
+    odom_topic:  /Odometry                     #/Odometry
+    map_frame: map
+    local_frame: odom
+    update_hz: 1.0
+    # Saved map to auto-load at startup (produced by map_hba). Leave empty to
+    # require an explicit /relocalize service call (which also supplies a
+    # pcd_path) before the node has any map to align against.
+    map_path: /home/juggernauts/localizer/src/map/refined_map.pcd
+    # Optional fixed start pose (map frame), applied once right after map_path
+    # loads. Only takes effect if start_x is present -- omit all of these to
+    # instead rely on /initialpose (RViz "2D Pose Estimate") or /relocalize, or
+    # on odom origin already coinciding with map origin.
+    start_x: -20.4
+    start_y: -6.45
+    start_z: 0.0
+    start_yaw: 0.0
+    start_roll: 0.0
+    start_pitch: 0.0
+    # Reject an ICP realignment whose implied map->odom offset jumps further than
+    # this from the last accepted one (a good fitness score doesn't rule out a
+    # wrong local minimum in corridors/flat walls/symmetric rooms). Does not apply
+    # to the first alignment or to an explicit /relocalize call.
+    max_offset_jump_dist: 0.5
+    max_offset_jump_yaw: 0.3
+    
+    rough_scan_resolution: 0.25
+    rough_map_resolution: 0.25
+    rough_max_iteration: 5
+    rough_score_thresh: 0.2
+    # VGICP's internal voxel covariance grid size (meters), separate from the
+    # scan/map downsample resolution above.
+    rough_vgicp_resolution: 1.0
+    num_threads: 4
+    
+    refine_scan_resolution: 0.1
+    refine_map_resolution: 0.1
+    refine_max_iteration: 10
+    refine_score_thresh: 0.1
+    refine_vgicp_resolution: 0.5

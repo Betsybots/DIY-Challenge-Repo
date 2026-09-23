@@ -42,10 +42,21 @@ def generate_launch_description():
         'global_map.yaml',
     )
 
+    map_yaml_env = os.environ.get('DIY_MAP_YAML')
+    if map_yaml_env and not os.path.isabs(map_yaml_env):
+        raise RuntimeError(
+            "DIY_MAP_YAML is set to a non-absolute path: "
+            f"'{map_yaml_env}'. It looks like a leading '/' is missing "
+            "(e.g. 'home/...' instead of '/home/...'), which causes "
+            "map_server to fail with a 'bad file' error. Fix the "
+            "environment variable or unset it to use the bundled "
+            f"challenge_bringup map ({default_map_yaml})."
+        )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'map_yaml',
-            default_value=os.environ.get('DIY_MAP_YAML') or default_map_yaml,
+            default_value=map_yaml_env or default_map_yaml,
             description=(
                 'Absolute path to the saved map YAML file '
             ),
@@ -55,7 +66,7 @@ def generate_launch_description():
             description='Use ROS simulation clock.',
         ),
         DeclareLaunchArgument(
-            'base_frame', default_value='base_link',
+            'base_frame', default_value='base_footprint',
             description='Use base_footprint in simulation and base_link on hardware.',
         ),
         DeclareLaunchArgument(
@@ -67,7 +78,7 @@ def generate_launch_description():
             description='Minimum static-obstacle clearance for A* in meters.',
         ),
         DeclareLaunchArgument(
-            'cmd_vel_topic', default_value='/cmd_vel_nav',
+            'cmd_vel_topic', default_value='/cmd_vel',
             description=(
                 'Defaults to /cmd_vel_nav (hardware — read by cmd_vel_mux_node '
                 'for AUTONOMOUS mode), matching base_frame/use_sim_time above. '

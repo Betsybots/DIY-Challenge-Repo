@@ -1,0 +1,40 @@
+# Config for the octomap_to_grid tool (patches/*.pcd + poses.txt -> OctoMap ->
+# 2D occupancy grid). Adjust these and re-run against the same saved map while
+# tuning, instead of retyping CLI flags each time:
+#   ros2 run map_hba octomap_to_grid --config src/map_hba/config/octomap_to_grid.yaml
+#
+# Any value here can still be overridden per-run with a CLI flag, e.g.:
+#   ros2 run map_hba octomap_to_grid --config <this file> --resolution 0.1
+
+# Directory produced by /loop_pgo/save_maps (save_patches:true): expects
+# <maps_path>/patches/*.pcd and <maps_path>/<poses_file>.
+maps_path: /home/juggernauts/localizer/src/map
+
+# Filename (relative to maps_path) or absolute path. Use "poses.txt" for the
+# raw loop_pgo keyframe poses, or map_hba's own "refined_poses.txt" (from
+# /map_hba/save_poses) to ray-cast with the bundle-adjusted trajectory instead.
+poses_file: refined_poses.txt
+
+# Output path prefix -- writes <out_prefix>.pgm + <out_prefix>.yaml (and
+# <out_prefix>.bt if save_bt is true).
+out_prefix: /home/juggernauts/localizer/src/map/global_map
+
+# OctoMap voxel size / grid cell size, in meters. Smaller = sharper map, more
+# memory and slower ray-casting.
+resolution: 0.05
+
+# Height band (meters, in the map frame) used when projecting the 3D octree
+# down to a 2D grid: only voxels with z in [z_min, z_max] are considered.
+# Tune to your sensor mount height / robot footprint to include real
+# obstacles while excluding ground noise and overhangs.
+# Measured on this map's refined_map.pcd: points span roughly z=-0.8..2.6m
+# with no clean floor spike (QT64's 1m blind zone hides near-robot floor
+# returns). -0.3..0.5 straddled a near-floor clutter band and made the grid
+# ~41% solid black; 0.0..1.0 sits above most floor-level clutter and gives a
+# clean wall/equipment silhouette instead - re-tune if you remount the sensor.
+z_min: 0.0
+z_max: 0.2
+
+# Also write <out_prefix>.bt (the raw 3D octree), useful for inspecting in
+# octovis or reusing later for a 3D costmap layer.
+save_bt: true

@@ -74,7 +74,7 @@ ekf_filter_node:
                   false, false, false,
                   false, false, false,
                   false, false, true,
-                  false, false, false]
+                  true, false, false]
     imu0_queue_size: 10
     imu0_nodelay: true
     imu0_differential: false

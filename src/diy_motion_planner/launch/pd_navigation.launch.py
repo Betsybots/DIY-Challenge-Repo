@@ -39,6 +39,40 @@ from launch.conditions import IfCondition
 import os
 from ament_index_python.packages import get_package_share_directory
 
+
+def _resolve_default_map_yaml():
+    """Resolve the default map_yaml value from DIY_MAP_YAML/DIY_ROS_WS.
+
+    Raises a clear error at launch-description-generation time if the
+    resolved path is not absolute (e.g. a leading '/' was dropped), rather
+    than letting nav2's map_server fail deep inside map_io with a cryptic
+    'bad file' error.
+    """
+    map_yaml_env = os.environ.get('DIY_MAP_YAML')
+    ros_ws = os.environ.get('DIY_ROS_WS', '')
+
+    if map_yaml_env:
+        default_map_yaml = map_yaml_env
+    elif ros_ws:
+        default_map_yaml = os.path.join(
+            ros_ws, 'src', 'DIY-Challenge-Repo', 'maps', 'global_map_2_smooth.yaml',
+        )
+    else:
+        default_map_yaml = ''
+
+    if default_map_yaml and not os.path.isabs(default_map_yaml):
+        source = 'DIY_MAP_YAML' if map_yaml_env else 'DIY_ROS_WS'
+        raise RuntimeError(
+            f"{source} resolves to a non-absolute map_yaml path: "
+            f"'{default_map_yaml}'. It looks like a leading '/' is "
+            "missing (e.g. 'home/...' instead of '/home/...'), which "
+            "causes map_server to fail with a 'bad file' error. Fix the "
+            "environment variable or pass map_yaml:=... explicitly."
+        )
+
+    return default_map_yaml
+
+
 def generate_launch_description():
 
     # ============================================================
@@ -85,16 +119,7 @@ def generate_launch_description():
 
         DeclareLaunchArgument(
             'map_yaml',
-            default_value=(
-                os.environ.get('DIY_MAP_YAML')
-                or (
-                    os.path.join(
-                        os.environ.get('DIY_ROS_WS', ''),
-                        'src', 'DIY-Challenge-Repo', 'maps', 'global_map_2_smooth.yaml',
-                    )
-                    if os.environ.get('DIY_ROS_WS') else ''
-                )
-            ),
+            default_value=_resolve_default_map_yaml(),
             description=(
                 'Absolute path to the saved map YAML file (nav2_map_server format). '
                 'Defaults to $DIY_MAP_YAML if set, else '

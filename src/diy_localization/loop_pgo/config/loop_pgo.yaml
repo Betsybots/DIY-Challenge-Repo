@@ -1,0 +1,26 @@
+cloud_topic: /cloud_registered_body
+odom_topic: /Odometry
+imu_topic: /imu/data
+map_frame: map
+local_frame: odom
+
+reject_imu_shocks: true
+gravity_magnitude: 9.81
+shock_accel_deviation_threshold: 4.0
+shock_cooldown: 0.3
+
+key_pose_delta_deg: 10
+key_pose_delta_trans: 0.5
+loop_search_radius: 1.0
+loop_time_tresh: 60.0
+loop_score_tresh: 0.15
+loop_submap_half_range: 5
+submap_resolution: 0.1
+min_loop_detect_duration: 5.0
+
+loop_consistency_count: 3
+loop_consistency_target_tolerance: 5
+loop_huber_k: 1.345
+hessian_eigen_ratio_threshold: 0.001
+hessian_degenerate_scale: 0.01
+hessian_min_information: 0.000001

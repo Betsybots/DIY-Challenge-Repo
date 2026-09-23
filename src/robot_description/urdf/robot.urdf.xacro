@@ -63,7 +63,7 @@
   <xacro:property name="imu_width" value="0.03"/>
   <xacro:property name="imu_height" value="0.02"/>
   <xacro:property name="hesai_centroid_y" value="-0.0298"/>
-  <xacro:property name="hesai_centroid_z" value="0.0124"/>
+  <xacro:property name="hesai_centroid_z" value="0.0504"/>
   
   <xacro:arg name="use_nominal_extrinsics" default="true" />
   <!-- sim:=true (pass via `xacro robot.urdf.xacro sim:=true`) includes all Gazebo plugins/tags -->
