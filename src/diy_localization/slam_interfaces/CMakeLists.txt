@@ -16,6 +16,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SavePoses.srv"
   "srv/Relocalize.srv"
   "srv/IsValid.srv"
+  "msg/LocalizationStatus.msg"
   DEPENDENCIES std_msgs
 )
 

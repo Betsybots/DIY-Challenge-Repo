@@ -9,6 +9,13 @@ update_hz: 2.0
 # Too small -> "old data"/timeout warnings; too large -> Nav2 accepts a more
 # stale correction without complaint. 0.2-0.5s is a reasonable range here.
 transform_tolerance: 0.3
+# Merge this many of the most recent LiDAR scans (via their own paired
+# odometry) into one cloud before each ICP alignment, instead of aligning a
+# single scan against the map. 1 = disabled (this repo's original behavior).
+# Higher values (2-5) give ICP a denser, more geometrically-constrained input
+# -- useful given the QT64's ~1m blind zone -- at a small added per-cycle
+# transform cost. Clamped to [1, 10].
+accumulate_scans: 1
 # Saved map to auto-load at startup (produced by map_hba). Leave empty to
 # require an explicit /relocalize service call (which also supplies a
 # pcd_path) before the node has any map to align against.
@@ -17,8 +24,8 @@ map_path: /home/u_ikkurd/DIY-Challenge-Repo/src/diy_localization/map/refined_map
 # loads. Only takes effect if start_x is present -- omit all of these to
 # instead rely on /initialpose (RViz "2D Pose Estimate") or /relocalize, or
 # on odom origin already coinciding with map origin.
-start_x: 0.0 #-20.4
-start_y: 0.0 #-6.45
+start_x: 0.0 
+start_y: 0.0 
 start_z: 0.0
 start_yaw: 0.0
 start_roll: 0.0
@@ -29,6 +36,18 @@ start_pitch: 0.0
 # to the first alignment or to an explicit /relocalize call.
 max_offset_jump_dist: 0.5
 max_offset_jump_yaw: 0.3
+# Auto-recovery: after this many CONSECUTIVE alignment failures (and every
+# further multiple of it), sweep a grid of hypotheses derived from the loaded
+# map's own point cloud (see computeRecoveryHypotheses() in localizer_node.cpp)
+# trying to re-lock from scratch, instead of holding a possibly-stale offset
+# forever. 0 disables auto-recovery. No external waypoints file needed --
+# adapts automatically to whatever map is loaded (map_path or /relocalize).
+recovery_after_failures: 0
+recovery_grid_spacing: 2.0
+recovery_yaw_samples: 4
+# Blend accepted map->odom corrections over this many seconds instead of
+# publishing a one-tick jump. Set to 0 to publish corrections immediately.
+offset_smoothing_time_constant: 0.5
 
 rough_scan_resolution: 0.25
 rough_map_resolution: 0.25

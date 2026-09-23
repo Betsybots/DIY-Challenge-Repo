@@ -19,6 +19,9 @@
   <depend>geometry_msgs</depend>
   <depend>slam_interfaces</depend>
   <depend>fast_gicp</depend>
+  <depend>yaml-cpp</depend>
+  <depend>eigen</depend>
+  <depend>libpcl-all-dev</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

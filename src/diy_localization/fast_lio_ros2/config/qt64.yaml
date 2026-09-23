@@ -130,6 +130,13 @@
             max_mean_residual:  1.0                  # 1.0
             shock_accel_deviation_threshold: 8.0    # 8.0 m/s^2 deviation from gravity; raise to avoid false positives
             shock_process_noise_scale: 25.0           # 25.0 temporary IMU process-noise multiplier during a shock
+            # Catches fast rotations (e.g. an in-place spin) that
+            # shock_accel_deviation_threshold alone misses -- a pure rotation
+            # need not produce much net linear acceleration deviation.
+            # motion_controller's max_angular_velocity defaults to 1.0 rad/s,
+            # so this is set above normal commanded turning to avoid false
+            # positives during intentional in-place rotation.
+            shock_gyro_threshold: 2.5                 # rad/s
             max_imu_gap: 0.05                        # seconds; reject if IMU coverage has a gap this large
             # Keep rejecting scans from map insertion for this long (seconds) after a
             # shock clears. Without this, the very next scan that individually looks

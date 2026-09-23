@@ -46,14 +46,23 @@ class ImuProcess
   void set_acc_cov(const V3D &scaler);
   void set_gyr_bias_cov(const V3D &b_g);
   void set_acc_bias_cov(const V3D &b_a);
-  // Configures per-IMU-interval shock detection: a raw acceleration reading whose
-  // magnitude deviates from gravity_mag by more than accel_deviation_threshold
-  // (m/s^2) temporarily inflates that predict step's process noise by
-  // process_noise_scale, so the filter trusts gyro/accel propagation less during
-  // the shock instead of silently absorbing a bad reading into the state.
-  void set_shock_detection(double gravity_mag, double accel_deviation_threshold, double process_noise_scale);
+  // Configures per-IMU-interval shock detection. Two independent triggers,
+  // either one inflates that predict step's process noise by
+  // process_noise_scale (so the filter trusts propagation less during the
+  // shock instead of silently absorbing a bad reading into the state):
+  // - accel_deviation_threshold (m/s^2): raw acceleration magnitude deviates
+  //   from gravity_mag by more than this (e.g. driving over a bump).
+  // - gyro_threshold (rad/s): angular velocity magnitude exceeds this. Only
+  //   catches acceleration-based shocks; a fast rotation with little net
+  //   linear acceleration change (e.g. an in-place spin) would otherwise not
+  //   be flagged at all.
+  void set_shock_detection(double gravity_mag, double accel_deviation_threshold, double process_noise_scale, double gyro_threshold);
   double getMaxImuGap() const { return last_max_imu_gap_; }
   bool hadShock() const { return last_had_shock_; }
+  // Diagnostics: which trigger(s) actually fired, so a rejected-scan log can
+  // say why instead of just that it happened.
+  bool hadAccelShock() const { return last_had_accel_shock_; }
+  bool hadGyroShock() const { return last_had_gyro_shock_; }
   // Timestamp (lidar/imu clock) of the most recent IMU sample that triggered
   // shock detection -- lets callers keep treating scans as low-quality for a
   // cooldown window after a shock clears, instead of trusting the very next
@@ -95,9 +104,12 @@ class ImuProcess
 
   double gravity_mag_ = G_m_s2;
   double shock_accel_deviation_threshold_ = 4.0;
+  double shock_gyro_threshold_ = 3.0;
   double shock_process_noise_scale_ = 25.0;
   double last_max_imu_gap_ = 0.0;
   bool   last_had_shock_ = false;
+  bool   last_had_accel_shock_ = false;
+  bool   last_had_gyro_shock_ = false;
   double last_shock_time_ = -1e9;
 };
 
@@ -173,11 +185,12 @@ void ImuProcess::set_acc_bias_cov(const V3D &b_a)
   cov_bias_acc = b_a;
 }
 
-void ImuProcess::set_shock_detection(double gravity_mag, double accel_deviation_threshold, double process_noise_scale)
+void ImuProcess::set_shock_detection(double gravity_mag, double accel_deviation_threshold, double process_noise_scale, double gyro_threshold)
 {
   gravity_mag_ = gravity_mag;
   shock_accel_deviation_threshold_ = accel_deviation_threshold;
   shock_process_noise_scale_ = process_noise_scale;
+  shock_gyro_threshold_ = gyro_threshold;
 }
 
 void ImuProcess::IMU_init(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, int &N)
@@ -265,6 +278,8 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
   double dt = 0;
   last_max_imu_gap_ = 0.0;
   last_had_shock_ = false;
+  last_had_accel_shock_ = false;
+  last_had_gyro_shock_ = false;
 
   input_ikfom in;
   for (auto it_imu = v_imu.begin(); it_imu < (v_imu.end() - 1); it_imu++)
@@ -293,11 +308,18 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
     // A raw acceleration reading (now in m/s^2, after the gravity-scale
     // calibration above) that deviates sharply from static gravity indicates
     // a shock (e.g. driving over a bump) rather than smooth motion; the
-    // filter should trust this interval's propagation less.
-    const bool shock_this_step = std::abs(acc_avr.norm() - gravity_mag_) > shock_accel_deviation_threshold_;
+    // filter should trust this interval's propagation less. Independently,
+    // a high angular velocity magnitude catches fast rotations (e.g. an
+    // in-place spin) that the acceleration check alone would miss, since a
+    // pure rotation need not produce much net linear acceleration deviation.
+    const bool accel_shock_this_step = std::abs(acc_avr.norm() - gravity_mag_) > shock_accel_deviation_threshold_;
+    const bool gyro_shock_this_step = angvel_avr.norm() > shock_gyro_threshold_;
+    const bool shock_this_step = accel_shock_this_step || gyro_shock_this_step;
     if (shock_this_step)
     {
       last_had_shock_ = true;
+      last_had_accel_shock_ = last_had_accel_shock_ || accel_shock_this_step;
+      last_had_gyro_shock_ = last_had_gyro_shock_ || gyro_shock_this_step;
       last_shock_time_ = tail_stamp;
     }
 

@@ -1,7 +1,12 @@
 #include <queue>
+#include <deque>
 #include <mutex>
+#include <atomic>
 #include <filesystem>
 #include <algorithm>
+#include <cmath>
+#include <limits>
+#include <unordered_set>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -10,6 +15,7 @@
 #include <message_filters/synchronizer.h>
 
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/common/transforms.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 
@@ -17,9 +23,31 @@
 #include "localizers/icp_localizer.h"
 #include "slam_interfaces/srv/relocalize.hpp"
 #include "slam_interfaces/srv/is_valid.hpp"
+#include "slam_interfaces/msg/localization_status.hpp"
 #include <yaml-cpp/yaml.h>
 
 using namespace std::chrono_literals;
+
+// Map-frame seed pose for auto-recovery, derived from the loaded map's own
+// point cloud (see computeRecoveryHypotheses()) -- no external waypoints
+// file to maintain, and it auto-adapts to whatever map gets loaded (startup
+// map_path or a later /relocalize with a different pcd).
+struct RecoveryHypothesis
+{
+    double x = 0.0;
+    double y = 0.0;
+};
+
+// One synced (cloud, odometry pose) sample kept for scan accumulation (see
+// buildAccumulatedCloud()). The cloud is a fresh object per callback (never
+// mutated in place), so aliasing between history entries and last_cloud is
+// safe.
+struct ScanRecord
+{
+    CloudType::Ptr cloud;
+    M3D r = M3D::Identity();
+    V3D t = V3D::Zero();
+};
 
 struct NodeConfig
 {
@@ -56,6 +84,27 @@ struct NodeConfig
     // rejected as stale even though we only actually recompute the offset
     // at update_hz.
     double transform_tolerance = 0.1;
+    // Time constant for blending the broadcast map->odom transform toward a
+    // new ICP correction. Set to <= 0 to retain immediate updates.
+    double offset_smoothing_time_constant = 0.5;
+    // Attempt a map-derived grid-hypothesis sweep (see computeRecoveryHypotheses())
+    // every time consecutive_align_failures reaches a multiple of this count.
+    // 0 disables auto-recovery.
+    int recovery_after_failures = 0;
+    // Spacing (meters) between candidate grid points covering the loaded
+    // map's footprint. Smaller = more thorough but slower sweeps.
+    double recovery_grid_spacing = 2.0;
+    // Evenly-spaced yaw candidates tried at each grid point (e.g. 4 = every
+    // 90 deg). Grid points carry no heading information, unlike a hand-picked
+    // waypoint, so more samples are needed here to cover orientation.
+    int recovery_yaw_samples = 4;
+    // Merge this many of the most recent synced scans (via their own paired
+    // odometry) into one cloud before each ICP alignment, instead of aligning
+    // a single scan against the map. 1 (default) = disabled, this repo's
+    // original behavior. Higher values (2-5) give ICP a denser, more
+    // geometrically-constrained input -- useful given the QT64's ~1m blind
+    // zone -- at a small added per-cycle transform cost. Clamped to [1, 10].
+    int accumulate_scans = 1;
 };
 
 struct NodeState
@@ -63,16 +112,33 @@ struct NodeState
     std::mutex message_mutex;
     std::mutex service_mutex;
 
-    bool message_received = false;
-    bool service_received = false;
-    bool localize_success = false;
+    // Touched from both the ICP-timer callback group and the default group
+    // (services/subscriptions) once timerCB runs on its own callback group
+    // (see LocalizerNode's constructor) -- atomic so those cross-group reads
+    // and writes aren't a data race.
+    std::atomic<bool> message_received{false};
+    std::atomic<bool> service_received{false};
+    std::atomic<bool> localize_success{false};
     builtin_interfaces::msg::Time last_message_time;
     CloudType::Ptr last_cloud = std::make_shared<CloudType>();
     M3D last_r;                          // localmap_body_r
     V3D last_t;                          // localmap_body_t
-    M3D last_offset_r = M3D::Identity(); // map_localmap_r
-    V3D last_offset_t = V3D::Zero();     // map_localmap_t
+    // Bounded to accumulate_scans entries (see syncCB), most recent last --
+    // consumed by buildAccumulatedCloud().
+    std::deque<ScanRecord> scan_history;
+    M3D last_offset_r = M3D::Identity(); // Smoothed, broadcast map->odom rotation.
+    V3D last_offset_t = V3D::Zero();     // Smoothed, broadcast map->odom translation.
+    M3D target_offset_r = M3D::Identity();
+    V3D target_offset_t = V3D::Zero();
+    rclcpp::Time last_smooth_time;
+    rclcpp::Time last_align_time;
     M4F initial_guess = M4F::Identity();
+    // Odometry pose at the moment the current /relocalize or /initialpose
+    // request was received -- lets timerCB's service_received branch keep
+    // tracking the robot's actual motion on every retry, instead of reusing
+    // the exact requested pose forever if the first attempt fails.
+    M3D service_ref_r = M3D::Identity();
+    V3D service_ref_t = V3D::Zero();
     bool has_aligned_once = false;
     // -1 = no successful alignment yet; otherwise the refine-stage VGICP
     // fitness score from the last accepted offset, used as a rough proxy
@@ -101,10 +167,12 @@ public:
 
         if (!m_config.map_path.empty())
         {
+            std::lock_guard<std::mutex> localizer_lock(m_localizer_mutex);
             if (std::filesystem::exists(m_config.map_path) && m_localizer->loadMap(m_config.map_path))
             {
                 m_map_loaded = true;
                 RCLCPP_INFO(this->get_logger(), "AUTO-LOADED MAP: %s", m_config.map_path.c_str());
+                computeRecoveryHypotheses();
                 if (m_config.has_start_pose)
                 {
                     applyInitialGuess(m_config.start_x, m_config.start_y, m_config.start_z,
@@ -128,14 +196,19 @@ public:
         m_map_cloud_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("map_cloud", 10);
         // Absolute (leading "/") so it lands on /amcl_pose regardless of node namespace, matching Nav2's AMCL convention.
         m_pose_pub = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/amcl_pose", 10);
+        // Lets other nodes (e.g. motion_controller) throttle speed or react
+        // when map->odom stops being refreshed, instead of only finding out
+        // indirectly via a pose jump.
+        m_status_pub = this->create_publisher<slam_interfaces::msg::LocalizationStatus>("localization_status", 10);
 
-        // ICP realignment is expensive; only rerun it at update_hz. TF/pose are
-        // instead broadcast from syncCB at sensor rate (see there) so map->odom
-        // always carries a fresh, strictly-increasing timestamp instead of the
-        // same stamp being re-sent to tf2 between recomputes (which is what
-        // makes tf2 log "old"/"repeated" data warnings for that edge).
-        const double recompute_hz = m_config.update_hz > 0.0 ? m_config.update_hz : 1.0;
-        m_timer = this->create_wall_timer(std::chrono::duration<double>(1.0 / recompute_hz), std::bind(&LocalizerNode::timerCB, this));
+        // timerCB (ICP) runs in its own callback group so a slow align() or
+        // recovery sweep can't delay syncCB's TF broadcast / the smoothing
+        // tick, which stay in the node's default group -- requires
+        // MultiThreadedExecutor in main() to actually run concurrently.
+        // m_localizer_mutex (see below) protects the one thing genuinely
+        // shared between the two groups: m_localizer itself.
+        m_icp_callback_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        m_timer = this->create_wall_timer(10ms, std::bind(&LocalizerNode::timerCB, this), m_icp_callback_group);
     }
 
     void loadParameters()
@@ -187,40 +260,201 @@ public:
             config["max_offset_jump_yaw"].as<double>() : m_config.max_offset_jump_yaw;
         m_config.transform_tolerance = config["transform_tolerance"] ?
             config["transform_tolerance"].as<double>() : m_config.transform_tolerance;
+        m_config.offset_smoothing_time_constant = config["offset_smoothing_time_constant"] ?
+            config["offset_smoothing_time_constant"].as<double>() :
+            m_config.offset_smoothing_time_constant;
+        m_config.recovery_after_failures = config["recovery_after_failures"] ?
+            config["recovery_after_failures"].as<int>() : m_config.recovery_after_failures;
+        m_config.recovery_grid_spacing = config["recovery_grid_spacing"] ?
+            config["recovery_grid_spacing"].as<double>() : m_config.recovery_grid_spacing;
+        m_config.recovery_yaw_samples = config["recovery_yaw_samples"] ?
+            config["recovery_yaw_samples"].as<int>() : m_config.recovery_yaw_samples;
+        m_config.accumulate_scans = config["accumulate_scans"] ?
+            config["accumulate_scans"].as<int>() : m_config.accumulate_scans;
+        m_config.accumulate_scans = std::clamp(m_config.accumulate_scans, 1, 10);
+    }
+
+    // Derives map-frame seed hypotheses for auto-recovery directly from the
+    // loaded map's own point cloud: lays a grid over its XY footprint at
+    // recovery_grid_spacing, keeping only cells with actual map structure
+    // nearby (an occupancy check against the map cloud voxelized at half that
+    // spacing) so hypotheses aren't wasted on open space outside the mapped
+    // area's footprint.
+    // Precondition: caller holds m_localizer_mutex (this touches m_localizer
+    // and m_recovery_hypotheses, both shared with the ICP callback group).
+    void computeRecoveryHypotheses()
+    {
+        m_recovery_hypotheses.clear();
+        CloudType::Ptr map_cloud = m_localizer->roughMap();
+        if (!map_cloud || map_cloud->empty())
+            return;
+
+        const double occ_res = std::max(m_config.recovery_grid_spacing * 0.5, 0.1);
+        constexpr int64_t kOffset = 1'000'000;
+        constexpr int64_t kStride = 4'000'000;
+        auto cell_key = [&](int64_t ix, int64_t iy) {
+            return (ix + kOffset) * kStride + (iy + kOffset);
+        };
+
+        std::unordered_set<int64_t> occupied_cells;
+        occupied_cells.reserve(map_cloud->size());
+        double min_x = std::numeric_limits<double>::max();
+        double max_x = std::numeric_limits<double>::lowest();
+        double min_y = std::numeric_limits<double>::max();
+        double max_y = std::numeric_limits<double>::lowest();
+        for (const auto &pt : map_cloud->points)
+        {
+            min_x = std::min(min_x, static_cast<double>(pt.x));
+            max_x = std::max(max_x, static_cast<double>(pt.x));
+            min_y = std::min(min_y, static_cast<double>(pt.y));
+            max_y = std::max(max_y, static_cast<double>(pt.y));
+            occupied_cells.insert(cell_key(
+                static_cast<int64_t>(std::floor(pt.x / occ_res)),
+                static_cast<int64_t>(std::floor(pt.y / occ_res))));
+        }
+
+        auto has_structure_nearby = [&](double x, double y) {
+            const int64_t cx = static_cast<int64_t>(std::floor(x / occ_res));
+            const int64_t cy = static_cast<int64_t>(std::floor(y / occ_res));
+            for (int64_t dx = -1; dx <= 1; ++dx)
+                for (int64_t dy = -1; dy <= 1; ++dy)
+                    if (occupied_cells.count(cell_key(cx + dx, cy + dy)))
+                        return true;
+            return false;
+        };
+
+        const double spacing = std::max(m_config.recovery_grid_spacing, 0.1);
+        for (double x = min_x; x <= max_x; x += spacing)
+        {
+            for (double y = min_y; y <= max_y; y += spacing)
+            {
+                if (has_structure_nearby(x, y))
+                    m_recovery_hypotheses.push_back({x, y});
+            }
+        }
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Computed %zu auto-recovery grid hypothesis(es) from the loaded map (spacing=%.1fm)",
+            m_recovery_hypotheses.size(), spacing);
+    }
+
+    // Merges scan_history entries into one cloud expressed in target_r/target_t's
+    // body frame (same-frame composition math as the map->odom offset elsewhere
+    // in this file), instead of aligning ICP against a single, possibly
+    // feature-thin scan (QT64 has a ~1m blind zone). No-op (returns the most
+    // recent scan verbatim, zero extra cost) when accumulate_scans <= 1 or
+    // fewer than 2 scans are available yet.
+    CloudType::Ptr buildAccumulatedCloud(const std::vector<ScanRecord> &history, const M3D &target_r, const V3D &target_t)
+    {
+        if (history.empty())
+            return std::make_shared<CloudType>();
+        if (history.size() == 1 || m_config.accumulate_scans <= 1)
+            return history.back().cloud;
+
+        CloudType::Ptr accumulated = std::make_shared<CloudType>(*history.back().cloud);
+        for (size_t i = 0; i + 1 < history.size(); ++i)
+        {
+            const ScanRecord &hist = history[i];
+            const M3D rel_r = target_r.transpose() * hist.r;
+            const V3D rel_t = target_r.transpose() * (hist.t - target_t);
+            M4F transform = M4F::Identity();
+            transform.block<3, 3>(0, 0) = rel_r.cast<float>();
+            transform.block<3, 1>(0, 3) = rel_t.cast<float>();
+            CloudType transformed;
+            pcl::transformPointCloud(*hist.cloud, transformed, transform);
+            accumulated->operator+=(transformed);
+        }
+        return accumulated;
     }
     void timerCB()
     {
         if (!m_state.message_received)
             return;
 
-        M4F initial_guess = M4F::Identity();
-        if (m_state.service_received)
-        {
-            std::lock_guard<std::mutex> service_lock(m_state.service_mutex);
-            initial_guess = m_state.initial_guess;
-            // m_state.service_received = false;
-        }
-        else
-        {
-            std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
-            initial_guess.block<3, 3>(0, 0) = (m_state.last_offset_r * m_state.last_r).cast<float>();
-            initial_guess.block<3, 1>(0, 3) = (m_state.last_offset_r * m_state.last_t + m_state.last_offset_t).cast<float>();
-        }
+        advanceSmoothedOffset();
 
+        const rclcpp::Time now = this->now();
+        const double align_period = 1.0 / std::max(m_config.update_hz, 1e-6);
+        if (m_state.last_align_time.nanoseconds() != 0 &&
+            (now - m_state.last_align_time).seconds() < align_period)
+        {
+            return;
+        }
+        m_state.last_align_time = now;
+
+        // Single snapshot of the odometry pose/cloud/stamp that will actually be
+        // aligned, taken once under one lock -- both the ICP warm-start guess
+        // below and the offset computed after align() are derived from this same
+        // capture, so a syncCB update landing mid-timerCB can't pair the guess
+        // with different odometry than what was actually aligned.
         M3D current_local_r;
         V3D current_local_t;
         builtin_interfaces::msg::Time current_time;
+        CloudType::Ptr current_cloud;
+        M3D current_target_offset_r;
+        V3D current_target_offset_t;
+        std::vector<ScanRecord> history_snapshot;
         {
             std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
             current_local_r = m_state.last_r;
             current_local_t = m_state.last_t;
             current_time = m_state.last_message_time;
-            m_localizer->setInput(m_state.last_cloud);
+            current_target_offset_r = m_state.target_offset_r;
+            current_target_offset_t = m_state.target_offset_t;
+            history_snapshot.assign(m_state.scan_history.begin(), m_state.scan_history.end());
+        }
+        current_cloud = buildAccumulatedCloud(history_snapshot, current_local_r, current_local_t);
+
+        // Guards every m_localizer call/m_recovery_hypotheses access below --
+        // m_localizer is also touched by relocCB/the constructor (default
+        // callback group) via loadMap(). Held through publishLocalizationStatus()/
+        // publishMapCloud() at the end of this function (both also read
+        // m_localizer and are only ever called from here).
+        std::lock_guard<std::mutex> localizer_lock(m_localizer_mutex);
+        m_localizer->setInput(current_cloud);
+
+        M4F initial_guess = M4F::Identity();
+        if (m_state.service_received)
+        {
+            M3D requested_r;
+            V3D requested_t;
+            M3D service_ref_r;
+            V3D service_ref_t;
+            {
+                std::lock_guard<std::mutex> service_lock(m_state.service_mutex);
+                requested_r = m_state.initial_guess.block<3, 3>(0, 0).cast<double>();
+                requested_t = m_state.initial_guess.block<3, 1>(0, 3).cast<double>();
+                service_ref_r = m_state.service_ref_r;
+                service_ref_t = m_state.service_ref_t;
+            }
+            // Track the robot's own odometry motion since the request instead of
+            // retrying the exact same static requested pose forever: service_received
+            // is only ever cleared on a successful alignment (see below), so without
+            // this, a failed first attempt would keep re-seeding from an
+            // increasingly stale guess for the rest of the run.
+            const M3D req_offset_r = requested_r * service_ref_r.transpose();
+            const V3D req_offset_t = -req_offset_r * service_ref_t + requested_t;
+            initial_guess.block<3, 3>(0, 0) = (req_offset_r * current_local_r).cast<float>();
+            initial_guess.block<3, 1>(0, 3) = (req_offset_r * current_local_t + req_offset_t).cast<float>();
+        }
+        else
+        {
+            initial_guess.block<3, 3>(0, 0) = (current_target_offset_r * current_local_r).cast<float>();
+            initial_guess.block<3, 1>(0, 3) = (current_target_offset_r * current_local_t + current_target_offset_t).cast<float>();
         }
 
         bool result = m_localizer->align(initial_guess);
         if (result)
         {
+            if (m_state.consecutive_align_failures > 0)
+            {
+                RCLCPP_INFO(
+                    this->get_logger(),
+                    "ICP map alignment RECOVERED after %d consecutive failure(s) (rough fitness=%.3f, refine fitness=%.3f)",
+                    m_state.consecutive_align_failures,
+                    m_localizer->lastRoughFitness(), m_localizer->lastRefineFitness());
+            }
             m_state.consecutive_align_failures = 0;
             M3D map_body_r = initial_guess.block<3, 3>(0, 0).cast<double>();
             V3D map_body_t = initial_guess.block<3, 1>(0, 3).cast<double>();
@@ -234,8 +468,8 @@ public:
             // and this is most likely to bite while parked between goals).
             // Explicit /relocalize calls are exempt -- a jump is exactly what
             // they are for.
-            const V3D offset_delta_t = candidate_offset_t - m_state.last_offset_t;
-            const M3D offset_delta_r = candidate_offset_r * m_state.last_offset_r.transpose();
+            const V3D offset_delta_t = candidate_offset_t - m_state.target_offset_t;
+            const M3D offset_delta_r = candidate_offset_r * m_state.target_offset_r.transpose();
             const double jump_dist = offset_delta_t.norm();
             const double jump_yaw = std::abs(std::atan2(offset_delta_r(1, 0), offset_delta_r(0, 0)));
 
@@ -252,8 +486,8 @@ public:
             }
             else
             {
-                m_state.last_offset_r = candidate_offset_r;
-                m_state.last_offset_t = candidate_offset_t;
+                m_state.target_offset_r = candidate_offset_r;
+                m_state.target_offset_t = candidate_offset_t;
                 m_state.has_aligned_once = true;
                 m_state.last_fitness_score = m_localizer->lastFitnessScore();
             }
@@ -263,6 +497,17 @@ public:
                 std::lock_guard<std::mutex> service_lock(m_state.service_mutex);
                 m_state.localize_success = true;
                 m_state.service_received = false;
+                // An explicit /relocalize or /initialpose has no prior localized
+                // state to stay continuous with -- snap instead of blending.
+                m_state.last_offset_r = m_state.target_offset_r;
+                m_state.last_offset_t = m_state.target_offset_t;
+                // This is the log line that actually confirms localization is
+                // trustworthy -- the /relocalize service response (see relocCB)
+                // only ever confirmed the map file loaded.
+                RCLCPP_INFO(
+                    this->get_logger(),
+                    "Map lock ACQUIRED: map->odom translation=(%.3f, %.3f, %.3f)",
+                    m_state.target_offset_t.x(), m_state.target_offset_t.y(), m_state.target_offset_t.z());
             }
         }
         else
@@ -282,8 +527,133 @@ public:
                 m_localizer_config.rough_score_thresh,
                 m_localizer->lastRefineConverged() ? "y" : "n", m_localizer->lastRefineFitness(),
                 m_localizer_config.refine_score_thresh);
+
+            if (m_config.recovery_after_failures > 0 && !m_recovery_hypotheses.empty() &&
+                m_state.consecutive_align_failures % m_config.recovery_after_failures == 0)
+            {
+                // attemptRecoverySweep() also touches m_localizer -- relies on
+                // localizer_lock (above) still being held here, does not lock
+                // itself (see its own precondition comment).
+                attemptRecoverySweep(current_local_r, current_local_t);
+            }
         }
+        publishLocalizationStatus(current_time);
         publishMapCloud(current_time);
+    }
+
+    // Sweeps map-derived grid hypotheses (see computeRecoveryHypotheses()) trying
+    // to re-lock from scratch, for when ICP has been failing against the
+    // last-known offset for a while (e.g. the robot was picked up/got lost
+    // beyond the offset's convergence basin). Blocking (like the regular
+    // align() call this augments) -- runs on the same timer thread, so a full
+    // sweep briefly delays the next TF/status publish; acceptable since the
+    // alternative is staying lost indefinitely. Returns on the first
+    // hypothesis that converges rather than exhaustively scoring all of them.
+    // Precondition: m_localizer->setInput() has already been called with this
+    // scan (true for its only caller, timerCB's failure branch) -- not
+    // repeated here since fast_gicp caches by cloud pointer identity anyway.
+    // Precondition: caller holds m_localizer_mutex (true for its only caller,
+    // timerCB's failure branch) -- not acquired here to avoid deadlocking on
+    // a non-recursive mutex already held by that caller.
+    bool attemptRecoverySweep(const M3D &local_r, const V3D &local_t)
+    {
+        const int yaw_samples = std::max(1, m_config.recovery_yaw_samples);
+        RCLCPP_WARN(
+            this->get_logger(),
+            "Auto-recovery: %d consecutive alignment failures -- sweeping %zu grid hypothesis(es) "
+            "x %d yaw sample(s) to attempt re-lock",
+            m_state.consecutive_align_failures, m_recovery_hypotheses.size(), yaw_samples);
+
+        for (size_t i = 0; i < m_recovery_hypotheses.size(); ++i)
+        {
+            const RecoveryHypothesis &hyp = m_recovery_hypotheses[i];
+            for (int k = 0; k < yaw_samples; ++k)
+            {
+                const double yaw = (2.0 * M_PI * k) / yaw_samples;
+                M4F guess = M4F::Identity();
+                Eigen::AngleAxisd yaw_angle(yaw, Eigen::Vector3d::UnitZ());
+                guess.block<3, 3>(0, 0) = yaw_angle.toRotationMatrix().cast<float>();
+                guess.block<3, 1>(0, 3) = V3F(hyp.x, hyp.y, 0.0f);
+                if (!m_localizer->align(guess))
+                    continue;
+
+                const M3D map_body_r = guess.block<3, 3>(0, 0).cast<double>();
+                const V3D map_body_t = guess.block<3, 1>(0, 3).cast<double>();
+                const M3D recovered_offset_r = map_body_r * local_r.transpose();
+                const V3D recovered_offset_t = -map_body_r * local_r.transpose() * local_t + map_body_t;
+
+                std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
+                m_state.target_offset_r = recovered_offset_r;
+                m_state.target_offset_t = recovered_offset_t;
+                // No prior localized state worth staying continuous with -- snap.
+                m_state.last_offset_r = recovered_offset_r;
+                m_state.last_offset_t = recovered_offset_t;
+                m_state.has_aligned_once = true;
+                m_state.localize_success = true;
+                m_state.last_fitness_score = m_localizer->lastFitnessScore();
+                m_state.consecutive_align_failures = 0;
+
+                RCLCPP_INFO(
+                    this->get_logger(),
+                    "Auto-recovery: Map lock RE-ACQUIRED from grid hypothesis #%zu (x=%.2f y=%.2f) yaw=%.2f -- "
+                    "map->odom translation=(%.3f, %.3f, %.3f)",
+                    i, hyp.x, hyp.y, yaw,
+                    recovered_offset_t.x(), recovered_offset_t.y(), recovered_offset_t.z());
+                return true;
+            }
+        }
+        RCLCPP_WARN(
+            this->get_logger(),
+            "Auto-recovery: none of %zu grid hypothesis(es) x %d yaw sample(s) converged -- still lost, "
+            "will retry after another %d consecutive failure(s)",
+            m_recovery_hypotheses.size(), yaw_samples, m_config.recovery_after_failures);
+        return false;
+    }
+
+    // Precondition: caller holds m_localizer_mutex (true for its only caller,
+    // timerCB, via the lock held for the whole ICP section -- not acquired
+    // here to avoid deadlocking on a non-recursive mutex already held).
+    void publishLocalizationStatus(builtin_interfaces::msg::Time &time)
+    {
+        slam_interfaces::msg::LocalizationStatus status;
+        status.header.stamp = time;
+        status.header.frame_id = m_config.map_frame;
+        status.localized = m_state.localize_success;
+        status.consecutive_align_failures = m_state.consecutive_align_failures;
+        status.rough_fitness = m_localizer->lastRoughFitness();
+        status.refine_fitness = m_localizer->lastRefineFitness();
+        m_status_pub->publish(status);
+    }
+
+    void advanceSmoothedOffset()
+    {
+        std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
+        const rclcpp::Time now = this->now();
+        if (m_state.last_smooth_time.nanoseconds() == 0)
+        {
+            m_state.last_smooth_time = now;
+            return;
+        }
+
+        const double dt = (now - m_state.last_smooth_time).seconds();
+        m_state.last_smooth_time = now;
+        if (dt <= 0.0 || dt > 1.0)
+            return;
+
+        if (m_config.offset_smoothing_time_constant <= 0.0)
+        {
+            m_state.last_offset_r = m_state.target_offset_r;
+            m_state.last_offset_t = m_state.target_offset_t;
+            return;
+        }
+
+        const double alpha = 1.0 - std::exp(-dt / m_config.offset_smoothing_time_constant);
+        m_state.last_offset_t = (1.0 - alpha) * m_state.last_offset_t + alpha * m_state.target_offset_t;
+        Eigen::Quaterniond current(m_state.last_offset_r);
+        Eigen::Quaterniond target(m_state.target_offset_r);
+        current.normalize();
+        target.normalize();
+        m_state.last_offset_r = current.slerp(alpha, target).toRotationMatrix();
     }
     void syncCB(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg, const nav_msgs::msg::Odometry::ConstSharedPtr &odom_msg)
     {
@@ -294,7 +664,11 @@ public:
         {
             std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
 
-            pcl::fromROSMsg(*cloud_msg, *m_state.last_cloud);
+            // Fresh object per callback (not reused in place) so history entries
+            // pushed below stay valid/unmutated once earlier scans are appended.
+            CloudType::Ptr fresh_cloud = std::make_shared<CloudType>();
+            pcl::fromROSMsg(*cloud_msg, *fresh_cloud);
+            m_state.last_cloud = fresh_cloud;
 
             m_state.last_r = Eigen::Quaterniond(odom_msg->pose.pose.orientation.w,
                                                 odom_msg->pose.pose.orientation.x,
@@ -305,6 +679,12 @@ public:
                                  odom_msg->pose.pose.position.y,
                                  odom_msg->pose.pose.position.z);
             m_state.last_message_time = stamp;
+
+            m_state.scan_history.push_back({fresh_cloud, m_state.last_r, m_state.last_t});
+            const size_t max_history = static_cast<size_t>(std::max(1, m_config.accumulate_scans));
+            while (m_state.scan_history.size() > max_history)
+                m_state.scan_history.pop_front();
+
             if (!m_state.message_received)
             {
                 m_state.message_received = true;
@@ -391,12 +771,28 @@ public:
         Eigen::AngleAxisd yaw_angle(yaw, Eigen::Vector3d::UnitZ());
         Eigen::AngleAxisd roll_angle(roll, Eigen::Vector3d::UnitX());
         Eigen::AngleAxisd pitch_angle(pitch, Eigen::Vector3d::UnitY());
+        // Snapshot current odometry as the reference for tracking live motion on
+        // retries (see timerCB); falls back to identity if no odometry has
+        // arrived yet -- no worse than always-frozen until the first scan.
+        M3D service_ref_r = M3D::Identity();
+        V3D service_ref_t = V3D::Zero();
+        {
+            std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
+            if (m_state.message_received)
+            {
+                service_ref_r = m_state.last_r;
+                service_ref_t = m_state.last_t;
+            }
+        }
         std::lock_guard<std::mutex> service_lock(m_state.service_mutex);
         m_state.initial_guess.setIdentity();
         m_state.initial_guess.block<3, 3>(0, 0) = (yaw_angle * roll_angle * pitch_angle).toRotationMatrix().cast<float>();
         m_state.initial_guess.block<3, 1>(0, 3) = V3F(x, y, z);
+        m_state.service_ref_r = service_ref_r;
+        m_state.service_ref_t = service_ref_t;
         m_state.service_received = true;
         m_state.localize_success = false;
+        m_state.consecutive_align_failures = 0;
     }
 
     // RViz "2D Pose Estimate" (or any other /initialpose publisher): re-seeds
@@ -429,22 +825,43 @@ public:
         float roll = request->roll;
         float pitch = request->pitch;
 
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Received /relocalize request: pcd_path=%s initial pose=(x=%.2f, y=%.2f, z=%.2f, yaw=%.2f, roll=%.2f, pitch=%.2f)",
+            pcd_path.c_str(), x, y, z, yaw, roll, pitch);
+
         if (!std::filesystem::exists(pcd_path))
         {
+            RCLCPP_ERROR(this->get_logger(), "relocalize REJECTED: pcd file not found: %s", pcd_path.c_str());
             response->success = false;
             response->message = "pcd file not found";
             return;
         }
 
-        bool load_flag = m_localizer->loadMap(pcd_path);
+        bool load_flag;
+        {
+            std::lock_guard<std::mutex> localizer_lock(m_localizer_mutex);
+            load_flag = m_localizer->loadMap(pcd_path);
+            if (load_flag)
+                computeRecoveryHypotheses();
+        }
         if (!load_flag)
         {
+            RCLCPP_ERROR(this->get_logger(), "relocalize REJECTED: failed to load pcd map: %s", pcd_path.c_str());
             response->success = false;
             response->message = "load map failed";
             return;
         }
         m_map_loaded = true;
         applyInitialGuess(x, y, z, yaw, roll, pitch);
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "relocalize ACCEPTED: map loaded, will attempt ICP alignment every %.2fs (tracked "
+            "against live odometry) until it converges -- watch for a 'Map lock ACQUIRED' or "
+            "repeated alignment-failed warnings to know whether this actually took effect (this "
+            "response alone only confirms the map file loaded, not that ICP has converged)",
+            1.0 / std::max(m_config.update_hz, 1e-6));
 
         response->success = true;
         response->message = "relocalize success";
@@ -460,6 +877,8 @@ public:
             response->valid = m_state.localize_success;
         return;
     }
+    // Precondition: caller holds m_localizer_mutex (true for its only caller,
+    // timerCB, via the lock held for the whole ICP section).
     void publishMapCloud(builtin_interfaces::msg::Time &time)
     {
         if (m_map_cloud_pub->get_subscription_count() < 1)
@@ -481,6 +900,11 @@ private:
 
     ICPConfig m_localizer_config;
     std::shared_ptr<ICPLocalizer> m_localizer;
+    // Guards every m_localizer call and m_recovery_hypotheses access -- both
+    // are reachable from the ICP callback group (timerCB) and the default
+    // group (relocCB/constructor via loadMap()).
+    std::mutex m_localizer_mutex;
+    std::vector<RecoveryHypothesis> m_recovery_hypotheses;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> m_cloud_sub;
     message_filters::Subscriber<nav_msgs::msg::Odometry> m_odom_sub;
     rclcpp::TimerBase::SharedPtr m_timer;
@@ -491,11 +915,20 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr m_initialpose_sub;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_map_cloud_pub;
     rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr m_pose_pub;
+    rclcpp::Publisher<slam_interfaces::msg::LocalizationStatus>::SharedPtr m_status_pub;
+    rclcpp::CallbackGroup::SharedPtr m_icp_callback_group;
 };
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<LocalizerNode>());
+    auto node = std::make_shared<LocalizerNode>();
+    // MultiThreadedExecutor is required for timerCB's dedicated callback
+    // group (see the constructor) to actually run concurrently with syncCB/
+    // the services, instead of the default single-threaded executor still
+    // serializing everything regardless of group.
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
+    executor.add_node(node);
+    executor.spin();
     rclcpp::shutdown();
     return 0;
 }
