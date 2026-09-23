@@ -141,4 +141,4 @@
         # Absolute path for the final full-map PCD save (on shutdown or /map_save
         # service call). Used as-is since it starts with "/". Leave empty ("") to
         # fall back to <ROOT_DIR>/PCD/scans.pcd.
-        map_file_path: "/home/juggernauts/localizer/src/map/fast_lio_map.pcd"
+        map_file_path: "/home/u_ikkurd/DIY-Challenge-Repo/src/diy_localization/map/fast_lio_map.pcd"

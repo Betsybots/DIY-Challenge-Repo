@@ -8,7 +8,7 @@
 
 # Directory produced by /loop_pgo/save_maps (save_patches:true): expects
 # <maps_path>/patches/*.pcd and <maps_path>/<poses_file>.
-maps_path: /home/juggernauts/localizer/src/map
+maps_path: /home/u_ikkurd/DIY-Challenge-Repo/src/diy_localization/map
 
 # Filename (relative to maps_path) or absolute path. Use "poses.txt" for the
 # raw loop_pgo keyframe poses, or map_hba's own "refined_poses.txt" (from
@@ -17,7 +17,7 @@ poses_file: refined_poses.txt
 
 # Output path prefix -- writes <out_prefix>.pgm + <out_prefix>.yaml (and
 # <out_prefix>.bt if save_bt is true).
-out_prefix: /home/juggernauts/localizer/src/map/global_map
+out_prefix: /home/u_ikkurd/DIY-Challenge-Repo/src/diy_localization/map/global_map
 
 # OctoMap voxel size / grid cell size, in meters. Smaller = sharper map, more
 # memory and slower ray-casting.

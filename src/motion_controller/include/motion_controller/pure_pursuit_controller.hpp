@@ -85,6 +85,13 @@ protected:
 
   void publishLookaheadMarker(const geometry_msgs::msg::PoseStamped & pose);
 
+  enum class PathBlockStatus { CLEAR, UNKNOWN_ONLY, CONFIRMED_OBSTACLE };
+
+  PathBlockStatus checkPathBlockStatus(
+    double robot_x,
+    double robot_y,
+    const nav_msgs::msg::Path & transformed_plan) const;
+
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
   std::shared_ptr<tf2_ros::Buffer> tf_;
   std::string plugin_name_;
@@ -104,9 +111,21 @@ protected:
   bool unknown_is_occupied_;
   int occupied_threshold_;
   double collision_check_resolution_;
+  double collision_check_distance_;
+  double unknown_grace_period_;
+  double max_pose_jump_speed_;
   rclcpp::Duration transform_tolerance_{0, 0};
 
   nav_msgs::msg::Path global_plan_;
+  nav_msgs::msg::Path global_plan_odom_;
+  bool has_valid_transformed_plan_ = false;
+
+  bool has_blocked_before_ = false;
+  rclcpp::Time last_blocked_time_;
+
+  bool has_last_final_pose_ = false;
+  geometry_msgs::msg::PoseStamped last_final_pose_;
+  rclcpp::Time last_final_pose_time_;
 
   // Side-channel publishers -- not part of nav2_core::Controller, kept for
   // compatibility with diy_waypoint_sequencer (/pd/goal_reached) and existing

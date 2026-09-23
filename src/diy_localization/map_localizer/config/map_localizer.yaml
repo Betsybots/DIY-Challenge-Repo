@@ -12,7 +12,7 @@ transform_tolerance: 0.3
 # Saved map to auto-load at startup (produced by map_hba). Leave empty to
 # require an explicit /relocalize service call (which also supplies a
 # pcd_path) before the node has any map to align against.
-map_path: /home/juggernauts/localizer/src/map/refined_map.pcd
+map_path: /home/u_ikkurd/DIY-Challenge-Repo/src/diy_localization/map/refined_map.pcd
 # Optional fixed start pose (map frame), applied once right after map_path
 # loads. Only takes effect if start_x is present -- omit all of these to
 # instead rely on /initialpose (RViz "2D Pose Estimate") or /relocalize, or
