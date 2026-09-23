@@ -1,6 +1,7 @@
 #include <queue>
 #include <mutex>
 #include <filesystem>
+#include <cmath>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -27,6 +28,17 @@ struct NodeConfig
     std::string map_frame = "map";
     std::string local_frame = "odom";
     double update_hz = 1.0;
+    // ICP re-registers against the map at update_hz (often just 1 Hz) and,
+    // when it fails to converge (e.g. during a fast/aggressive maneuver or
+    // over feature-poor geometry), silently holds the last known-good
+    // map->odom correction rather than erroring. If real drift accumulates
+    // during that stall, the next successful alignment corrects for all of
+    // it at once - a single large, instantaneous TF jump ("teleporting" in
+    // RViz). Exponentially smoothing the *broadcast* offset toward each
+    // newly computed correction (time constant in seconds; <= 0 disables
+    // smoothing and restores the old snap-instantly behavior) turns that
+    // jump into a smooth blend instead.
+    double offset_smoothing_time_constant = 0.5;
 };
 
 struct NodeState
@@ -42,9 +54,29 @@ struct NodeState
     CloudType::Ptr last_cloud = std::make_shared<CloudType>();
     M3D last_r;                          // localmap_body_r
     V3D last_t;                          // localmap_body_t
+    // Smoothed map<->odom correction actually broadcast over TF - chases
+    // target_offset_r/t rather than snapping straight to it (see
+    // NodeConfig::offset_smoothing_time_constant above).
     M3D last_offset_r = M3D::Identity(); // map_localmap_r
     V3D last_offset_t = V3D::Zero();     // map_localmap_t
+    // Latest raw correction actually computed by a successful ICP align(),
+    // unsmoothed. Used as the ICP warm-start guess (needs to be the true
+    // latest estimate, not the lagging smoothed one) and as the smoothing
+    // target.
+    M3D target_offset_r = M3D::Identity();
+    V3D target_offset_t = V3D::Zero();
+    rclcpp::Time last_smooth_time = rclcpp::Clock().now();
     M4F initial_guess = M4F::Identity();
+    // Local (FAST-LIO2) odometry pose at the moment the /relocalize request
+    // was received. Lets the service-provided initial_guess keep tracking
+    // the robot's actual motion on every retry, instead of staying frozen
+    // at the exact pose requested - see timerCB's service_received branch.
+    M3D service_ref_r = M3D::Identity();
+    V3D service_ref_t = V3D::Zero();
+    // Diagnostic counter: consecutive align() failures since the last
+    // successful lock (or since node startup). Logged so an operator can
+    // tell "still retrying" from "just started failing" at a glance.
+    int consecutive_align_failures = 0;
 };
 
 class LocalizerNode : public rclcpp::Node
@@ -92,6 +124,10 @@ public:
         m_config.map_frame = config["map_frame"].as<std::string>();
         m_config.local_frame = config["local_frame"].as<std::string>();
         m_config.update_hz = config["update_hz"].as<double>();
+        // Optional key: keep loading older configs that don't have it yet
+        // working, falling back to the NodeConfig default.
+        if (config["offset_smoothing_time_constant"])
+            m_config.offset_smoothing_time_constant = config["offset_smoothing_time_constant"].as<double>();
 
         m_localizer_config.rough_scan_resolution = config["rough_scan_resolution"].as<double>();
         m_localizer_config.rough_map_resolution = config["rough_map_resolution"].as<double>();
@@ -112,6 +148,11 @@ public:
         if (!m_state.message_received)
             return;
 
+        // Advance the broadcast offset toward the latest ICP-computed
+        // correction every tick (not just on ticks that recompute it), so
+        // it keeps blending in smoothly between update_hz corrections too.
+        advanceSmoothedOffset();
+
         rclcpp::Duration diff = rclcpp::Clock().now() - m_state.last_send_tf_time;
 
         bool update_tf = diff.seconds() > (1.0 / m_config.update_hz) && m_state.message_received;
@@ -127,15 +168,49 @@ public:
         M4F initial_guess = M4F::Identity();
         if (m_state.service_received)
         {
-            std::lock_guard<std::mutex>(m_state.service_mutex);
-            initial_guess = m_state.initial_guess;
-            // m_state.service_received = false;
+            M3D requested_r;
+            V3D requested_t;
+            M3D service_ref_r;
+            V3D service_ref_t;
+            M3D live_local_r;
+            V3D live_local_t;
+            {
+                std::lock_guard<std::mutex>(m_state.service_mutex);
+                requested_r = m_state.initial_guess.block<3, 3>(0, 0).cast<double>();
+                requested_t = m_state.initial_guess.block<3, 1>(0, 3).cast<double>();
+                service_ref_r = m_state.service_ref_r;
+                service_ref_t = m_state.service_ref_t;
+            }
+            {
+                std::lock_guard<std::mutex>(m_state.message_mutex);
+                live_local_r = m_state.last_r;
+                live_local_t = m_state.last_t;
+            }
+            // Track the robot's own (short-term-accurate) odometry motion
+            // since the /relocalize request, instead of retrying the exact
+            // same static requested pose forever. Previously, if the very
+            // first alignment attempt from that pose failed to converge,
+            // map_localizer was stuck: service_received is only ever reset
+            // to false on SUCCESS (see below), so every retry reused this
+            // identical, increasingly stale guess - map->odom could stay
+            // frozen at its default identity offset for the entire run,
+            // even though the /relocalize service call itself reported
+            // success (that response only confirms the map file loaded, not
+            // that ICP ever actually converged).
+            M3D req_offset_r = requested_r * service_ref_r.transpose();
+            V3D req_offset_t = -req_offset_r * service_ref_t + requested_t;
+            initial_guess.block<3, 3>(0, 0) = (req_offset_r * live_local_r).cast<float>();
+            initial_guess.block<3, 1>(0, 3) = (req_offset_r * live_local_t + req_offset_t).cast<float>();
         }
         else
         {
             std::lock_guard<std::mutex>(m_state.message_mutex);
-            initial_guess.block<3, 3>(0, 0) = (m_state.last_offset_r * m_state.last_r).cast<float>();
-            initial_guess.block<3, 1>(0, 3) = (m_state.last_offset_r * m_state.last_t + m_state.last_offset_t).cast<float>();
+            // Warm-start from target_offset (the latest *unsmoothed*
+            // correction), not the lagging smoothed last_offset - ICP needs
+            // the best available guess, not the one being eased into the
+            // broadcast TF.
+            initial_guess.block<3, 3>(0, 0) = (m_state.target_offset_r * m_state.last_r).cast<float>();
+            initial_guess.block<3, 1>(0, 3) = (m_state.target_offset_r * m_state.last_t + m_state.target_offset_t).cast<float>();
         }
 
         M3D current_local_r;
@@ -154,17 +229,96 @@ public:
         {
             M3D map_body_r = initial_guess.block<3, 3>(0, 0).cast<double>();
             V3D map_body_t = initial_guess.block<3, 1>(0, 3).cast<double>();
-            m_state.last_offset_r = map_body_r * current_local_r.transpose();
-            m_state.last_offset_t = -map_body_r * current_local_r.transpose() * current_local_t + map_body_t;
+            m_state.target_offset_r = map_body_r * current_local_r.transpose();
+            m_state.target_offset_t = -map_body_r * current_local_r.transpose() * current_local_t + map_body_t;
+            if (m_state.consecutive_align_failures > 0)
+            {
+                RCLCPP_INFO(
+                    this->get_logger(),
+                    "ICP map alignment RECOVERED after %d consecutive failure(s) "
+                    "(rough fitness=%.3f, refine fitness=%.3f)",
+                    m_state.consecutive_align_failures,
+                    m_localizer->lastRoughFitness(), m_localizer->lastRefineFitness());
+            }
+            m_state.consecutive_align_failures = 0;
             if (!m_state.localize_success && m_state.service_received)
             {
                 std::lock_guard<std::mutex>(m_state.service_mutex);
                 m_state.localize_success = true;
                 m_state.service_received = false;
+                // An explicit /relocalize call has no prior localized state
+                // to stay continuous with - snap the broadcast offset
+                // immediately instead of blending in over
+                // offset_smoothing_time_constant seconds.
+                m_state.last_offset_r = m_state.target_offset_r;
+                m_state.last_offset_t = m_state.target_offset_t;
+                // This is the log line that actually matters for diagnosing
+                // this bug class: the /relocalize SERVICE RESPONSE only ever
+                // confirmed the map file loaded (see relocCB) - THIS is the
+                // moment ICP actually converged and map->odom starts being
+                // trustworthy.
+                RCLCPP_INFO(
+                    this->get_logger(),
+                    "Map lock ACQUIRED: map->odom translation=(%.3f, %.3f, %.3f)",
+                    m_state.target_offset_t.x(), m_state.target_offset_t.y(),
+                    m_state.target_offset_t.z());
             }
+        }
+        else
+        {
+            // target_offset_r/t (and therefore, eventually, the broadcast
+            // last_offset_r/t) is intentionally left untouched here: we hold
+            // the last known-good map->odom correction rather than publish a
+            // bad one. Logged so a stretch of failed re-localization is
+            // visible instead of silent.
+            m_state.consecutive_align_failures++;
+            RCLCPP_WARN(
+                this->get_logger(),
+                "ICP map alignment failed (attempt #%d since last lock, "
+                "localized=%s | rough fitness=%.3f, thresh=%.3f | "
+                "refine fitness=%.3f, thresh=%.3f) - holding last known "
+                "map->odom correction",
+                m_state.consecutive_align_failures, m_state.localize_success ? "yes" : "no",
+                m_localizer->lastRoughFitness(), m_localizer->config().rough_score_thresh,
+                m_localizer->lastRefineFitness(), m_localizer->config().refine_score_thresh);
         }
         sendBroadCastTF(current_time);
         publishMapCloud(current_time);
+    }
+
+    // Exponentially blends the broadcast map->odom offset (last_offset_r/t)
+    // toward the latest ICP-computed correction (target_offset_r/t). Called
+    // every 10ms tick regardless of update_hz, so a correction that arrives
+    // after a stale/failed period is absorbed smoothly over roughly
+    // 3 * offset_smoothing_time_constant seconds instead of snapping
+    // instantly onto whatever downstream (RViz, Nav2, pure_pursuit) is
+    // consuming the map->odom TF.
+    void advanceSmoothedOffset()
+    {
+        rclcpp::Time now = rclcpp::Clock().now();
+        double dt = (now - m_state.last_smooth_time).seconds();
+        m_state.last_smooth_time = now;
+        // Guard against a negative/huge dt from a clock jump or the very
+        // first call.
+        if (dt <= 0.0 || dt > 1.0)
+            return;
+
+        if (m_config.offset_smoothing_time_constant <= 0.0)
+        {
+            // Smoothing disabled: restore the original snap-instantly
+            // behavior.
+            m_state.last_offset_r = m_state.target_offset_r;
+            m_state.last_offset_t = m_state.target_offset_t;
+            return;
+        }
+
+        double alpha = 1.0 - std::exp(-dt / m_config.offset_smoothing_time_constant);
+        m_state.last_offset_t = (1.0 - alpha) * m_state.last_offset_t + alpha * m_state.target_offset_t;
+        Eigen::Quaterniond q_last(m_state.last_offset_r);
+        Eigen::Quaterniond q_target(m_state.target_offset_r);
+        q_last.normalize();
+        q_target.normalize();
+        m_state.last_offset_r = q_last.slerp(alpha, q_target).toRotationMatrix();
     }
     void syncCB(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg, const nav_msgs::msg::Odometry::ConstSharedPtr &odom_msg)
     {
@@ -217,8 +371,15 @@ public:
         float roll = request->roll;
         float pitch = request->pitch;
 
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Received /relocalize request: pcd_path=%s initial pose=(x=%.2f, "
+            "y=%.2f, z=%.2f, yaw=%.2f, pitch=%.2f, roll=%.2f)",
+            pcd_path.c_str(), x, y, z, yaw, pitch, roll);
+
         if (!std::filesystem::exists(pcd_path))
         {
+            RCLCPP_ERROR(this->get_logger(), "relocalize REJECTED: pcd file not found: %s", pcd_path.c_str());
             response->success = false;
             response->message = "pcd file not found";
             return;
@@ -230,6 +391,7 @@ public:
         bool load_flag = m_localizer->loadMap(pcd_path);
         if (!load_flag)
         {
+            RCLCPP_ERROR(this->get_logger(), "relocalize REJECTED: failed to load pcd map: %s", pcd_path.c_str());
             response->success = false;
             response->message = "load map failed";
             return;
@@ -239,9 +401,38 @@ public:
             m_state.initial_guess.setIdentity();
             m_state.initial_guess.block<3, 3>(0, 0) = (yaw_angle * roll_angle * pitch_angle).toRotationMatrix().cast<float>();
             m_state.initial_guess.block<3, 1>(0, 3) = V3F(x, y, z);
+            // Snapshot the robot's current odometry pose so timerCB's
+            // service_received branch can keep this guess tracking the
+            // robot's actual motion on every retry, instead of reusing this
+            // exact static pose forever if the first alignment attempt
+            // fails (see timerCB). Falls back to identity if no odometry
+            // has arrived yet (message_received still false) - a rare edge
+            // case, no worse than the old always-frozen behavior until the
+            // first scan comes in.
+            if (m_state.message_received)
+            {
+                m_state.service_ref_r = m_state.last_r;
+                m_state.service_ref_t = m_state.last_t;
+            }
+            else
+            {
+                m_state.service_ref_r = M3D::Identity();
+                m_state.service_ref_t = V3D::Zero();
+            }
             m_state.service_received = true;
             m_state.localize_success = false;
+            m_state.consecutive_align_failures = 0;
         }
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "relocalize ACCEPTED: map loaded, will attempt ICP alignment "
+            "every %.2fs (starting from the requested pose, tracked against "
+            "live odometry) until it converges - watch for either a 'Map "
+            "lock ACQUIRED' or repeated 'ICP map alignment failed' messages "
+            "below to know whether this actually took effect (this response "
+            "alone only confirms the map file loaded)",
+            1.0 / m_config.update_hz);
 
         response->success = true;
         response->message = "relocalize success";

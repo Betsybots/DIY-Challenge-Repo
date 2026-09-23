@@ -38,6 +38,16 @@ odom_topic: /lidar_odometry
 map_frame: map
 local_frame: odom
 update_hz: 1.0
+# When ICP fails to re-converge (fitness score above rough/refine_score_thresh
+# below, e.g. during a fast maneuver or over feature-poor geometry),
+# map_localizer silently holds the last known-good map->odom correction
+# instead of erroring. If real drift builds up during that stall, the next
+# successful alignment used to apply the entire correction in one shot - a
+# sudden pose "teleport" downstream (RViz, Nav2, pure_pursuit). This
+# exponentially blends the broadcast correction toward each new alignment
+# over roughly 3x this many seconds instead of snapping instantly. Set to 0
+# to restore the old snap-instantly behavior.
+offset_smoothing_time_constant: 0.5
 
 rough_scan_resolution: 0.25
 rough_map_resolution: 0.25

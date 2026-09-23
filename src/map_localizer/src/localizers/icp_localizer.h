@@ -37,10 +37,18 @@ public:
     ICPConfig &config() { return m_config; }
     CloudType::Ptr roughMap() { return m_rough_tgt; }
     CloudType::Ptr refineMap() { return m_refine_tgt; }
-
+    // Fitness scores from the most recent align() call (rough/refine ICP's
+    // getFitnessScore(), lower is better), regardless of whether that call
+    // returned true. -1.0 means the corresponding ICP stage never ran (e.g.
+    // no map loaded yet, or the rough stage already failed). Exposed so
+    // callers can log *why* an alignment failed instead of only the bool.
+    double lastRoughFitness() const { return m_last_rough_fitness; }
+    double lastRefineFitness() const { return m_last_refine_fitness; }
 
 private:
     ICPConfig m_config;
+    double m_last_rough_fitness = -1.0;
+    double m_last_refine_fitness = -1.0;
     pcl::VoxelGrid<PointType> m_voxel_filter;
     fast_gicp::FastVGICP<PointType, PointType> m_refine_icp;
     fast_gicp::FastVGICP<PointType, PointType> m_rough_icp;

@@ -1089,6 +1089,15 @@ private:
             p_imu->Process(Measures, kf, feats_undistort);
             state_point = kf.get_x();
             pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
+            // Snapshot the pure IMU-propagated (pre-measurement-update)
+            // state/covariance here, before the LiDAR scan-match correction
+            // below is applied. If this scan later turns out to be
+            // shock-damaged/low-quality, we roll the filter back to this
+            // predicted-only state before publishing odometry, instead of
+            // trusting a correction computed from a scan already flagged
+            // unreliable (see scan_is_low_quality below).
+            state_ikfom predicted_state_for_rollback = state_point;
+            esekfom::esekf<state_ikfom, 12, input_ikfom>::cov predicted_cov_for_rollback = kf.get_P();
 
             if (feats_undistort->empty() || (feats_undistort == NULL))
             {
@@ -1173,7 +1182,14 @@ private:
             // Frontend scan-quality gate: a scan captured during an IMU shock or with too
             // few reliable point-to-plane correspondences is kept out of the persistent
             // ikd-tree map and off the published clouds (loop_pgo/map_localizer never see
-            // it), while odometry/TF still publish so downstream consumers stay in sync.
+            // it). Odometry/TF still publish every cycle so downstream consumers stay in
+            // sync - but (see the rollback below) they now publish the pre-update,
+            // IMU-only PREDICTED pose for a low-quality scan, not this scan's
+            // untrustworthy LiDAR correction. Previously this gate only protected the
+            // persistent map from a bad scan; the actual pose handed to RViz/Nav2/
+            // map_localizer/the motion planner was NOT protected, and a single
+            // shock-damaged correction could still slip into odom->base_link and appear
+            // as a pose jump/teleport downstream.
             // shock_cooldown keeps this gate closed for a settling window *after* a shock
             // clears too -- the scan right after a bump can look individually "clean"
             // (good feature count/residual) while the pose still hasn't fully reconverged,
@@ -1191,9 +1207,26 @@ private:
             {
                 rejected_scan_count++;
                 RCLCPP_WARN(this->get_logger(),
-                            "Rejecting low-quality scan #%d: features=%d residual=%.3f shock=%d cooldown=%d max_imu_gap=%.4f",
+                            "Rejecting low-quality scan #%d: features=%d residual=%.3f shock=%d cooldown=%d max_imu_gap=%.4f "
+                            "- rolling odometry back to pre-update predicted state",
                             rejected_scan_count, effct_feat_num, res_mean_last,
                             p_imu->hadShock(), in_shock_cooldown, p_imu->getMaxImuGap());
+
+                // Discard this scan's (untrustworthy) measurement update: restore the
+                // filter to the state/covariance it had right after pure IMU propagation,
+                // before this scan's correction was applied. Without this, a shock-
+                // damaged or feature-starved scan's bad correction still got published as
+                // real odometry/TF, even though it had already been identified as
+                // unreliable a few lines above.
+                kf.change_x(predicted_state_for_rollback);
+                kf.change_P(predicted_cov_for_rollback);
+                state_point = kf.get_x();
+                euler_cur = SO3ToEuler(state_point.rot);
+                pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
+                geoQuat.x = state_point.rot.coeffs()[0];
+                geoQuat.y = state_point.rot.coeffs()[1];
+                geoQuat.z = state_point.rot.coeffs()[2];
+                geoQuat.w = state_point.rot.coeffs()[3];
             }
 
             /******* Publish odometry *******/
