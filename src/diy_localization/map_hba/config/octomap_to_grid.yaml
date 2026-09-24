@@ -8,6 +8,13 @@
 
 # Directory produced by /loop_pgo/save_maps (save_patches:true): expects
 # <maps_path>/patches/*.pcd and <maps_path>/<poses_file>.
+# NOTE 2026-09-24: loop_pgo was removed in favor of RTAB-Map, which does NOT
+# produce this patches/poses.txt layout (it saves a single .db instead), so
+# this tool is no longer fed by anything -- use scripts/export_rtabmap_map.sh
+# + scripts/pcd_to_pgm.py/build_course_map.sh instead (gets a plain merged
+# .pcd out of the .db and reuses the existing, already-proven 2D map
+# pipeline; see that script's header comment for why octomap_to_grid's own
+# patches/poses.txt format isn't worth reproducing).
 maps_path: /home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map
 
 # Filename (relative to maps_path) or absolute path. Use "poses.txt" for the

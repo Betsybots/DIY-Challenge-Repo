@@ -1,11 +1,17 @@
 // Offline batch tool: keyframe patches + poses -> OctoMap -> 2D occupancy grid.
 //
-// Consumes the exact output of loop_pgo's `/loop_pgo/save_maps` service
-// (called with save_patches:true):
+// Consumes the exact output the now-removed loop_pgo package's
+// `/loop_pgo/save_maps` service used to produce (called with save_patches:true):
 //   <maps_path>/patches/<i>.pcd   body-frame keyframe scans
 //   <maps_path>/poses.txt         "<file_name> tx ty tz qw qx qy qz" per line
 // or map_hba's own `/map_hba/save_poses` output (refined_poses.txt, same format,
 // same patches/ directory, BA-optimized translations/rotations).
+// NOTE 2026-09-24: loop_pgo was replaced by RTAB-Map, which has no equivalent
+// of this patches/poses.txt layout -- nothing produces it anymore, and it's
+// not worth reproducing. Use scripts/export_rtabmap_map.sh (rtabmap-export +
+// pcl_ply2pcd) to get a plain merged .pcd out of RTAB-Map's .db instead, then
+// scripts/pcd_to_pgm.py/build_course_map.sh's existing pipeline (that
+// pipeline already accepts "any XYZ .pcd", not specifically loop_pgo's).
 //
 // Each patch is ray-cast into an octomap::OcTree from its keyframe's sensor
 // origin, so free space is genuinely carved out (not just "occupied where a
@@ -231,8 +237,9 @@ int main(int argc, char **argv)
 
     if (!fs::exists(patches_dir))
     {
-        std::cerr << "[ERROR] " << patches_dir << " does not exist. Run loop_pgo's "
-                  << "/loop_pgo/save_maps service with save_patches:true first.\n";
+        std::cerr << "[ERROR] " << patches_dir << " does not exist. This tool's "
+                  << "patches/poses.txt input format is not currently produced by "
+                  << "anything (loop_pgo, which used to, was replaced by RTAB-Map).\n";
         return 1;
     }
     if (!fs::exists(poses_path))

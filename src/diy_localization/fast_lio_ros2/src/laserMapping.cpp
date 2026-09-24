@@ -96,7 +96,7 @@ bool   runtime_pos_log = false, pcd_save_en = false, time_sync_en = false, extri
 
 // Frontend scan-quality gating: keeps a shock-damaged or feature-starved scan
 // out of the persistent ikd-tree map and off the published clouds, without
-// disrupting odometry/TF continuity for downstream consumers (loop_pgo).
+// disrupting odometry/TF continuity for downstream consumers (RTAB-Map).
 bool   reject_low_quality_scans = true;
 int    min_effective_features = 10;
 double max_mean_residual = 1.0;
@@ -899,8 +899,8 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
     // a "full strength" correction along that weak direction from whatever
     // few, easily-aliased residuals exist. That is a direct, code-level
     // cause of the erratic/aliased yaw seen in symmetric spaces (confirmed
-    // by loop_pgo repeatedly detecting near-identical Scan Context matches
-    // against very different true poses in exactly such rooms).
+    // by the old loop_pgo package repeatedly detecting near-identical Scan
+    // Context matches against very different true poses in exactly such rooms).
     //
     // This is the standard LOAM/LIO-SAM degeneracy fix (Zhang & Singh, "On
     // Degeneracy of Optimization-based State Estimation Problems", ICRA
@@ -1289,7 +1289,7 @@ private:
 
             // Frontend scan-quality gate: a scan captured during an IMU shock or with too
             // few reliable point-to-plane correspondences is kept out of the persistent
-            // ikd-tree map and off the published clouds (loop_pgo/map_localizer never see
+            // ikd-tree map and off the published clouds (RTAB-Map/map_localizer never see
             // it). Odometry/TF still publish every cycle so downstream consumers stay in
             // sync - but (see the rollback below) they now publish the pre-update, IMU-only
             // PREDICTED pose for a low-quality scan, not this scan's untrustworthy LiDAR

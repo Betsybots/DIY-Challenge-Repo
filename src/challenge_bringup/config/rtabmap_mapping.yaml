@@ -1,0 +1,77 @@
+# RTAB-Map mapping-mode config — replaces loop_pgo (removed 2026-09-24).
+#
+# Lidar-only setup: no camera, so registration/loop-closure runs on
+# /cloud_registered_body (FAST-LIO2's body-frame registered cloud, frame_id
+# base_link) against external odometry (/odom, the EKF's odom->base_footprint
+# output) instead of RTAB-Map's own icp_odometry front end.
+#
+# Parameter-by-parameter mapping from the old loop_pgo.yaml, for anyone
+# comparing against that history:
+#   key_pose_delta_trans/deg  -> RGBD/LinearUpdate, RGBD/AngularUpdate
+#   submap_resolution         -> Icp/VoxelSize
+#   loop_search_radius        -> Icp/MaxCorrespondenceDistance +
+#                                 RGBD/LocalRadius (candidate search radius)
+#   ICP-vs-guess deviation gate (hand-coded in searchForLoopPairs()) ->
+#                                 Icp/MaxTranslation / Icp/MaxRotation
+#                                 (RTAB-Map's built-in equivalent)
+#   min_loop_detect_duration  -> Mem/RehearsalSimilarity / natural throttling
+#                                 via RGBD/LinearUpdate + RGBD/AngularUpdate
+#                                 (no direct wall-clock cooldown parameter;
+#                                 not needed since proximity detection already
+#                                 runs against the whole graph, not a
+#                                 single one-shot candidate)
+#   odom_trans/rot_noise_*    -> not ported; RTAB-Map's optimizer estimates
+#                                 information/covariance from the odometry
+#                                 message's own covariance fields instead of
+#                                 a fixed per-meter/per-radian scale.
+#
+# NOT ported 1:1: loop_pgo's custom IMU-shock rejection (reject_imu_shocks)
+# has no RTAB-Map equivalent — it's superseded by RTAB-Map's own ICP
+# correspondence-ratio + max-translation/rotation gates below, which reject
+# bad registrations regardless of cause rather than specifically IMU spikes.
+# Revisit only if bad registrations reappear post-switch.
+rtabmap:
+  ros__parameters:
+    frame_id: base_link
+    odom_frame_id: odom
+    map_frame_id: map
+    publish_tf: true
+
+    subscribe_depth: false
+    subscribe_rgb: false
+    subscribe_scan_cloud: true
+    subscribe_odom_info: false
+    approx_sync: true
+    wait_for_transform: 0.2
+
+    # Lidar-only registration, no visual features.
+    Reg/Strategy: "1"          # 1 = ICP only
+    Reg/Force3DoF: "false"
+
+    Icp/PointToPlane: "true"
+    Icp/VoxelSize: "0.1"                    # was submap_resolution
+    Icp/MaxCorrespondenceDistance: "1.0"     # was loop_search_radius
+    Icp/MaxTranslation: "1.0"               # was loop_search_radius (ICP-vs-guess gate)
+    Icp/MaxRotation: "0.785"                 # was the hand-coded 45deg gate
+    Icp/Iterations: "30"
+    Icp/Epsilon: "0.001"
+    Icp/CorrespondenceRatio: "0.2"
+    Icp/OutlierRatio: "0.7"
+
+    # Keyframe spacing — matches loop_pgo's key_pose_delta_trans/deg exactly.
+    RGBD/LinearUpdate: "0.5"
+    RGBD/AngularUpdate: "0.26"
+    RGBD/ProximityBySpace: "true"
+    RGBD/ProximityMaxGraphDepth: "0"          # 0 = search the whole graph, not just a recent window
+    RGBD/OptimizeFromGraphEnd: "false"
+
+    # g2o: guaranteed available in the apt binary. GTSAM ("2") matches
+    # loop_pgo's own iSAM2 backend more closely if your rtabmap build has it.
+    Optimizer/Strategy: "1"
+
+    Mem/IncrementalMemory: "true"
+    Mem/NotLinkedNodesKept: "false"
+
+    Grid/FromDepth: "false"
+    Grid/RangeMax: "20.0"
+    Grid/CellSize: "0.05"

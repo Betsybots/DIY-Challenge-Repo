@@ -19,19 +19,23 @@ STARTUP ORDER
     3. Fast LIO2 — starts after a short delay for localization
     4. EKF (diy_state_estimate) — fuses /wheel_odom + /imu/data + FAST-LIO2
        /Odometry into /odom and owns the odom→base_footprint TF
-    5. Autonomous mode: map_localizer + Nav2 navigation stack
-    6. Manual mode: loop closure / map-refinement stack only
+    5. Autonomous mode: RTAB-Map (localization mode, replaces the old
+       map_localizer package as of 2026-09-24) + Nav2 navigation stack
+    6. Manual mode: RTAB-Map (ICP-based loop closure + pose graph, replaces
+       the old loop_pgo package as of 2026-09-24)
     7. rviz2 — optional debug visualization (use_rviz:=true)
 
 TF OWNERSHIP
 ────────────
-    map  → odom            map_localizer (VGICP against the saved map)
+    map  → odom            RTAB-Map (autonomous: localization mode against a
+                           saved database; manual/mapping: ICP loop closure.
+                           Replaces map_localizer/loop_pgo as of 2026-09-24)
     odom → base_footprint  diy_state_estimate ekf_filter_node — ONLY this
                            node. FAST-LIO2 also broadcasts odom→base_link
                            and has no switch to stop it, so its /tf is
                            remapped to a dead topic below. Its /Odometry
-                           message still flows to the EKF and to
-                           map_localizer unchanged.
+                           message still flows to the EKF and to RTAB-Map
+                           unchanged.
     base_footprint → *     robot_state_publisher (URDF): fixed joint
                            base_footprint→base_link, then base_link→sensors/
                            wheels.
@@ -64,6 +68,7 @@ def generate_launch_description():
     autonomous = LaunchConfiguration('autonomous')
     use_rviz = LaunchConfiguration('use_rviz')
     startup_delay = LaunchConfiguration('startup_delay')
+    database_path = LaunchConfiguration('database_path')
 
     # ── Argument declarations ──────────────────────────────────────────────
 
@@ -75,6 +80,17 @@ def generate_launch_description():
         default_value='5.0',
         description='Seconds to wait after starting the Hesai driver before '
                     'launching the rest of the stack (lets the sensor come online).',
+    )
+
+    declare_database_path = DeclareLaunchArgument(
+        'database_path',
+        # Same default both rtabmap_mapping_launch.py and
+        # rtabmap_localization_launch.py already use on their own, so a
+        # mapping run (autonomous:=false) followed by an autonomous run
+        # (autonomous:=true) picks up the same map with no extra step.
+        default_value=os.path.join(pkg_dir, 'maps', 'rtabmap.db'),
+        description='Path to the RTAB-Map database (mapping mode writes it, '
+                    'localization mode reads it).',
     )
     
     robot_description_launch = IncludeLaunchDescription(
@@ -106,7 +122,7 @@ def generate_launch_description():
             # FAST-LIO2 in its own scoped group so the /tf remap applies to it
             # alone: it broadcasts odom→base_link unconditionally, and the EKF
             # below must be the sole owner of that transform. /Odometry is
-            # NOT remapped — the EKF and map_localizer consume it directly.
+            # NOT remapped — the EKF and RTAB-Map consume it directly.
             GroupAction(
                 actions=[
                     SetRemap(src='/tf', dst='/tf_fastlio_unused'),
@@ -141,25 +157,30 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
-                        get_package_share_directory('map_localizer'),
+                        pkg_dir,
                         'launch',
-                        'map_localizer_launch.py',
+                        'rtabmap_localization_launch.py',
                     )
                 ),
                 condition=IfCondition(autonomous),
                 launch_arguments={
-                    'use_rviz': 'false',
+                    'database_path': database_path,
+                    
                 }.items(),
             ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
-                        get_package_share_directory('loop_pgo'),
+                        pkg_dir,
                         'launch',
-                        'loop_pgo_launch.py',
+                        'rtabmap_mapping_launch.py',
                     )
                 ),
                 condition=UnlessCondition(autonomous),
+                launch_arguments={
+                    'database_path': database_path,
+                    'use_rviz': True,
+                }.items(),
             ),
         ]
     )
@@ -193,7 +214,7 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         output='screen',
-        condition=IfCondition(use_rviz),
+        # condition=IfCondition(use_rviz),
         arguments=['-d', os.path.join(pkg_dir, 'rviz', 'master.rviz')],
     )
 
@@ -220,6 +241,7 @@ def generate_launch_description():
         declare_startup_delay,
         declare_autonomous,
         declare_use_rviz,
+        declare_database_path,
         robot_description_launch,
         hesai_launch,
         delayed_fast_lio,

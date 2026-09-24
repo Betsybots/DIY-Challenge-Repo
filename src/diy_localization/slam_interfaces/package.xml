@@ -3,7 +3,7 @@
 <package format="3">
   <name>slam_interfaces</name>
   <version>0.0.0</version>
-  <description>Custom srv definitions for loop_pgo and map_hba backend nodes</description>
+  <description>Custom srv definitions for map_hba backend nodes (formerly also loop_pgo, removed 2026-09-24)</description>
   <maintainer email="zhouzhou@todo.todo">zhouzhou</maintainer>
   <license>MIT</license>
 

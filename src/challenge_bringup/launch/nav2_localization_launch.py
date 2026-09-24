@@ -25,6 +25,11 @@ from launch_ros.actions import Node
 from launch_ros.descriptions import ComposableNode, ParameterFile
 from nav2_common.launch import RewrittenYaml
 
+# NOTE 2026-09-24: not included from master.launch.py (map_localizer_launch.py
+# is launched standalone there instead) -- this file's lifecycle_nodes/Node
+# below reference the now-removed 'map_localizer' package and would fail if
+# actually launched. Left as-is (dead file), flagged for whoever revives it.
+
 
 def generate_launch_description():
     # Get the launch directory

@@ -22,7 +22,7 @@ would let them completely dominate the fused estimate:
 This node subscribes to both, applies a floor (and optional scale) to the
 relevant covariance blocks, and republishes on *_ekf topics that the EKF
 consumes instead of the raw ones. Nothing else about the messages is touched,
-so FAST-LIO2, map_localizer, etc. keep reading the raw topics unchanged.
+so FAST-LIO2, RTAB-Map, etc. keep reading the raw topics unchanged.
 
 TUNING KNOBS (all ROS parameters)
 ─────────────────────────────────

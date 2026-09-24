@@ -168,8 +168,8 @@ void PurePursuitController::setPlan(const nav_msgs::msg::Path & path)
   // Transform into the local costmap's frame ONCE here, rather than on every
   // computeVelocityCommands() tick. Re-fetching the latest map->odom
   // transform every 20Hz tick meant any localization correction (a real,
-  // observed failure mode -- map_localizer applying a non-smoothed absolute
-  // correction) got imported into the control loop instantly, teleporting
+  // observed failure mode -- the old map_localizer package applying a
+  // non-smoothed absolute correction) got imported into the control loop instantly, teleporting
   // final_pose. Caching it here means the robot smoothly tracks this fixed
   // path until the next replan, at which point a fresh correction is picked
   // up all at once (bounded by the planner's own replanning rate) instead of

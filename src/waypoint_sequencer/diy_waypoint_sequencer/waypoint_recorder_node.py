@@ -5,7 +5,7 @@ drive, using the RPi's joystick trigger axes as record/undo controls.
 
 WHY THIS EXISTS:
 Post-hoc waypoint picking (pick_waypoints.py) requires a finished, cleaned-up
-map — but during an offline mapping drive itself (FAST-LIO2 + loop_pgo, see
+map — but during an offline mapping drive itself (FAST-LIO2 + RTAB-Map, see
 challenge_master.launch.py's mapping mode), the operator already knows
 exactly where the meaningful course waypoints are while driving past them.
 This node lets them mark those spots live, using the same physical
@@ -13,9 +13,9 @@ controller already driving the robot (driveStack's manual.launch.py) — no
 second pass, no separate mapping-then-clicking workflow.
 
 POSE SOURCE: a live TF lookup of map_frame -> base_frame, NOT a raw odometry
-topic. During mapping, loop_pgo broadcasts a loop-closure-corrected
-map->odom TF (see LIO_Localization/src/loop_pgo/src/pgo_node.cpp
-sendBroadCastTF()), composed with FAST-LIO2's own odom->base_link TF
+topic. During mapping, RTAB-Map broadcasts a loop-closure-corrected
+map->odom TF (see rtabmap_mapping_launch.py, replaces the old loop_pgo
+package), composed with FAST-LIO2's own odom->base_link TF
 (laserMapping.cpp) -- together giving the best available pose estimate at
 each instant, already in the same "map" frame convention every other
 waypoints YAML in this repo uses. Subscribing to /Odometry directly would

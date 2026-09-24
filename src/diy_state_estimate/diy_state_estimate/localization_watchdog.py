@@ -11,10 +11,10 @@ recovery behavior had already stopped commanding any motion, the fused
 eventually reporting the robot 10+ metres outside the map with nothing in
 the stack noticing or reacting -- Nav2 just kept logging "Start/Goal is
 inside inflated obstacle region" / "Robot is out of bounds of the costmap"
-forever. The root cause is upstream of this package (map_localizer's
-map->odom VGICP correction and/or FAST-LIO2's /Odometry -- both external,
-closed to this repo), but NOTHING downstream was watching for "this
-estimate cannot possibly be real" and cutting power. This node is that
+forever. The root cause is upstream of this package (map_localizer's, now
+RTAB-Map's, map->odom correction and/or FAST-LIO2's /Odometry -- both
+external, closed to this repo), but NOTHING downstream was watching for
+"this estimate cannot possibly be real" and cutting power. This node is that
 missing check.
 
 WHAT IT DOES

@@ -4,7 +4,7 @@ waypoint_recorder.launch.py — standalone launch for waypoint_recorder_node.
 
 Run this alongside an offline mapping drive (challenge_master.launch.py /
 master.launch.py with autonomous:=false, which brings up FAST-LIO2 +
-loop_pgo) to record waypoints live using the joystick's LT/RT triggers.
+RTAB-Map) to record waypoints live using the joystick's LT/RT triggers.
 See waypoint_recorder_node.py's module docstring for the full design.
 
 Usage:

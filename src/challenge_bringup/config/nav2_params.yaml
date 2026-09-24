@@ -504,6 +504,9 @@ velocity_smoother:
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
 
+# NOTE 2026-09-24: stale/unused -- this section paired with the dead
+# nav2_localization_launch.py, not master.launch.py's live path. The
+# 'map_localizer' package it configures was removed in favor of RTAB-Map.
 map_localizer:
   ros__parameters:
     cloud_topic: /cloud_registered_body

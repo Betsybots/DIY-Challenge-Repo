@@ -1,0 +1,43 @@
+scripts/export_rtabmap_map.sh -- usage reference
+==================================================
+
+Flags:
+  --db PATH            Which .db to export from
+                        (default: src/challenge_bringup/maps/rtabmap.db)
+  --output-dir DIR      Where outputs get written
+                        (default: src/challenge_bringup/maps)
+  --output-name NAME    Base filename for all outputs
+                        (default: rtabmap_map)
+  --voxel M             Downsample voxel size, only affects --cloud
+                        (default: 0.02)
+  --cloud                Export merged .pcd (via .ply + pcl_ply2pcd) (on by default)
+  --no-cloud             Turn --cloud off
+  --map                  Export Nav2 .pgm + .yaml directly (off by default)
+  -h, --help             Print usage and exit
+
+Ways to run it:
+
+1. Default (cloud only) -- just get the .pcd for the hand-trace pipeline:
+   scripts/export_rtabmap_map.sh
+
+2. Nav2 map only:
+   scripts/export_rtabmap_map.sh --no-cloud --map
+
+3. Both outputs in one pass (cloud + Nav2 map, single rtabmap-export call):
+   scripts/export_rtabmap_map.sh --map
+
+4. Custom database path (e.g. you overrode database_path on master.launch.py):
+   scripts/export_rtabmap_map.sh --db /path/to/your.db --map
+
+5. Custom output location/name (e.g. keep multiple course attempts side by side):
+   scripts/export_rtabmap_map.sh --output-dir /tmp/attempt3 --output-name course_v3 --map
+
+6. Tune cloud density (denser/sparser .pcd, only matters with --cloud):
+   scripts/export_rtabmap_map.sh --voxel 0.05
+
+7. Fully combined (all flags together):
+   scripts/export_rtabmap_map.sh --db /path/to/your.db --output-dir /tmp/out \
+       --output-name course_v3 --voxel 0.03 --map
+
+8. Invalid combo it explicitly rejects: --no-cloud with no --map -> errors out
+   with "Nothing to do."

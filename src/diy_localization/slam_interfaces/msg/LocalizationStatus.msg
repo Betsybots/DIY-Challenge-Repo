@@ -1,5 +1,8 @@
 # Health of map_localizer's map->odom correction, published each time ICP
 # attempts an alignment (at the node's configured update_hz).
+# NOTE 2026-09-24: map_localizer was removed (replaced by RTAB-Map); nothing
+# publishes this message anymore. Left defined since nothing else in this
+# repo actually subscribes to it either -- no consumer to update.
 std_msgs/Header header
 
 # True once ICP has locked on at least once. Can still be true while

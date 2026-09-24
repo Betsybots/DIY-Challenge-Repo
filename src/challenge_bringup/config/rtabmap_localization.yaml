@@ -1,0 +1,68 @@
+# RTAB-Map localization-mode config — replaces map_localizer (removed 2026-09-24).
+#
+# Same lidar-only ICP registration as rtabmap_mapping.yaml (see that file for
+# the full loop_pgo->RTAB-Map parameter mapping); the ONLY functional
+# difference here is Mem/IncrementalMemory: false, which is RTAB-Map's
+# documented mapping/localization mode switch -- no new nodes are added to
+# the loaded graph, incoming scans are only ever matched AGAINST it. This is
+# this repo's AMCL-equivalent role (see map_localizer's own CHANGES_REPORT.md,
+# "which replaces AMCL": FAST-LIO2 owns odom->base_link, this owns map->odom).
+#
+# Requires a database already built by a prior mapping run (rtabmap_mapping,
+# UnlessCondition(autonomous)) at the SAME database_path -- this node does not
+# create a map, only localizes against one. If database_path doesn't exist or
+# is empty, RTAB-Map starts with nothing to localize against.
+#
+# NOT ported from map_localizer: transform_tolerance (AMCL-style TF broadcast
+# lookahead so Nav2 doesn't reject a stale correction) and the hand-coded
+# start_x/y/yaw fixed initial guess -- RTAB-Map's global relocalization
+# (matching the live scan against every stored keyframe, not a single
+# configured start pose) makes a fixed initial guess unnecessary; the
+# transform_tolerance equivalent, if Nav2 TF lookups start timing out after
+# switching over, needs to be found in RTAB-Map's own tf_delay/wait_for_transform
+# parameters and verified against the parameter reference
+# (introlab.github.io/rtabmap/api/latest/parameters.html) -- not guessed here.
+rtabmap:
+  ros__parameters:
+    frame_id: base_link
+    odom_frame_id: odom
+    map_frame_id: map
+    publish_tf: true
+
+    subscribe_depth: false
+    subscribe_rgb: false
+    subscribe_scan_cloud: true
+    subscribe_odom_info: false
+    approx_sync: true
+    wait_for_transform: 0.2
+
+    Reg/Strategy: "1"          # 1 = ICP only
+    Reg/Force3DoF: "false"
+
+    Icp/PointToPlane: "true"
+    Icp/VoxelSize: "0.1"
+    Icp/MaxCorrespondenceDistance: "1.0"
+    Icp/MaxTranslation: "1.0"
+    Icp/MaxRotation: "0.785"
+    Icp/Iterations: "30"
+    Icp/Epsilon: "0.001"
+    Icp/CorrespondenceRatio: "0.2"
+    Icp/OutlierRatio: "0.7"
+
+    RGBD/LinearUpdate: "0.5"
+    RGBD/AngularUpdate: "0.26"
+    RGBD/ProximityBySpace: "true"
+    RGBD/ProximityMaxGraphDepth: "0"
+    RGBD/OptimizeFromGraphEnd: "false"
+
+    Optimizer/Strategy: "1"
+
+    # The mapping/localization mode switch -- everything else above is
+    # identical to rtabmap_mapping.yaml.
+    Mem/IncrementalMemory: "false"
+    Mem/InitWMWithAllNodes: "true"   # load the whole saved graph for global relocalization
+    Mem/NotLinkedNodesKept: "false"
+
+    Grid/FromDepth: "false"
+    Grid/RangeMax: "20.0"
+    Grid/CellSize: "0.05"
