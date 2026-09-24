@@ -153,7 +153,12 @@ struct NodeState
     // fitness score from the last accepted offset, used as a rough proxy
     // for /amcl_pose covariance.
     double last_fitness_score = -1.0;
-    int consecutive_align_failures = 0;
+    // Written from timerCB's align-failure branch with NO lock held (ICP
+    // callback group) and reset to 0 from applyInitialGuess() under
+    // service_mutex (default group, via relocCB/initialPoseCB) -- a plain
+    // int here is a data race between those two threads, same reasoning as
+    // the atomic<bool> members above.
+    std::atomic<int> consecutive_align_failures{0};
 };
 
 class LocalizerNode : public rclcpp::Node
@@ -529,7 +534,7 @@ public:
                         jump_dist, jump_yaw, effective_max_jump_dist, effective_max_jump_yaw,
                         m_config.max_offset_jump_dist, m_config.max_offset_jump_yaw,
                         odom_moved_dist, odom_moved_yaw,
-                        m_state.consecutive_align_failures);
+                        m_state.consecutive_align_failures.load());
 
                     attempt_recovery_after_jump_reject =
                         m_config.recovery_after_failures > 0 && !m_recovery_hypotheses.empty() &&
@@ -543,7 +548,7 @@ public:
                             this->get_logger(),
                             "ICP map alignment RECOVERED after %d consecutive failure(s)/rejection(s) "
                             "(rough fitness=%.3f, refine fitness=%.3f)",
-                            m_state.consecutive_align_failures,
+                            m_state.consecutive_align_failures.load(),
                             m_localizer->lastRoughFitness(), m_localizer->lastRefineFitness());
                     }
                     m_state.consecutive_align_failures = 0;
@@ -594,7 +599,7 @@ public:
                 "ICP alignment failed to converge (%d consecutive attempts) -- "
                 "rough[converged=%s score=%.3f/%.3f] refine[converged=%s score=%.3f/%.3f] -- "
                 "map->odom is holding the last accepted offset",
-                m_state.consecutive_align_failures,
+                m_state.consecutive_align_failures.load(),
                 m_localizer->lastRoughConverged() ? "y" : "n", m_localizer->lastRoughFitness(),
                 m_localizer_config.rough_score_thresh,
                 m_localizer->lastRefineConverged() ? "y" : "n", m_localizer->lastRefineFitness(),
@@ -634,7 +639,7 @@ public:
             this->get_logger(),
             "Auto-recovery: %d consecutive alignment failures -- sweeping %zu grid hypothesis(es) "
             "x %d yaw sample(s) to attempt re-lock",
-            m_state.consecutive_align_failures, m_recovery_hypotheses.size(), yaw_samples);
+            m_state.consecutive_align_failures.load(), m_recovery_hypotheses.size(), yaw_samples);
 
         for (size_t i = 0; i < m_recovery_hypotheses.size(); ++i)
         {

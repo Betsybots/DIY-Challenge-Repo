@@ -102,6 +102,11 @@ public:
         m_pgo_config.hessian_eigen_ratio_threshold = config["hessian_eigen_ratio_threshold"].as<double>(1e-3);
         m_pgo_config.hessian_degenerate_scale = config["hessian_degenerate_scale"].as<double>(1e-2);
         m_pgo_config.hessian_min_information = config["hessian_min_information"].as<double>(1e-6);
+        m_pgo_config.odom_trans_noise_per_meter = config["odom_trans_noise_per_meter"].as<double>(0.05);
+        m_pgo_config.odom_trans_noise_floor = config["odom_trans_noise_floor"].as<double>(0.01);
+        m_pgo_config.odom_rot_noise_per_rad = config["odom_rot_noise_per_rad"].as<double>(0.05);
+        m_pgo_config.odom_rot_noise_floor = config["odom_rot_noise_floor"].as<double>(0.01);
+        m_pgo_config.odom_z_noise_floor = config["odom_z_noise_floor"].as<double>(0.001);
     }
 
     void imuCB(const sensor_msgs::msg::Imu::ConstSharedPtr &imu_msg)
@@ -231,12 +236,21 @@ public:
 
     void timerCB()
     {
-        if (m_state.cloud_buffer.size() == 0)
-            return;
-        CloudWithPose cp = m_state.cloud_buffer.front();
-        // 清理队列
+        // Was `std::lock_guard<std::mutex>(m_state.message_mutex);` (no
+        // variable name) -- that constructs and immediately destroys an
+        // unnamed temporary, locking and unlocking on that one statement
+        // before the pop loop below ever runs. It protected nothing. Harmless
+        // today only because main() spins this node single-threaded with no
+        // callback groups (syncCB/timerCB never actually run concurrently),
+        // but a landmine if that ever changes -- map_localizer already made
+        // exactly that jump to a MultiThreadedExecutor. Also extended the
+        // lock to cover the buffer read below, which was unprotected too.
+        CloudWithPose cp;
         {
-            std::lock_guard<std::mutex>(m_state.message_mutex);
+            std::lock_guard<std::mutex> lock(m_state.message_mutex);
+            if (m_state.cloud_buffer.empty())
+                return;
+            cp = m_state.cloud_buffer.front();
             while (!m_state.cloud_buffer.empty())
             {
                 m_state.cloud_buffer.pop();

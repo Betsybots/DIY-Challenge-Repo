@@ -56,11 +56,17 @@ max_offset_jump_yaw: 0.3
 # adapts automatically to whatever map is loaded (map_path or /relocalize).
 # 2026-09-23: localizer_node.cpp's timerCB now also counts repeated
 # jump-rejections toward this threshold (previously only outright align()
-# failures counted -- see that file for the fix). Left at 0/disabled here
-# since there's no measured/observed basis in this session for a specific
-# nonzero value -- pick one deliberately (and how many seconds that implies
-# at your update_hz) before turning this on, rather than trusting a guess.
-recovery_after_failures: 0
+# failures counted -- see that file for the fix).
+# 2026-09-23: now have a measured basis (see the "errors" run log) -- with
+# this left at 0/disabled, a run was observed getting permanently stuck:
+# ICP/jump-rejections repeated for 4+ minutes straight with map->odom frozen
+# on the last accepted offset the entire time (this is what "map/odom
+# drifting" looks like from the outside -- odom free-running uncorrected,
+# not a bug in FAST-LIO2 itself). Enabled at 10 consecutive failures (~5s at
+# this update_hz=2.0) so the node attempts to re-lock instead of staying
+# stuck indefinitely. Re-tune if 5s proves too eager/too slow once you have
+# more runs to look at.
+recovery_after_failures: 10
 recovery_grid_spacing: 2.0
 recovery_yaw_samples: 4
 # Blend accepted map->odom corrections over this many seconds instead of

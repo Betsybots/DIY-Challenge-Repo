@@ -24,3 +24,20 @@ loop_huber_k: 1.345
 hessian_eigen_ratio_threshold: 0.001
 hessian_degenerate_scale: 0.01
 hessian_min_information: 0.000001
+
+# Sequential odometry between-factor noise, scaled by how far odometry says
+# the robot actually moved/turned across each edge (see simple_pgo.cpp
+# addKeyPose()). 2026-09-23: replaced a fixed, very tight noise (variance
+# 1e-6 rot / 1e-4 trans regardless of edge length) that was diagnosed as the
+# likely cause of "multiple corner layers"/double-wall ghosting in saved
+# maps -- that tight a noise makes every odometry edge almost rigid, so even
+# a correctly-detected loop closure can only nudge the trajectory slightly
+# instead of smoothing out accumulated drift back through the loop. Tune
+# the *_per_meter/_per_rad slopes to your odometry's real drift rate if
+# ghosting persists; the floors keep near-zero deltas from collapsing to an
+# under-constrained (variance ~0) edge.
+odom_trans_noise_per_meter: 0.05
+odom_trans_noise_floor: 0.01
+odom_rot_noise_per_rad: 0.05
+odom_rot_noise_floor: 0.01
+odom_z_noise_floor: 0.001

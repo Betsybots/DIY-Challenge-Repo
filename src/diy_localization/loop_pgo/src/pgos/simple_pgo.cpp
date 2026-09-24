@@ -43,7 +43,12 @@ SimplePGO::SimplePGO(const Config &config) : m_config(config)
     m_r_offset.setIdentity();
     m_t_offset.setZero();
 
-    m_icp.setMaxCorrespondenceDistance(10);
+    // Was 10m -- far larger than the submap itself (loop_submap_half_range=5
+    // keyframes * key_pose_delta_trans=0.5m spacing, a ~2.5m radius), which let
+    // ICP accept correspondences across open space to the wrong nearby
+    // structure (e.g. the wrong corner) instead of only genuinely close
+    // geometry. Tightened to roughly match the submap's real extent.
+    m_icp.setMaxCorrespondenceDistance(3.0);
     m_icp.setNumThreads(0); // 0 = use all available threads
     m_icp.setCorrespondenceRandomness(20);
     m_icp.setRegularizationMethod(fast_gicp::RegularizationMethod::PLANE);
@@ -84,7 +89,19 @@ bool SimplePGO::addKeyPose(const CloudWithPose &cloud_with_pose)
         const KeyPoseWithCloud &last_item = m_key_poses.back();
         M3D r_between = last_item.r_local.transpose() * cloud_with_pose.pose.r;
         V3D t_between = last_item.r_local.transpose() * (cloud_with_pose.pose.t - last_item.t_local);
-        gtsam::noiseModel::Diagonal::shared_ptr noise = gtsam::noiseModel::Diagonal::Variances((gtsam::Vector(6) << 1e-6, 1e-6, 1e-6, 1e-4, 1e-4, 1e-6).finished());
+        // Scale by the *actual* measured delta for this edge (not the
+        // isKeyPose() spacing target) so a longer stretch between keyframes
+        // -- more room for odometry to have drifted -- gets a proportionally
+        // looser edge, letting loop-closure corrections actually propagate
+        // back through it instead of fighting a near-rigid prior.
+        const double dtrans = t_between.norm();
+        const double drot = Eigen::Quaterniond(r_between).angularDistance(Eigen::Quaterniond::Identity());
+        const double trans_sigma = std::max(m_config.odom_trans_noise_floor, m_config.odom_trans_noise_per_meter * dtrans);
+        const double rot_sigma = std::max(m_config.odom_rot_noise_floor, m_config.odom_rot_noise_per_rad * drot);
+        const double z_sigma = m_config.odom_z_noise_floor;
+        gtsam::noiseModel::Diagonal::shared_ptr noise = gtsam::noiseModel::Diagonal::Variances(
+            (gtsam::Vector(6) << rot_sigma * rot_sigma, rot_sigma * rot_sigma, rot_sigma * rot_sigma,
+                                 trans_sigma * trans_sigma, trans_sigma * trans_sigma, z_sigma * z_sigma).finished());
         m_graph.add(gtsam::BetweenFactor<gtsam::Pose3>(idx - 1, idx, gtsam::Pose3(gtsam::Rot3(r_between), gtsam::Point3(t_between)), noise));
     }
     KeyPoseWithCloud item;
@@ -181,7 +198,27 @@ void SimplePGO::searchForLoopPairs()
         if (sc_result.first != -1)
         {
             loop_idx = sc_result.first;
-            initial_guess.block<3, 3>(0, 0) = Eigen::AngleAxisf(sc_result.second, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+            const M3D r_guess = Eigen::AngleAxisd(
+                static_cast<double>(sc_result.second), Eigen::Vector3d::UnitZ()).toRotationMatrix();
+            initial_guess.block<3, 3>(0, 0) = r_guess.cast<float>();
+            // Unlike the radius-search branch above (whose candidate is, by
+            // construction, within loop_search_radius of last_item in the
+            // CURRENT global estimate, so identity is a fair starting guess),
+            // a Scan Context candidate exists precisely BECAUSE drift has
+            // pushed these two keyframes' current global positions apart --
+            // leaving the translation at identity/zero assumes source and
+            // target already overlap in world coordinates, which is normally
+            // false here. ICP then only finds whatever sparse correspondences
+            // happen to fall within setMaxCorrespondenceDistance of that
+            // wrong start and can still "converge" with a passable fitness
+            // score despite the two submaps not actually overlapping --
+            // exactly what shows up downstream as an accepted loop whose
+            // start/end scans visibly don't align. Seed translation from the
+            // current global position delta between the two keyframes
+            // (target - R*source, consistent with how align()'s guess is
+            // applied: p_target ~= R*p_source + t).
+            const V3D t_guess = m_key_poses[loop_idx].t_global - r_guess * last_item.t_global;
+            initial_guess.block<3, 1>(0, 3) = t_guess.cast<float>();
         }
     }
 

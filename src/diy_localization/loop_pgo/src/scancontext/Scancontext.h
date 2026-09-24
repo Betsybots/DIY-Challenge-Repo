@@ -69,7 +69,8 @@ public:
 
 public:
     // hyper parameters ()
-    const double LIDAR_HEIGHT = 2.0; // lidar height : add this for simply directly using lidar scan in the lidar local coord (not robot base coord) / if you use robot-coord-transformed lidar scans, just set this as 0.
+    // QT64 mount height measured at 10 in (0.254 m) above the ground.
+    const double LIDAR_HEIGHT = 0.254; // lidar height : add this for simply directly using lidar scan in the lidar local coord (not robot base coord) / if you use robot-coord-transformed lidar scans, just set this as 0.
 
     const int    PC_NUM_RING = 20; // 20 in the original paper (IROS 18)
     const int    PC_NUM_SECTOR = 60; // 60 in the original paper (IROS 18)

@@ -49,6 +49,19 @@ struct Config
     double hessian_eigen_ratio_threshold = 1e-3;
     double hessian_degenerate_scale = 1e-2;
     double hessian_min_information = 1e-6;
+    // Between-factor (sequential odometry edge) noise, scaled by how far the
+    // robot's own odometry says it actually moved/turned between the two
+    // keyframes it links, with a floor for near-zero deltas. Previously this
+    // was a single fixed, very tight variance regardless of delta size --
+    // that makes every odometry edge in the graph almost rigid, so even a
+    // correctly-detected loop closure can only nudge the trajectory a little,
+    // leaving a visible seam/duplicated geometry (e.g. double walls at
+    // corners) in the saved map instead of the loop fully smoothing it out.
+    double odom_trans_noise_per_meter = 0.05; // 1-sigma meters of drift per meter of edge translation
+    double odom_trans_noise_floor = 0.01;      // meters, 1-sigma floor for tiny/zero deltas
+    double odom_rot_noise_per_rad = 0.05;      // 1-sigma radians of drift per radian of edge rotation
+    double odom_rot_noise_floor = 0.01;        // radians, 1-sigma floor for tiny/zero deltas
+    double odom_z_noise_floor = 0.001;         // meters, 1-sigma for the z axis (kept tight: ground robot)
 };
 
 class SimplePGO
