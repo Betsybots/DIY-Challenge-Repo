@@ -28,6 +28,8 @@ Preprocess::Preprocess() : feature_enabled(0), lidar_type(QT64), blind(0.01), po
 {
   inf_bound = 10;
   N_SCANS = 16;
+  ring_min = 0;
+  ring_max = 63;
   SCAN_RATE = 10;
   group_size = 8;
   disA = 0.01;
@@ -158,9 +160,13 @@ void Preprocess::hesai_handler(const sensor_msgs::msg::PointCloud2::UniquePtr &m
       added_pt.normal_y = 0;
       added_pt.normal_z = 0;
       added_pt.curvature = (pl_orig.points[i].timestamp - pl_orig.points[0].timestamp) * time_unit_scale;
-      if (pl_orig.points[i].ring < (uint16_t)N_SCANS)
+      // Remap the driver's physical ring ID into a compact 0..N_SCANS-1 slot
+      // (see ring_min/ring_max comment in preprocess.h) so the per-line loop
+      // below actually visits every retained line instead of only 0..N_SCANS-1
+      // of the raw ring IDs.
+      if (pl_orig.points[i].ring >= (uint16_t)ring_min && pl_orig.points[i].ring <= (uint16_t)ring_max)
       {
-        pl_buff[pl_orig.points[i].ring].push_back(added_pt);
+        pl_buff[pl_orig.points[i].ring - ring_min].push_back(added_pt);
       }
     }
 
@@ -194,10 +200,12 @@ void Preprocess::hesai_handler(const sensor_msgs::msg::PointCloud2::UniquePtr &m
       // feature_enabled branch above -- with feature_extract_enable: false
       // (this driver's actual running config), every ring the QT64 reports
       // was kept regardless of scan_line, silently ignoring any reduced
-      // vertical-FOV setting in qt64.yaml. Ring convention (ascending =
-      // bottom-to-top or vice versa) is driver-defined -- verify in RViz
-      // that the kept rings are actually the half of the FOV you intend.
-      if (pl_orig.points[i].ring >= (uint16_t)N_SCANS) continue;
+      // vertical-FOV setting in qt64.yaml. A bare `ring >= N_SCANS` bound
+      // also assumed retained ring IDs start at 0, which drops the wrong
+      // rings when the driver keeps a subset with non-zero-based IDs (this
+      // deployment: 32 lines numbered 10-41). Use the actual [ring_min,
+      // ring_max] window instead.
+      if (pl_orig.points[i].ring < (uint16_t)ring_min || pl_orig.points[i].ring > (uint16_t)ring_max) continue;
 
       double range = pl_orig.points[i].x * pl_orig.points[i].x + pl_orig.points[i].y * pl_orig.points[i].y +
                      pl_orig.points[i].z * pl_orig.points[i].z;

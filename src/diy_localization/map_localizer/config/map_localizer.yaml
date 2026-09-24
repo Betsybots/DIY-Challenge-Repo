@@ -1,5 +1,5 @@
 cloud_topic: /cloud_registered_body
-odom_topic: /odom
+odom_topic: /Odometery
 map_frame: map
 local_frame: odom
 update_hz: 2.0

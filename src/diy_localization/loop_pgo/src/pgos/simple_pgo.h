@@ -21,6 +21,12 @@ struct KeyPoseWithCloud
     M3D r_global;
     V3D t_global;
     double time;
+    // Cumulative odometry path length (sum of |t_between| up to and including
+    // this keyframe) -- distinguishes a genuine revisit (traveled away and
+    // back) from merely being spatially close in the CURRENT estimate after
+    // idling/slow-driving/rotating in place nearby, which time or keyframe
+    // count alone can't tell apart from a real loop.
+    double path_length;
     CloudType::Ptr body_cloud;
 };
 struct LoopPair
@@ -29,8 +35,7 @@ struct LoopPair
     size_t target_id;
     M3D r_offset;
     V3D t_offset;
-    double score;
-    Eigen::Matrix<double, 6, 6> information; // from FastGICP::getFinalHessian(), tangent order [rot xyz, trans xyz]
+    double score; // FastGICP fitness score, used directly as the loop factor's noise variance
 };
 
 struct Config
@@ -38,7 +43,6 @@ struct Config
     double key_pose_delta_deg = 10;
     double key_pose_delta_trans = 1.0;
     double loop_search_radius = 1.0;
-    double loop_time_tresh = 60.0;
     double loop_score_tresh = 0.15;
     // Scan Context's keyframe-gap exclusion window (see NUM_EXCLUDE_RECENT in
     // Scancontext.h). Below this many keyframes of separation, the
@@ -52,34 +56,22 @@ struct Config
     // Tighten (lower) if you see "[Loop found]" against an early keyframe
     // that the robot has not actually returned to.
     double sc_dist_thres = 0.13;
-    // Minimum point count a candidate submap must have before ICP is even
-    // attempted, matching LIO-SAM's hardcoded 300/1000 sanity gate in
-    // performLoopClosure() (mapOptmization.cpp) -- rejects sparse/degenerate
-    // candidates that could otherwise "converge" trivially.
-    int loop_min_source_points = 300;
-    int loop_min_target_points = 1000;
     int loop_submap_half_range = 5;
     double submap_resolution = 0.1;
     double min_loop_detect_duration = 10.0;
     int loop_consistency_count = 3;
-    int loop_consistency_target_tolerance = 5;
-    double loop_huber_k = 1.345;
-    double hessian_eigen_ratio_threshold = 1e-3;
-    double hessian_degenerate_scale = 1e-2;
-    double hessian_min_information = 1e-6;
     // Between-factor (sequential odometry edge) noise, scaled by how far the
     // robot's own odometry says it actually moved/turned between the two
-    // keyframes it links, with a floor for near-zero deltas. Previously this
-    // was a single fixed, very tight variance regardless of delta size --
-    // that makes every odometry edge in the graph almost rigid, so even a
-    // correctly-detected loop closure can only nudge the trajectory a little,
-    // leaving a visible seam/duplicated geometry (e.g. double walls at
-    // corners) in the saved map instead of the loop fully smoothing it out.
+    // keyframes it links (see addKeyPose()). Previously this was a single
+    // fixed, very tight variance regardless of delta size -- that makes every
+    // odometry edge in the graph almost rigid, so even a correctly-detected
+    // loop closure can only nudge the trajectory a little, leaving a visible
+    // seam/duplicated geometry (e.g. double walls at corners) in the saved
+    // map instead of the loop fully smoothing it out. Tune these to your
+    // odometry's real drift rate if ghosting persists; the fixed floors (see
+    // addKeyPose()) only guard the near-zero-delta edge case.
     double odom_trans_noise_per_meter = 0.05; // 1-sigma meters of drift per meter of edge translation
-    double odom_trans_noise_floor = 0.01;      // meters, 1-sigma floor for tiny/zero deltas
-    double odom_rot_noise_per_rad = 0.05;      // 1-sigma radians of drift per radian of edge rotation
-    double odom_rot_noise_floor = 0.01;        // radians, 1-sigma floor for tiny/zero deltas
-    double odom_z_noise_floor = 0.001;         // meters, 1-sigma for the z axis (kept tight: ground robot)
+    double odom_rot_noise_per_rad = 0.05;     // 1-sigma radians of drift per radian of edge rotation
 };
 
 class SimplePGO

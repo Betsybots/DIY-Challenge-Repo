@@ -1,37 +1,5 @@
 #include "simple_pgo.h"
 
-namespace
-{
-Eigen::Matrix<double, 6, 6> conditionLoopInformation(
-    const Eigen::Matrix<double, 6, 6> &hessian, const Config &config)
-{
-    const Eigen::Matrix<double, 6, 6> symmetric_hessian = 0.5 * (hessian + hessian.transpose());
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 6, 6>> solver(symmetric_hessian);
-    if (solver.info() != Eigen::Success || !solver.eigenvalues().allFinite())
-        return Eigen::Matrix<double, 6, 6>::Identity() * config.hessian_min_information;
-
-    Eigen::Matrix<double, 6, 1> eigenvalues = solver.eigenvalues();
-    const double max_eigenvalue = eigenvalues.maxCoeff();
-    if (!std::isfinite(max_eigenvalue) || max_eigenvalue <= config.hessian_min_information)
-        return Eigen::Matrix<double, 6, 6>::Identity() * config.hessian_min_information;
-
-    for (int i = 0; i < eigenvalues.size(); ++i)
-    {
-        if (eigenvalues(i) <= 0.0)
-        {
-            eigenvalues(i) = config.hessian_min_information;
-        }
-        else if (eigenvalues(i) / max_eigenvalue < config.hessian_eigen_ratio_threshold)
-        {
-            eigenvalues(i) = std::max(config.hessian_min_information,
-                                      eigenvalues(i) * config.hessian_degenerate_scale);
-        }
-    }
-
-    return solver.eigenvectors() * eigenvalues.asDiagonal() * solver.eigenvectors().transpose();
-}
-}
-
 SimplePGO::SimplePGO(const Config &config) : m_config(config)
 {
     m_sc_manager.setNumExcludeRecent(config.num_exclude_recent);
@@ -98,9 +66,18 @@ bool SimplePGO::addKeyPose(const CloudWithPose &cloud_with_pose)
         // back through it instead of fighting a near-rigid prior.
         const double dtrans = t_between.norm();
         const double drot = Eigen::Quaterniond(r_between).angularDistance(Eigen::Quaterniond::Identity());
-        const double trans_sigma = std::max(m_config.odom_trans_noise_floor, m_config.odom_trans_noise_per_meter * dtrans);
-        const double rot_sigma = std::max(m_config.odom_rot_noise_floor, m_config.odom_rot_noise_per_rad * drot);
-        const double z_sigma = m_config.odom_z_noise_floor;
+        // Floors are fixed, not exposed: they only guard the near-zero-delta
+        // edge case (a keyframe added by rotation alone with ~0 translation,
+        // or vice versa) from collapsing to an under-constrained variance~0
+        // edge -- not something that needs retuning per course, unlike the
+        // per_meter/per_rad slopes below which describe this odometry's own
+        // real drift rate.
+        constexpr double kOdomTransNoiseFloor = 0.01; // meters
+        constexpr double kOdomRotNoiseFloor = 0.01;   // radians
+        constexpr double kOdomZNoiseFloor = 0.001;    // meters, ground robot
+        const double trans_sigma = std::max(kOdomTransNoiseFloor, m_config.odom_trans_noise_per_meter * dtrans);
+        const double rot_sigma = std::max(kOdomRotNoiseFloor, m_config.odom_rot_noise_per_rad * drot);
+        const double z_sigma = kOdomZNoiseFloor;
         gtsam::noiseModel::Diagonal::shared_ptr noise = gtsam::noiseModel::Diagonal::Variances(
             (gtsam::Vector(6) << rot_sigma * rot_sigma, rot_sigma * rot_sigma, rot_sigma * rot_sigma,
                                  trans_sigma * trans_sigma, trans_sigma * trans_sigma, z_sigma * z_sigma).finished());
@@ -113,6 +90,7 @@ bool SimplePGO::addKeyPose(const CloudWithPose &cloud_with_pose)
     item.body_cloud = cloud_with_pose.cloud;
     item.r_global = init_r;
     item.t_global = init_t;
+    item.path_length = (idx == 0) ? 0.0 : m_key_poses.back().path_length + (cloud_with_pose.pose.t - m_key_poses.back().t_local).norm();
     m_key_poses.push_back(item);
     m_sc_manager.makeAndSaveScancontextAndKeys(*cloud_with_pose.cloud); // index-aligned with m_key_poses
     return true;
@@ -180,15 +158,16 @@ void SimplePGO::searchForLoopPairs()
     std::vector<float> sqdists;
     kdtree.radiusSearch(last_pose_pt, m_config.loop_search_radius, ids, sqdists);
 
+    // Candidate SELECTION here only needs to pick one of the spatially-nearby
+    // keyframes the radius search returns; whether it's actually a valid loop
+    // (not just a recently-visited spot) is decided uniformly below by the
+    // path-length check, not by picking a specific candidate here. Prefer the
+    // oldest (smallest index) as the most conservative choice.
     int loop_idx = -1;
     for (size_t i = 0; i < ids.size(); i++)
     {
-        int idx = ids[i];
-        if (std::abs(last_item.time - m_key_poses[idx].time) > m_config.loop_time_tresh)
-        {
-            loop_idx = idx;
-            break;
-        }
+        if (loop_idx == -1 || ids[i] < loop_idx)
+            loop_idx = ids[i];
     }
 
     // fallback: descriptor-based candidate (Scan Context), for revisits the geometric radius
@@ -224,6 +203,25 @@ void SimplePGO::searchForLoopPairs()
         }
     }
 
+    // Neither the radius search above (gates on CURRENT spatial proximity +
+    // wall-clock time) nor ScanContext's own NUM_EXCLUDE_RECENT (gates on
+    // keyframe COUNT) actually verify the robot travelled away from this
+    // candidate and back -- both stay satisfied trivially while the robot
+    // idles, drives slowly, or rotates in place near the candidate (rotation
+    // alone adds new keyframes via isKeyPose()'s angle check with ~zero
+    // translation, so they're still co-located and pass a radius check
+    // instantly). Require actual cumulative path length travelled since the
+    // candidate to meaningfully exceed the search radius itself -- otherwise
+    // the robot never really left this candidate's vicinity in the first
+    // place, and accepting it just forces ISAM2 to warp the whole trajectory
+    // to satisfy a constraint that wasn't a genuine revisit.
+    if (loop_idx != -1)
+    {
+        const double travelled = m_key_poses[cur_idx].path_length - m_key_poses[loop_idx].path_length;
+        if (travelled < 3.0 * m_config.loop_search_radius)
+            loop_idx = -1;
+    }
+
     if (loop_idx == -1)
         return;
 
@@ -233,12 +231,14 @@ void SimplePGO::searchForLoopPairs()
     // Minimum-overlap sanity gate (matches LIO-SAM's detectLoopClosureDistance()/
     // performLoopClosure() in mapOptmization.cpp, which rejects a candidate
     // outright if either cloud is too sparse: "cureKeyframeCloud->size() < 300
-    // || prevKeyframeCloud->size() < 1000"). Without this, a near-empty or
-    // feature-poor submap can still report ICP convergence with a passable
-    // fitness score purely because it has very few, trivially-satisfied
-    // correspondences -- indistinguishable downstream from a genuine match.
-    if (static_cast<int>(source_cloud->size()) < m_config.loop_min_source_points ||
-        static_cast<int>(target_cloud->size()) < m_config.loop_min_target_points)
+    // || prevKeyframeCloud->size() < 1000"). Fixed, not exposed as yaml
+    // parameters -- LIO-SAM hardcodes its equivalent directly in source too;
+    // these are already scaled down from that for the QT64's sparser,
+    // shorter-range scans and aren't course-specific.
+    constexpr int kLoopMinSourcePoints = 50;
+    constexpr int kLoopMinTargetPoints = 200;
+    if (static_cast<int>(source_cloud->size()) < kLoopMinSourcePoints ||
+        static_cast<int>(target_cloud->size()) < kLoopMinTargetPoints)
         return;
 
     CloudType::Ptr align_cloud(new CloudType);
@@ -250,10 +250,34 @@ void SimplePGO::searchForLoopPairs()
     if (!m_icp.hasConverged() || m_icp.getFitnessScore() > m_config.loop_score_tresh)
         return;
 
+    M4F loop_transform = m_icp.getFinalTransformation();
+
+    // Real gap, not a parameter: fitness score alone cannot detect ICP
+    // converging to a well-fitting but WRONG local optimum, which is exactly
+    // what a symmetric/repetitive room (this package's own logged failure
+    // mode) causes -- e.g. snapping ~90/180 degrees off onto the "wrong"
+    // matching wall. ICP is a local optimizer seeded from `initial_guess`
+    // (identity for the radius-search branch's already-nearby candidate, or
+    // Scan Context's yaw+position guess for the descriptor branch); a large,
+    // unexplained correction FAR beyond that guess is itself evidence of a
+    // wrong basin, independent of how good the fitness score looks. This is
+    // the same principle as this repo's own map_localizer jump gate
+    // (max_offset_jump_dist/yaw in localizer_node.cpp) applied here to ICP's
+    // result vs. its own seed instead of to consecutive localization ticks.
+    const M3D icp_rotation = loop_transform.block<3, 3>(0, 0).cast<double>();
+    const V3D icp_translation = loop_transform.block<3, 1>(0, 3).cast<double>();
+    const M3D guess_rotation = initial_guess.block<3, 3>(0, 0).cast<double>();
+    const V3D guess_translation = initial_guess.block<3, 1>(0, 3).cast<double>();
+    const double correction_rot_rad = Eigen::Quaterniond(guess_rotation.transpose() * icp_rotation)
+                                           .angularDistance(Eigen::Quaterniond::Identity());
+    const double correction_trans = (icp_translation - guess_translation).norm();
+    constexpr double kMaxIcpCorrectionFromGuessRad = 45.0 * M_PI / 180.0;
+    if (correction_rot_rad > kMaxIcpCorrectionFromGuessRad || correction_trans > m_config.loop_search_radius)
+        return;
+
     // Compute the correction this candidate implies BEFORE gating, so the
     // consistency check below can compare it to the previous candidate's
     // correction (not just keyframe indices).
-    M4F loop_transform = m_icp.getFinalTransformation();
     M3D r_refined = loop_transform.block<3, 3>(0, 0).cast<double>() * m_key_poses[cur_idx].r_global;
     V3D t_refined = loop_transform.block<3, 3>(0, 0).cast<double>() * m_key_poses[cur_idx].t_global + loop_transform.block<3, 1>(0, 3).cast<double>();
     M3D r_offset = m_key_poses[loop_idx].r_global.transpose() * r_refined;
@@ -276,9 +300,14 @@ void SimplePGO::searchForLoopPairs()
     // itself (a few multiples of it), not a new standalone tunable.
     const double trans_tolerance = 3.0 * m_config.key_pose_delta_trans;
     const double rot_tolerance_rad = 3.0 * m_config.key_pose_delta_deg * M_PI / 180.0;
+    // Index tolerance is a secondary check (the trans/rot offset comparison
+    // below is what actually verifies consistency); fixed since it's just a
+    // "did we jump to a wildly different target keyframe" sanity bound, not
+    // something that needs retuning per course.
+    constexpr int kLoopConsistencyIndexTolerance = 2;
     bool candidate_is_consistent =
         m_pending_loop_count > 0 && cur_idx == m_pending_loop_source + 1 &&
-        std::abs(loop_idx - m_pending_loop_target) <= m_config.loop_consistency_target_tolerance;
+        std::abs(loop_idx - m_pending_loop_target) <= kLoopConsistencyIndexTolerance;
     if (candidate_is_consistent)
     {
         const double trans_delta = (t_offset - m_pending_loop_t_offset).norm();
@@ -298,7 +327,6 @@ void SimplePGO::searchForLoopPairs()
     one_pair.source_id = cur_idx;
     one_pair.target_id = loop_idx;
     one_pair.score = m_icp.getFitnessScore();
-    one_pair.information = conditionLoopInformation(m_icp.getFinalHessian(), m_config);
     one_pair.r_offset = r_offset;
     one_pair.t_offset = t_offset;
     m_cache_pairs.push_back(one_pair);
@@ -313,8 +341,17 @@ void SimplePGO::smoothAndUpdate()
     {
         for (LoopPair &pair : m_cache_pairs)
         {
-            auto gaussian_noise = gtsam::noiseModel::Gaussian::Information(pair.information);
-            auto huber_loss = gtsam::noiseModel::mEstimator::Huber::Create(m_config.loop_huber_k);
+            // Noise built directly from ICP fitness, matching LIO-SAM's actual
+            // loop-factor construction (performLoopClosure(), mapOptmization.cpp):
+            // `Vector6 << noiseScore x6; noiseModel::Diagonal::Variances(...)`.
+            // Neither LIO-SAM nor SC-A-LOAM condition this against the ICP
+            // Hessian's eigenvalues -- that was three extra tunables here for a
+            // refinement the reference algorithms don't do.
+            auto gaussian_noise = gtsam::noiseModel::Diagonal::Variances(
+                gtsam::Vector6::Constant(std::max(pair.score, 1e-4)));
+            // 1.345 is the standard Huber constant (95% efficiency under
+            // Gaussian noise) -- a textbook value, not a per-course tunable.
+            auto huber_loss = gtsam::noiseModel::mEstimator::Huber::Create(1.345);
             auto robust_noise = gtsam::noiseModel::Robust::Create(huber_loss, gaussian_noise);
             m_graph.add(gtsam::BetweenFactor<gtsam::Pose3>(pair.target_id, pair.source_id,
                                                            gtsam::Pose3(gtsam::Rot3(pair.r_offset),

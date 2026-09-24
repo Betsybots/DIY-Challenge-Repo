@@ -33,7 +33,11 @@
 
         preprocess:
             lidar_type: 3                # 3: Hesai QT64
-            scan_line: 32                # QT64 has 32 rings (0-31)
+            scan_line: 32                # number of active lines the Hesai driver is configured to output
+            # The driver keeps these lines' *original* ring IDs (not renumbered
+            # to 0-31) -- ring_max - ring_min + 1 must equal scan_line above.
+            ring_min: 10
+            ring_max: 41
             timestamp_unit: 0            # 0-second, 1-millisecond, 2-microsecond, 3-nanosecond
             scan_rate: 10                # Hz
             blind: 0.5                   # Blind zone of the LiDAR in meters (QT64 has a blind zone of ~1 m)

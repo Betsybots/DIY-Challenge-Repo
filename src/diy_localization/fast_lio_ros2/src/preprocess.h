@@ -122,6 +122,12 @@ class Preprocess
   vector<orgtype> typess[128]; //maximum 128 line lidar
   float time_unit_scale;
   int lidar_type, point_filter_num, N_SCANS, SCAN_RATE, time_unit;
+  // Inclusive [ring_min, ring_max] window of ring IDs the driver actually
+  // publishes (e.g. a 64-channel LiDAR reconfigured at the driver to only
+  // output a 32-line subset keeps that subset's *original* ring IDs, not
+  // 0..31) -- N_SCANS is the buffer/slot count (ring_max - ring_min + 1),
+  // ring_min/ring_max say which physical ring IDs map into those slots.
+  int ring_min, ring_max;
   double blind;
   bool feature_enabled, given_offset_time;
 

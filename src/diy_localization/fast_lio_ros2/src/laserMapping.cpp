@@ -732,7 +732,8 @@ void publish_odometry(const rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPt
     }
     if (!state_finite)
     {
-        RCLCPP_ERROR_THROTTLE(rclcpp::get_logger("laserMapping"), *rclcpp::Clock::make_shared(),
+        static rclcpp::Clock steady_clock(RCL_STEADY_TIME);
+        RCLCPP_ERROR_THROTTLE(rclcpp::get_logger("laserMapping"), steady_clock,
                               1000,
                               "Non-finite (NaN/Inf) state detected in publish_odometry(); "
                               "skipping publish of /Odometry and TF this cycle.");
@@ -918,27 +919,32 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         if (rot_eig.info() == Eigen::Success)
         {
             const Eigen::Vector3d eigenvalues = rot_eig.eigenvalues(); // ascending
-            const double min_eig = eigenvalues(0);
             const double max_eig = eigenvalues(2);
-            if (max_eig > 1e-6 && min_eig / max_eig < kDegenerateRotEigenRatioThreshold)
+            // Bug: this only ever tested/nulled eigenvalues(0), the single
+            // smallest eigenvector. A corridor/single-wall scene commonly has
+            // TWO weak rotational DOFs (only one axis, e.g. yaw about the wall
+            // normal, is actually constrained) -- eigenvalues(1) was computed
+            // and never even read. Loop ascending like LIO-SAM's LMOptimization
+            // does and null every eigenvector that fails the ratio test, not
+            // just the smallest, so a second weak direction isn't left exposed
+            // to a full-strength update from ambiguous geometry.
+            Eigen::Matrix3d projector = Eigen::Matrix3d::Identity();
+            bool any_weak = false;
+            if (max_eig > 1e-6)
             {
-                const Eigen::Vector3d weak_axis_local = rot_eig.eigenvectors().col(0);
-                const Eigen::Vector3d weak_axis_world = s.rot.toRotationMatrix() * weak_axis_local;
-                const bool yaw_dominant = std::abs(weak_axis_world.z()) >
-                    std::hypot(weak_axis_world.x(), weak_axis_world.y());
-                RCLCPP_WARN_THROTTLE(
-                    rclcpp::get_logger("laserMapping"), *rclcpp::Clock::make_shared(), 2000,
-                    "Weakly-constrained attitude direction this scan (rot eigenvalue ratio=%.4f)%s -- "
-                    "geometry alone (e.g. a corridor / parallel flat walls) isn't fully observing "
-                    "orientation; nulling it so gyro integration (not LiDAR) governs %s between updates",
-                    min_eig / max_eig, yaw_dominant ? " and it looks YAW-dominant" : "",
-                    yaw_dominant ? "yaw" : "that axis");
-
+                for (int idx = 0; idx < 3; ++idx)
+                {
+                    if (eigenvalues(idx) / max_eig >= kDegenerateRotEigenRatioThreshold) break;
+                    const Eigen::Vector3d v = rot_eig.eigenvectors().col(idx);
+                    projector -= v * v.transpose();
+                    any_weak = true;
+                }
+            }
+            if (any_weak)
+            {
                 // Row-vector projection: for each point's 1x3 rotation
-                // Jacobian row r, remove its component along the weak
-                // direction v: r_new = r - (r.v) v^T = r * (I - v v^T).
-                const Eigen::Matrix3d projector =
-                    Eigen::Matrix3d::Identity() - weak_axis_local * weak_axis_local.transpose();
+                // Jacobian row r, remove its component along each weak
+                // direction v: r_new = r * (I - sum(v v^T)).
                 h_rot_cols = h_rot_cols * projector;
             }
         }
@@ -978,6 +984,8 @@ public:
         this->declare_parameter<int>("preprocess.lidar_type", QT64);
         this->declare_parameter<string>("common.imu_gyr_unit", "rad");
         this->declare_parameter<int>("preprocess.scan_line", 64);
+        this->declare_parameter<int>("preprocess.ring_min", 0);
+        this->declare_parameter<int>("preprocess.ring_max", 63);
         this->declare_parameter<int>("preprocess.timestamp_unit", US);
         this->declare_parameter<int>("preprocess.scan_rate", 10);
         this->declare_parameter<int>("point_filter_num", 2);
@@ -1026,8 +1034,16 @@ public:
         this->get_parameter_or<string>("common.imu_gyr_unit", imu_gyr_unit_str, "rad");
         imu_gyr_is_deg = (imu_gyr_unit_str == "deg");
         this->get_parameter_or<int>("preprocess.scan_line", p_pre->N_SCANS, 64);
+        this->get_parameter_or<int>("preprocess.ring_min", p_pre->ring_min, 0);
+        this->get_parameter_or<int>("preprocess.ring_max", p_pre->ring_max, 63);
         this->get_parameter_or<int>("preprocess.timestamp_unit", p_pre->time_unit, US);
         this->get_parameter_or<int>("preprocess.scan_rate", p_pre->SCAN_RATE, 10);
+        if (p_pre->ring_max - p_pre->ring_min + 1 != p_pre->N_SCANS) {
+          RCLCPP_WARN(this->get_logger(),
+            "preprocess.scan_line (%d) does not match ring_max-ring_min+1 (%d) -- "
+            "some retained LiDAR rings will be dropped or under-allocated.",
+            p_pre->N_SCANS, p_pre->ring_max - p_pre->ring_min + 1);
+        }
         this->get_parameter_or<int>("point_filter_num", p_pre->point_filter_num, 2);
         this->get_parameter_or<bool>("feature_extract_enable", p_pre->feature_enabled, false);
         this->get_parameter_or<bool>("runtime_pos_log_enable", runtime_pos_log, 0);

@@ -33,6 +33,14 @@ struct NodeConfig
     double gravity_magnitude = 9.81;
     double shock_accel_deviation_threshold = 4.0;
     double shock_cooldown = 0.3;
+    // Ported from map_localizer's own fix for the same problem (see its
+    // CHANGES_REPORT.md, "TF smoothing (no more teleport on recovery)"):
+    // m_pgo->offsetR()/offsetT() can shift instantly whenever
+    // smoothAndUpdate() reoptimizes (every new keyframe, and especially
+    // right after a loop-closure factor is added) -- broadcasting that
+    // directly is what showed up as map->odom TF jumps. <= 0 restores
+    // instant-snap (REP-105-compliant, jump-tolerant) behavior.
+    double offset_smoothing_time_constant = 0.5;
 };
 
 struct NodeState
@@ -41,6 +49,12 @@ struct NodeState
     std::queue<CloudWithPose> cloud_buffer;
     double last_message_time = 0.0;
     double reject_clouds_until = 0.0;
+    // Smoothed map->odom offset actually broadcast over TF -- see
+    // advanceSmoothedOffset(). m_pgo->offsetR()/offsetT() itself is left
+    // untouched (still the raw optimized value everything else uses).
+    M3D last_offset_r = M3D::Identity();
+    V3D last_offset_t = V3D::Zero();
+    rclcpp::Time last_smooth_time;
 };
 
 class PGONode : public rclcpp::Node
@@ -87,30 +101,22 @@ public:
         m_node_config.gravity_magnitude = config["gravity_magnitude"].as<double>(9.81);
         m_node_config.shock_accel_deviation_threshold = config["shock_accel_deviation_threshold"].as<double>(4.0);
         m_node_config.shock_cooldown = config["shock_cooldown"].as<double>(0.3);
+        m_node_config.offset_smoothing_time_constant = config["offset_smoothing_time_constant"] ?
+            config["offset_smoothing_time_constant"].as<double>() :
+            m_node_config.offset_smoothing_time_constant;
 
         m_pgo_config.key_pose_delta_deg = config["key_pose_delta_deg"].as<double>();
         m_pgo_config.key_pose_delta_trans = config["key_pose_delta_trans"].as<double>();
         m_pgo_config.loop_search_radius = config["loop_search_radius"].as<double>();
-        m_pgo_config.loop_time_tresh = config["loop_time_tresh"].as<double>();
         m_pgo_config.loop_score_tresh = config["loop_score_tresh"].as<double>();
         m_pgo_config.num_exclude_recent = config["num_exclude_recent"].as<int>(50);
         m_pgo_config.sc_dist_thres = config["sc_dist_thres"].as<double>(0.13);
-        m_pgo_config.loop_min_source_points = config["loop_min_source_points"].as<int>(300);
-        m_pgo_config.loop_min_target_points = config["loop_min_target_points"].as<int>(1000);
         m_pgo_config.loop_submap_half_range = config["loop_submap_half_range"].as<int>();
         m_pgo_config.submap_resolution = config["submap_resolution"].as<double>();
         m_pgo_config.min_loop_detect_duration = config["min_loop_detect_duration"].as<double>();
         m_pgo_config.loop_consistency_count = config["loop_consistency_count"].as<int>(3);
-        m_pgo_config.loop_consistency_target_tolerance = config["loop_consistency_target_tolerance"].as<int>(5);
-        m_pgo_config.loop_huber_k = config["loop_huber_k"].as<double>(1.345);
-        m_pgo_config.hessian_eigen_ratio_threshold = config["hessian_eigen_ratio_threshold"].as<double>(1e-3);
-        m_pgo_config.hessian_degenerate_scale = config["hessian_degenerate_scale"].as<double>(1e-2);
-        m_pgo_config.hessian_min_information = config["hessian_min_information"].as<double>(1e-6);
         m_pgo_config.odom_trans_noise_per_meter = config["odom_trans_noise_per_meter"].as<double>(0.05);
-        m_pgo_config.odom_trans_noise_floor = config["odom_trans_noise_floor"].as<double>(0.01);
         m_pgo_config.odom_rot_noise_per_rad = config["odom_rot_noise_per_rad"].as<double>(0.05);
-        m_pgo_config.odom_rot_noise_floor = config["odom_rot_noise_floor"].as<double>(0.01);
-        m_pgo_config.odom_z_noise_floor = config["odom_z_noise_floor"].as<double>(0.001);
     }
 
     void imuCB(const sensor_msgs::msg::Imu::ConstSharedPtr &imu_msg)
@@ -162,8 +168,8 @@ public:
         transformStamped.header.frame_id = m_node_config.map_frame;
         transformStamped.child_frame_id = m_node_config.local_frame;
         transformStamped.header.stamp = time;
-        Eigen::Quaterniond q(m_pgo->offsetR());
-        V3D t = m_pgo->offsetT();
+        Eigen::Quaterniond q(m_state.last_offset_r);
+        V3D t = m_state.last_offset_t;
         transformStamped.transform.translation.x = t.x();
         transformStamped.transform.translation.y = t.y();
         transformStamped.transform.translation.z = t.z();
@@ -238,6 +244,42 @@ public:
         m_loop_marker_pub->publish(marker_array);
     }
 
+    // Blends m_state.last_offset_r/t toward the current m_pgo->offsetR()/
+    // offsetT() (the raw, possibly just-jumped optimized value) instead of
+    // snapping to it in one TF tick. Same exponential-smoothing math as
+    // map_localizer's advanceSmoothedOffset().
+    void advanceSmoothedOffset()
+    {
+        const rclcpp::Time now = this->now();
+        if (m_state.last_smooth_time.nanoseconds() == 0)
+        {
+            m_state.last_smooth_time = now;
+            m_state.last_offset_r = m_pgo->offsetR();
+            m_state.last_offset_t = m_pgo->offsetT();
+            return;
+        }
+
+        const double dt = (now - m_state.last_smooth_time).seconds();
+        m_state.last_smooth_time = now;
+        if (dt <= 0.0 || dt > 1.0)
+            return;
+
+        if (m_node_config.offset_smoothing_time_constant <= 0.0)
+        {
+            m_state.last_offset_r = m_pgo->offsetR();
+            m_state.last_offset_t = m_pgo->offsetT();
+            return;
+        }
+
+        const double alpha = 1.0 - std::exp(-dt / m_node_config.offset_smoothing_time_constant);
+        m_state.last_offset_t = (1.0 - alpha) * m_state.last_offset_t + alpha * m_pgo->offsetT();
+        Eigen::Quaterniond current(m_state.last_offset_r);
+        Eigen::Quaterniond target(m_pgo->offsetR());
+        current.normalize();
+        target.normalize();
+        m_state.last_offset_r = current.slerp(alpha, target).toRotationMatrix();
+    }
+
     void timerCB()
     {
         // Was `std::lock_guard<std::mutex>(m_state.message_mutex);` (no
@@ -266,6 +308,7 @@ public:
         if (!m_pgo->addKeyPose(cp))
         {
 
+            advanceSmoothedOffset();
             sendBroadCastTF(cur_time);
             return;
         }
@@ -273,6 +316,8 @@ public:
         m_pgo->searchForLoopPairs();
 
         m_pgo->smoothAndUpdate();
+
+        advanceSmoothedOffset();
 
         sendBroadCastTF(cur_time);
 

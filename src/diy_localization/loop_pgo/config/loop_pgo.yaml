@@ -1,5 +1,5 @@
 cloud_topic: /cloud_registered_body
-odom_topic: /odom
+odom_topic: /Odometery
 imu_topic: /imu/data
 map_frame: map
 local_frame: odom
@@ -8,19 +8,63 @@ reject_imu_shocks: true
 gravity_magnitude: 9.81
 shock_accel_deviation_threshold: 4.0
 shock_cooldown: 0.3
+# Ported from map_localizer (same problem, same fix, see its own yaml/
+# CHANGES_REPORT.md): smooths the broadcast map->odom TF instead of snapping
+# to it in one tick whenever smoothAndUpdate() shifts the offset (every new
+# keyframe, and especially right after a loop closure factor is accepted and
+# ISAM2 reoptimizes). REP-105 documents map->odom as allowed to jump and
+# odom as the frame consumers should use for continuous local control (this
+# repo's motion_controller already does, via costmap_ros_->getGlobalFrameID()) --
+# this setting is purely for smoother visualization/high-level consumers, not
+# a correctness requirement. <= 0 restores instant-snap behavior.
+offset_smoothing_time_constant: 0.5
 
-key_pose_delta_deg: 10
-key_pose_delta_trans: 0.5
-loop_search_radius: 1.0
-# 2026-09-24: tuned down from 60.0/50 -- at key_pose_delta_trans=0.5m spacing,
-# the old num_exclude_recent=50 required ~25m of travel and the old
-# loop_time_tresh=60.0 required 60s between visits before EITHER loop-closure
-# path (radius search or Scan Context fallback) would even attempt a match.
-# Short test loops (quick out-and-back) never cleared either window, so no
-# correction ever fired and map/odom just showed raw, uncorrected drift.
-loop_time_tresh: 10.0
-num_exclude_recent: 15
-# 2026-09-24: tightened from 0.13/0.15/3/5 -- lowering num_exclude_recent
+key_pose_delta_deg: 15  # degrees between consecutive key poses
+key_pose_delta_trans: 0.5  # meters between consecutive key poses
+loop_search_radius: 1.0  # meters for the loop search radius
+
+# 2026-09-24: reviewed against the actual reference implementations this
+# package is based on (gisbi-kim/SC-A-LOAM's laserPosegraphOptimization.cpp,
+# and TixiaoShan/LIO-SAM's mapOptmization.cpp) -- both expose only ~4-6 loop-
+# closure parameters total; the rest (fitness noise, robust-kernel constant,
+# minimum submap point counts, consistency-index tolerance, noise floors)
+# are fixed directly in their source, not yaml. This file now does the same:
+# removed loop_time_tresh (superseded below), loop_min_source/target_points,
+# loop_consistency_target_tolerance, loop_huber_k, the three hessian_* knobs,
+# and the three *_noise_floor knobs -- see simple_pgo.cpp/.h for where each
+# became a fixed constant and why.
+#
+# loop_time_tresh (wall-clock time since a spatially-nearby candidate) is
+# gone entirely, not just hardcoded: it was the actual root cause of false
+# "loop found" reports (spinning in place / slow driving satisfies a time
+# threshold without ever leaving the area -- neither SC-A-LOAM nor LIO-SAM's
+# thresholds are course-duration-aware either, they just assume a large
+# vehicle-scale dataset makes this a non-issue). Replaced by a check on
+# actual cumulative path length travelled since the candidate keyframe (see
+# searchForLoopPairs()), which stays correct regardless of course size/speed
+# and reuses loop_search_radius above instead of adding a new parameter.
+#
+# key_pose_delta_deg raised 10 -> 15: reduces how many keyframes a single
+# in-place rotation floods in (a 360 deg spin now adds 24 keyframes instead
+# of 36), giving num_exclude_recent/the path-length gate more real margin.
+#
+# num_exclude_recent and loop_search_radius are course-scale-dependent --
+# your two test courses need genuinely different values:
+#   - Indoor 10x6m room (diagonal ~11.7m, full loop ~32m): needs >~15m of
+#     required separation to clear the room's own diagonal -- 15/0.5 = 30.
+#     Values below are set for THIS case.
+#   - Outdoor 30x20m (diagonal ~36m, full loop ~100m): needs >~45m --
+#     45/0.5 = 90. Also widen loop_search_radius to ~2.0-3.0m for this case
+#     (a 100m loop accumulates more absolute odometry drift by the time you
+#     return, so a 1.0m radius is more likely to miss the actual revisit
+#     point) -- the path-length gate (3x this radius) scales up with it
+#     automatically, no extra parameter needed for that side effect.
+#     sc_dist_thres can also loosen back to the original paper's 0.13
+#     default outdoors (less repetitive geometry -> less aliasing risk).
+
+num_exclude_recent: 20  # number of most recent keyframes to exclude from loop closure search (indoor 10x6m course; use 90 for the 30x20m outdoor course)
+
+# 2026-09-24: tightened from 0.13 default -- lowering num_exclude_recent
 # above made Scan Context start proposing candidates after only ~7.5m of
 # travel, which is well within a single small/symmetric room. Terminal logs
 # showed "[Loop found]" against keyframe 0 at several points (e.g. keyframes
@@ -31,29 +75,21 @@ num_exclude_recent: 15
 # misaligned" ghosting). Tightened the descriptor threshold, the ICP fitness
 # gate, and the consistency requirement so a one-off aliasing hit is far less
 # likely to be accepted as a real loop closure. If you still see false
-# "[Loop found]" entries, lower sc_dist_thres further (e.g. 0.08) and/or
-# raise num_exclude_recent back up.
+# "[Loop found]" entries, lower sc_dist_thres further (e.g. 0.08).
 sc_dist_thres: 0.10
-# Minimum submap point count required before ICP is attempted at all (see
-# LIO-SAM's performLoopClosure() in mapOptmization.cpp, which hardcodes
-# 300/1000 for the same reason: too few points lets ICP "converge" on
-# trivially-satisfied correspondences instead of a genuine match). Scaled
-# down from LIO-SAM's Velodyne-scale corner+surf defaults since QT64 is a
-# much sparser, shorter-range (~5m) sensor -- raise these if your logged
-# submap sizes are comfortably larger than this in practice.
-loop_min_source_points: 50
-loop_min_target_points: 200
 loop_score_tresh: 0.08
 loop_submap_half_range: 5
 submap_resolution: 0.1
 min_loop_detect_duration: 5.0
 
-loop_consistency_count: 5
-loop_consistency_target_tolerance: 2
-loop_huber_k: 1.345
-hessian_eigen_ratio_threshold: 0.001
-hessian_degenerate_scale: 0.01
-hessian_min_information: 0.000001
+# Lowered 5 -> 3 (back toward the original default): searchForLoopPairs() now
+# also rejects any candidate whose ICP correction deviates too far from its
+# initial guess (see the comment there), an independent check against the
+# same symmetric-room-aliasing failure mode this count was raised to guard
+# against -- with that gate in place, requiring 5 straight consistent
+# detections just slows down genuine loop closure on a short course without
+# adding real protection.
+loop_consistency_count: 3
 
 # Sequential odometry between-factor noise, scaled by how far odometry says
 # the robot actually moved/turned across each edge (see simple_pgo.cpp
@@ -63,11 +99,9 @@ hessian_min_information: 0.000001
 # maps -- that tight a noise makes every odometry edge almost rigid, so even
 # a correctly-detected loop closure can only nudge the trajectory slightly
 # instead of smoothing out accumulated drift back through the loop. Tune
-# the *_per_meter/_per_rad slopes to your odometry's real drift rate if
-# ghosting persists; the floors keep near-zero deltas from collapsing to an
-# under-constrained (variance ~0) edge.
+# these to your odometry's real drift rate if ghosting persists; the small
+# fixed floors that used to be separate parameters now live in addKeyPose()
+# directly (they only guard the near-zero-delta edge case, not something
+# that needs per-course tuning).
 odom_trans_noise_per_meter: 0.05
-odom_trans_noise_floor: 0.01
 odom_rot_noise_per_rad: 0.05
-odom_rot_noise_floor: 0.01
-odom_z_noise_floor: 0.001
