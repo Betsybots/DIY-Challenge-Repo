@@ -40,7 +40,8 @@ def generate_launch_description():
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
 
-    lifecycle_nodes = ['controller_server',
+    lifecycle_nodes = ['map_server',
+                       'controller_server',
                        'smoother_server',
                        'planner_server',
                        'behavior_server',
@@ -111,13 +112,13 @@ def generate_launch_description():
     load_nodes = GroupAction(
         condition=IfCondition(PythonExpression(['not ', use_composition])),
         actions=[
-            # Node(
-            #     package='nav2_map_server',
-            #     executable='map_server',
-            #     name='map_server',
-            #     output='screen',
-            #     parameters=[configured_params],
-            # ),
+            Node(
+                package='nav2_map_server',
+                executable='map_server',
+                name='map_server',
+                output='screen',
+                parameters=[configured_params],
+            ),
             Node(
                 package='nav2_controller',
                 executable='controller_server',
@@ -216,11 +217,11 @@ def generate_launch_description():
         target_container=container_name_full,
         composable_node_descriptions=[
 
-            # ComposableNode(
-            #     package='nav2_map_server',
-            #     plugin='nav2_map_server::MapServer',
-            #     name='map_server',
-            #     parameters=[configured_params]),
+            ComposableNode(
+                package='nav2_map_server',
+                plugin='nav2_map_server::MapServer',
+                name='map_server',
+                parameters=[configured_params]),
 
             ComposableNode(
                 package='nav2_controller',

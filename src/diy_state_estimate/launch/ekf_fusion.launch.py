@@ -124,9 +124,9 @@ def generate_launch_description():
         parameters=[
             ekf_config,
             {
-                'odom0': wheel_odom_topic,
+                # 'odom0': wheel_odom_topic,
                 'imu0': imu_ekf_topic,
-                'odom1': lidar_ekf_topic,
+                'odom0': lidar_ekf_topic,
             },
         ],
         remappings=[('odometry/filtered', output_topic)],

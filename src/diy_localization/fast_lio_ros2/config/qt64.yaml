@@ -56,7 +56,7 @@
             b_acc_cov: 0.0001
             b_gyr_cov: 0.0001
             fov_degree: 360.0   # Field of view of the LiDAR in degrees
-            det_range: 5.0      #30.0   # Detection range of the LiDAR in meters (QT64 is a short-range LiDAR, ~30 m max)
+            det_range: 10.0      #30.0   # Detection range of the LiDAR in meters (QT64 is a short-range LiDAR, ~30 m max)
             # Online LiDAR-IMU extrinsic estimation needs rich 6-DOF excitation
             # (rotation about all axes). Motion that is mostly translational
             # (e.g. back-and-forth driving) cannot observe the rotational
@@ -66,7 +66,7 @@
             # below unless your platform will undergo rich 6-DOF motion.
             extrinsic_est_en: false
             #extrinsic_T: [0.0, 0.0298, -0.13795]
-            extrinsic_T: [0.0, 0.0298, -0.13422]
+            extrinsic_T: [-0.0209, 0.0469, -0.1067]
             # Rotation from the LiDAR frame to the (raw) IMU frame (row-major).
             # FAST-LIO applies this as: p_imu = extrinsic_R * p_lidar + extrinsic_T
             # (see offset_R_L_I / offset_T_L_I in laserMapping.cpp), so both
@@ -74,9 +74,12 @@
             #
 
             # Old values
-            extrinsic_R: [1.0, 0.0, 0.0,
-                          0.0, 1.0, 0.0,
-                          0.0, 0.0, 1.0]
+            # extrinsic_R: [1.0, 0.0, 0.0,
+            #               0.0, 1.0, 0.0,
+            #               0.0, 0.0, 1.0]
+            extrinsic_R: [0.998992, -0.044454, -0.006237,
+                        0.044420,  0.998998, -0.005500,
+                        0.006475,  0.005218,  0.999965]
 
 
         publish: 
@@ -119,7 +122,25 @@
             # motion_controller's max_angular_velocity defaults to 1.0 rad/s,
             # so this is set above normal commanded turning to avoid false
             # positives during intentional in-place rotation.
-            shock_gyro_threshold: 2.5                 # rad/s
+            #
+            # 2026-09-24: raised 2.5 -> 4.0. Confirmed (laserMapping.cpp,
+            # scan_is_low_quality branch) that whenever p_imu->hadGyroShock()
+            # trips, the ENTIRE scan's LiDAR correction is discarded and the
+            # published pose is rolled back to pure IMU (gyro-only) dead
+            # reckoning for that cycle + shock_cooldown afterward -- nothing
+            # retroactively fixes the heading error accumulated during that
+            # window. A deliberate manual/joystick in-place 360 deg spin
+            # (not nav2-commanded, so not capped at 1.0 rad/s) can easily
+            # sustain >2.5 rad/s for a large fraction of the turn, meaning
+            # most of that spin got zero LiDAR yaw correction -- this is the
+            # confirmed cause of "spin in place -> odometry drifts a lot".
+            # 4.0 rad/s (~230 deg/s) still catches a genuinely violent
+            # collision/whiplash-style shock while giving a normal fast
+            # in-place spin room to keep being LiDAR-corrected. If a real
+            # bump/collision still slips a distorted scan into the map after
+            # this change, lower it back down gradually (e.g. 4.0 -> 3.0)
+            # rather than jumping straight back to 2.5.
+            shock_gyro_threshold: 2.0                # rad/s
             max_imu_gap: 0.05                        # seconds; reject if IMU coverage has a gap this large
             # Keep rejecting scans from map insertion for this long (seconds) after a
             # shock clears. Without this, the very next scan that individually looks

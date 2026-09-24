@@ -1,4 +1,6 @@
 #include "simple_pgo.h"
+#include <rclcpp/rclcpp.hpp>
+#include <limits>
 
 SimplePGO::SimplePGO(const Config &config) : m_config(config)
 {
@@ -143,8 +145,26 @@ void SimplePGO::searchForLoopPairs()
     last_pose_pt.y = last_item.t_global(1);
     last_pose_pt.z = last_item.t_global(2);
 
+    // Exclude recent keyframes from the radius search itself (mirrors
+    // m_sc_manager's own num_exclude_recent for the ScanContext fallback
+    // below). Without this, consecutive keyframes (only ~key_pose_delta_trans
+    // apart, e.g. 0.5m) are ALWAYS within loop_search_radius (e.g. 1.0m) of
+    // each other during ordinary continuous motion -- confirmed live: every
+    // single cycle picked candidate=cur_idx-1 (or another keyframe just a
+    // few steps back), which the travelled-path-length gate below then
+    // (correctly) rejects every time. The real bug this caused: since that
+    // trivial recent neighbor always satisfies "found a candidate"
+    // (loop_idx != -1), the ScanContext fallback -- specifically built for
+    // "revisits the geometric radius search misses due to accumulated drift"
+    // -- was gated behind `if (loop_idx == -1)` and so almost NEVER actually
+    // ran, even after a genuine drift-affected revisit. Now only keyframes
+    // old enough to plausibly be a real revisit are eligible for the radius
+    // search at all; ScanContext gets a real chance to fire otherwise.
+    const bool have_old_keyframe = cur_idx > static_cast<size_t>(m_config.num_exclude_recent);
+    const size_t max_idx_for_radius = have_old_keyframe ? (cur_idx - static_cast<size_t>(m_config.num_exclude_recent)) : 0;
+
     pcl::PointCloud<pcl::PointXYZ>::Ptr key_poses_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    for (size_t i = 0; i < m_key_poses.size() - 1; i++)
+    for (size_t i = 0; have_old_keyframe && i < max_idx_for_radius; i++)
     {
         pcl::PointXYZ pt;
         pt.x = m_key_poses[i].t_global(0);
@@ -152,54 +172,86 @@ void SimplePGO::searchForLoopPairs()
         pt.z = m_key_poses[i].t_global(2);
         key_poses_cloud->push_back(pt);
     }
-    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-    kdtree.setInputCloud(key_poses_cloud);
-    std::vector<int> ids;
-    std::vector<float> sqdists;
-    kdtree.radiusSearch(last_pose_pt, m_config.loop_search_radius, ids, sqdists);
-
-    // Candidate SELECTION here only needs to pick one of the spatially-nearby
-    // keyframes the radius search returns; whether it's actually a valid loop
-    // (not just a recently-visited spot) is decided uniformly below by the
-    // path-length check, not by picking a specific candidate here. Prefer the
-    // oldest (smallest index) as the most conservative choice.
     int loop_idx = -1;
-    for (size_t i = 0; i < ids.size(); i++)
+    if (!key_poses_cloud->empty())
     {
-        if (loop_idx == -1 || ids[i] < loop_idx)
-            loop_idx = ids[i];
+        pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+        kdtree.setInputCloud(key_poses_cloud);
+        std::vector<int> ids;
+        std::vector<float> sqdists;
+        kdtree.radiusSearch(last_pose_pt, m_config.loop_search_radius, ids, sqdists);
+
+        // Candidate SELECTION here only needs to pick one of the spatially-nearby
+        // keyframes the radius search returns; whether it's actually a valid loop
+        // (not just a recently-visited spot) is decided uniformly below by the
+        // path-length check, not by picking a specific candidate here. Prefer the
+        // oldest (smallest index) as the most conservative choice.
+        for (size_t i = 0; i < ids.size(); i++)
+        {
+            if (loop_idx == -1 || ids[i] < loop_idx)
+                loop_idx = ids[i];
+        }
     }
 
     // fallback: descriptor-based candidate (Scan Context), for revisits the geometric radius
     // search misses due to accumulated drift (no reliance on an accurate global position estimate)
-    Eigen::Matrix4f initial_guess = Eigen::Matrix4f::Identity();
-    if (loop_idx == -1)
+    std::vector<Eigen::Matrix4f> initial_guesses;
+    if (loop_idx != -1)
+    {
+        // Radius-search candidate: already within loop_search_radius of
+        // last_item in the CURRENT global estimate, so identity is a fair,
+        // single starting guess -- no sweep needed.
+        initial_guesses.push_back(Eigen::Matrix4f::Identity());
+    }
+    else
     {
         std::pair<int, float> sc_result = m_sc_manager.detectLoopClosureID();
         if (sc_result.first != -1)
         {
             loop_idx = sc_result.first;
-            const M3D r_guess = Eigen::AngleAxisd(
-                static_cast<double>(sc_result.second), Eigen::Vector3d::UnitZ()).toRotationMatrix();
-            initial_guess.block<3, 3>(0, 0) = r_guess.cast<float>();
-            // Unlike the radius-search branch above (whose candidate is, by
-            // construction, within loop_search_radius of last_item in the
-            // CURRENT global estimate, so identity is a fair starting guess),
-            // a Scan Context candidate exists precisely BECAUSE drift has
-            // pushed these two keyframes' current global positions apart --
-            // leaving the translation at identity/zero assumes source and
-            // target already overlap in world coordinates, which is normally
-            // false here. ICP then only finds whatever sparse correspondences
-            // happen to fall within setMaxCorrespondenceDistance of that
-            // wrong start and can still "converge" with a passable fitness
-            // score despite the two submaps not actually overlapping --
-            // exactly what shows up downstream as an accepted loop whose
-            // start/end scans visibly don't align. Seed translation from the
-            // current global position delta between the two keyframes
-            // (target - R*source, consistent with how align()'s guess is
-            // applied: p_target ~= R*p_source + t).
-            const V3D t_guess = m_key_poses[loop_idx].t_global - r_guess * last_item.t_global;
-            initial_guess.block<3, 1>(0, 3) = t_guess.cast<float>();
+            const double sc_yaw = static_cast<double>(sc_result.second);
+            // ScanContext's yaw estimate is a genuine point-cloud-shape-
+            // derived measurement (not dependent on our own possibly-drifted
+            // odometry), but it's coarse (column-shift-quantized) -- not
+            // always precise enough, on its own, to seed ICP inside its
+            // convergence basin when accumulated yaw drift is large.
+            // Confirmed live (2026-09-24): a run where ScanContext correctly
+            // and consistently proposed the true target across ~15
+            // consecutive keyframes never once produced an ICP fitness
+            // better than 0.13 (thresh 0.08) using only the raw single-yaw
+            // guess. Sweep a small fan of candidate yaws around the SC
+            // estimate instead and let ICP fitness pick the best one
+            // (standard coarse-to-fine loop-closure seeding, as used by
+            // LIO-SAM/SC-A-LOAM-style pipelines).
+            static constexpr double kYawSweepOffsetsDeg[] = {0.0, 15.0, -15.0, 30.0, -30.0, 45.0, -45.0};
+            for (double offset_deg : kYawSweepOffsetsDeg)
+            {
+                const double yaw = sc_yaw + offset_deg * M_PI / 180.0;
+                const M3D r_guess = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+                // Unlike the radius-search branch above, a Scan Context
+                // candidate exists precisely BECAUSE drift has pushed these
+                // two keyframes' current global positions apart -- leaving
+                // the translation at identity/zero assumes source and target
+                // already overlap in world coordinates, which is normally
+                // false here. Seed translation from the current global
+                // position delta between the two keyframes (target -
+                // R*source, consistent with how align()'s guess is applied:
+                // p_target ~= R*p_source + t).
+                const V3D t_guess = m_key_poses[loop_idx].t_global - r_guess * last_item.t_global;
+                Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
+                guess.block<3, 3>(0, 0) = r_guess.cast<float>();
+                guess.block<3, 1>(0, 3) = t_guess.cast<float>();
+                initial_guesses.push_back(guess);
+            }
+            RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
+                        "[loop debug] cur=%zu radius search empty, ScanContext proposed target=%d yaw_guess_deg=%.1f (sweeping %zu candidate yaws)",
+                        cur_idx, loop_idx, sc_yaw * 180.0 / M_PI, initial_guesses.size());
+        }
+        else
+        {
+            RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
+                        "[loop debug] cur=%zu no candidate at all: radius search empty AND ScanContext found no match",
+                        cur_idx);
         }
     }
 
@@ -219,7 +271,12 @@ void SimplePGO::searchForLoopPairs()
     {
         const double travelled = m_key_poses[cur_idx].path_length - m_key_poses[loop_idx].path_length;
         if (travelled < 3.0 * m_config.loop_search_radius)
+        {
+            RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
+                        "[loop debug] cur=%zu candidate=%d REJECTED: travelled %.2fm < required %.2fm (3x loop_search_radius)",
+                        cur_idx, loop_idx, travelled, 3.0 * m_config.loop_search_radius);
             loop_idx = -1;
+        }
     }
 
     if (loop_idx == -1)
@@ -239,18 +296,53 @@ void SimplePGO::searchForLoopPairs()
     constexpr int kLoopMinTargetPoints = 200;
     if (static_cast<int>(source_cloud->size()) < kLoopMinSourcePoints ||
         static_cast<int>(target_cloud->size()) < kLoopMinTargetPoints)
+    {
+        RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
+                    "[loop debug] cur=%zu candidate=%d REJECTED: submap too sparse (source=%zu need>=%d, target=%zu need>=%d)",
+                    cur_idx, loop_idx, source_cloud->size(), kLoopMinSourcePoints, target_cloud->size(), kLoopMinTargetPoints);
         return;
-
-    CloudType::Ptr align_cloud(new CloudType);
+    }
 
     m_icp.setInputSource(source_cloud);
     m_icp.setInputTarget(target_cloud);
-    m_icp.align(*align_cloud, initial_guess);
 
-    if (!m_icp.hasConverged() || m_icp.getFitnessScore() > m_config.loop_score_tresh)
+    // Try every seeded hypothesis (a single identity guess for a radius-search
+    // candidate, or the yaw-sweep fan for a ScanContext candidate) and keep
+    // whichever converges to the best fitness. NOTE: deliberately NOT gating
+    // on m_icp.hasConverged() here. For fast_gicp (and PCL ICP in general),
+    // hasConverged() only reflects whether the per-iteration transformation
+    // delta shrank below transformationEpsilon within maximumIterations -- it
+    // is NOT a fit-quality signal and can actively disagree with
+    // getFitnessScore() (confirmed live: a candidate with fitness=0.0027,
+    // ~30x better than the 0.08 threshold, was rejected solely because
+    // hasConverged()==false). getFitnessScore() alone is the correct
+    // acceptance gate; a bad/wrong-basin match will show up there (and in
+    // the correction-vs-guess gate below), not in hasConverged().
+    double best_fitness = std::numeric_limits<double>::infinity();
+    Eigen::Matrix4f initial_guess = Eigen::Matrix4f::Identity();
+    M4F loop_transform = M4F::Identity();
+    bool have_result = false;
+    for (const Eigen::Matrix4f &guess : initial_guesses)
+    {
+        CloudType::Ptr align_cloud(new CloudType);
+        m_icp.align(*align_cloud, guess);
+        const double fitness = m_icp.getFitnessScore();
+        if (fitness < best_fitness)
+        {
+            best_fitness = fitness;
+            initial_guess = guess;
+            loop_transform = m_icp.getFinalTransformation();
+            have_result = true;
+        }
+    }
+
+    if (!have_result || best_fitness > m_config.loop_score_tresh)
+    {
+        RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
+                    "[loop debug] cur=%zu candidate=%d REJECTED: best of %zu seed(s) ICP fitness=%.4f (thresh=%.4f)",
+                    cur_idx, loop_idx, initial_guesses.size(), best_fitness, m_config.loop_score_tresh);
         return;
-
-    M4F loop_transform = m_icp.getFinalTransformation();
+    }
 
     // Real gap, not a parameter: fitness score alone cannot detect ICP
     // converging to a well-fitting but WRONG local optimum, which is exactly
@@ -273,7 +365,13 @@ void SimplePGO::searchForLoopPairs()
     const double correction_trans = (icp_translation - guess_translation).norm();
     constexpr double kMaxIcpCorrectionFromGuessRad = 45.0 * M_PI / 180.0;
     if (correction_rot_rad > kMaxIcpCorrectionFromGuessRad || correction_trans > m_config.loop_search_radius)
+    {
+        RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
+                    "[loop debug] cur=%zu candidate=%d REJECTED: ICP correction vs guess too large -- rot=%.1fdeg (max=%.1fdeg) trans=%.2fm (max=%.2fm)",
+                    cur_idx, loop_idx, correction_rot_rad * 180.0 / M_PI, kMaxIcpCorrectionFromGuessRad * 180.0 / M_PI,
+                    correction_trans, m_config.loop_search_radius);
         return;
+    }
 
     // Compute the correction this candidate implies BEFORE gating, so the
     // consistency check below can compare it to the previous candidate's
@@ -320,7 +418,13 @@ void SimplePGO::searchForLoopPairs()
     m_pending_loop_r_offset = r_offset;
     m_pending_loop_t_offset = t_offset;
     if (m_pending_loop_count < m_config.loop_consistency_count)
+    {
+        RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
+                    "[loop debug] cur=%zu candidate=%d PASSED all gates but consistency count=%d/%d (%s) -- needs consecutive matching keyframes",
+                    cur_idx, loop_idx, m_pending_loop_count, m_config.loop_consistency_count,
+                    candidate_is_consistent ? "consistent with previous" : "reset, first hit or disagreed with previous");
         return;
+    }
     m_pending_loop_count = 0;
 
     LoopPair one_pair;
@@ -331,11 +435,18 @@ void SimplePGO::searchForLoopPairs()
     one_pair.t_offset = t_offset;
     m_cache_pairs.push_back(one_pair);
     m_history_pairs.emplace_back(one_pair.target_id, one_pair.source_id);
+    RCLCPP_WARN(rclcpp::get_logger("loop_pgo"),
+                "[Loop found] source=%d target=%d fitness=%.4f", static_cast<int>(cur_idx), loop_idx, one_pair.score);
 }
 
 void SimplePGO::smoothAndUpdate()
 {
     bool has_loop = !m_cache_pairs.empty();
+    // Keep a copy of the pairs being added THIS cycle (m_cache_pairs gets
+    // cleared below before ISAM2 solves) so we can check, after optimization,
+    // how well each one actually settled in -- see the post-optimization
+    // residual check at the end of this function.
+    std::vector<LoopPair> just_added_pairs = m_cache_pairs;
     // 添加回环因子
     if (has_loop)
     {
@@ -385,4 +496,56 @@ void SimplePGO::smoothAndUpdate()
     const KeyPoseWithCloud &last_item = m_key_poses.back();
     m_r_offset = last_item.r_global * last_item.r_local.transpose();
     m_t_offset = last_item.t_global - m_r_offset * last_item.t_local;
+
+    // Post-optimization residual check on any loop factor(s) just added this
+    // cycle -- mirrors RTAB-Map's `RGBD/OptimizeMaxError` concept (see its
+    // "Robust Graph Optimization" docs): rather than only gating BEFORE a
+    // loop edge is added (fitness/correction/consistency, all in
+    // searchForLoopPairs()), also check AFTER the solver has fully
+    // incorporated it how much it actually had to bend the graph vs. what
+    // the edge measured. A large post-optimization residual relative to the
+    // edge's own assigned noise means the rest of the graph disagreed with
+    // this edge strongly -- exactly the signature of "loop found" but the
+    // seam still visibly doesn't align (this package's own ICP-fitness-only
+    // pre-check, like RTAB-Map's own ICP discussion notes, cannot by itself
+    // detect a well-fitting-but-still-slightly-wrong local optimum). This is
+    // diagnostic/logging only for now -- it does NOT remove or re-solve
+    // without the edge (that would need re-running ISAM2 update with the
+    // factor excluded, a bigger change); it exists so the actual seam
+    // quality is directly measurable instead of inferred from ICP fitness
+    // alone.
+    for (const LoopPair &pair : just_added_pairs)
+    {
+        const M3D actual_r_offset = m_key_poses[pair.target_id].r_global.transpose() * m_key_poses[pair.source_id].r_global;
+        const V3D actual_t_offset = m_key_poses[pair.target_id].r_global.transpose() *
+                                     (m_key_poses[pair.source_id].t_global - m_key_poses[pair.target_id].t_global);
+        const double residual_rot_rad = Eigen::Quaterniond(pair.r_offset.transpose() * actual_r_offset)
+                                             .angularDistance(Eigen::Quaterniond::Identity());
+        const double residual_trans = (actual_t_offset - pair.t_offset).norm();
+        // Same noise model construction as the BetweenFactor above:
+        // Variances(pair.score) applied uniformly across rot+trans -- so
+        // sigma = sqrt(pair.score) is the one shared "expected error" scale
+        // to compare both residuals against. RTAB-Map's own default
+        // OptimizeMaxError ratio threshold is 3 (3-sigma); reused here.
+        const double sigma = std::sqrt(std::max(pair.score, 1e-4));
+        const double ratio = std::max(residual_rot_rad, residual_trans) / sigma;
+        constexpr double kOptimizeMaxErrorRatio = 3.0;
+        if (ratio > kOptimizeMaxErrorRatio)
+        {
+            RCLCPP_WARN(rclcpp::get_logger("loop_pgo"),
+                        "[loop debug] loop edge source=%d target=%d has a LARGE post-optimization residual "
+                        "(rot=%.2fdeg trans=%.3fm, ratio=%.1fx expected sigma=%.3f) -- the rest of the graph "
+                        "disagrees with this edge; seam may still look misaligned even though the loop was accepted",
+                        static_cast<int>(pair.source_id), static_cast<int>(pair.target_id),
+                        residual_rot_rad * 180.0 / M_PI, residual_trans, ratio, sigma);
+        }
+        else
+        {
+            RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
+                        "[loop debug] loop edge source=%d target=%d settled in cleanly "
+                        "(rot=%.2fdeg trans=%.3fm, ratio=%.1fx expected sigma=%.3f)",
+                        static_cast<int>(pair.source_id), static_cast<int>(pair.target_id),
+                        residual_rot_rad * 180.0 / M_PI, residual_trans, ratio, sigma);
+        }
+    }
 }

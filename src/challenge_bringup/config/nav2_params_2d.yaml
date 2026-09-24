@@ -1,3 +1,44 @@
+# amcl:
+  # ros__parameters:
+    # use_sim_time: True
+    # alpha1: 0.2
+    # alpha2: 0.2
+    # alpha3: 0.2
+    # alpha4: 0.2
+    # alpha5: 0.2
+    # base_frame_id: "base_footprint"
+    # beam_skip_distance: 0.5
+    # beam_skip_error_threshold: 0.9
+    # beam_skip_threshold: 0.3
+    # do_beamskip: false
+    # global_frame_id: "map"
+    # lambda_short: 0.1
+    # laser_likelihood_max_dist: 2.0
+    # laser_max_range: 100.0
+    # laser_min_range: -1.0
+    # laser_model_type: "likelihood_field"
+    # max_beams: 60
+    # max_particles: 2000
+    # min_particles: 500
+    # odom_frame_id: "odom"
+    # pf_err: 0.05
+    # pf_z: 0.99
+    # recovery_alpha_fast: 0.0
+    # recovery_alpha_slow: 0.0
+    # resample_interval: 1
+    # robot_model_type: "nav2_amcl::DifferentialMotionModel"
+    # save_pose_rate: 0.5
+    # sigma_hit: 0.2
+    # tf_broadcast: true
+    # transform_tolerance: 1.0
+    # update_min_a: 0.2
+    # update_min_d: 0.25
+    # z_hit: 0.5
+    # z_max: 0.05
+    # z_rand: 0.5
+    # z_short: 0.05
+    # scan_topic: scan
+
 bt_navigator:
   ros__parameters:
     use_sim_time: False
@@ -102,9 +143,9 @@ controller_server:
       debug_trajectory_details: True
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.3
+      max_vel_x: 0.5
       max_vel_y: 0.0
-      max_vel_theta: 0.5
+      max_vel_theta: 2.0
       min_speed_xy: 0.0
       max_speed_xy: 0.26
       min_speed_theta: 0.0
@@ -122,7 +163,7 @@ controller_server:
       sim_time: 1.7
       linear_granularity: 0.05
       angular_granularity: 0.025
-      transform_tolerance: 2.0
+      transform_tolerance: 0.2
       xy_goal_tolerance: 0.25
       trans_stopped_velocity: 0.25
       short_circuit_trajectory_evaluation: True
@@ -148,93 +189,115 @@ local_costmap:
       robot_base_frame: base_link
       use_sim_time: False
       rolling_window: true
-      width: 10
-      height: 10
+      width: 4.0
+      height: 4.0
       resolution: 0.05
-      #robot_radius: 0.22
-      footprint: "[[0.1143, 0.1524], [0.3175, -0.1524], [-0.3175, -0.1524], [0.1143, -0.1524]]"
-      plugins: ["stvl_layer", "inflation_layer"]
-      stvl_layer:
-        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
+
+      # Exact physical offset footprint based on 17" x 12" dimensions
+      # with base_link at the drive joint center (4.5" from front, 12.5" from rear)
+      footprint: "[[-0.3175, -0.1524], [-0.3175, 0.1524], [0.1143, 0.1524], [0.1143, -0.1524]]"
+
+      # Core Pipeline Layers (Excluding the standard 2D ObstacleLayer)
+      plugins: ["voxel_layer", "inflation_layer"]
+
+      # 3D Voxel Layer Configuration
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: true
-        voxel_decay: 1.5           # Seconds before unobserved obstacles expire
-        decay_model: 0             # Linear decay
-        voxel_size: 0.05           # 5 cm voxel resolution
-        publish_voxel_map: true
-        track_unknown_space: true
+        publish_voxel_grid: true
+        origin_z: 0.0
+        z_resolution: 0.05
+        z_voxels: 16
         max_obstacle_height: 2.0
-        min_obstacle_height: 0.1
-        observation_sources: pointcloud
-        pointcloud:
-          data_type: PointCloud2
-          topic: /cloud_registered_body  # Must use ground-filtered cloud!
+        mark_threshold: 0
+        unknown_threshold: 15
+        combination_method: 1
+        
+        # Dual observation pipelines separating marking and clearing for the same topic
+        observation_sources: cloud_marking cloud_clearing
+
+        # Pipeline 1: Only injects obstacles into the map
+        cloud_marking:
+          data_type: "PointCloud2"
+          topic: /cloud_registered_body
           marking: true
+          clearing: false
+          min_obstacle_height: 0.1  # Set slightly above ground to filter out floor plane
+          max_obstacle_height: 2.0
+          obstacle_max_range: 3.0
+          obstacle_min_range: 0.0
+
+        # Pipeline 2: Only raytraces to clear out transient/moved obstacles
+        cloud_clearing:
+          data_type: "PointCloud2"
+          topic: /cloud_registered_body
+          marking: false
           clearing: true
-          min_obstacle_height: 0.15      # Height above ramp surface
-          max_obstacle_height: 1.8
-          vertical_fov_angle: 0.78       # Sensor FOV in radians
-          horizontal_fov_angle: 6.28
-          decay_acceleration: 1.0
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          raytrace_max_range: 3.5   # Keep slightly larger than obstacle range for thorough clearing
+          raytrace_min_range: 0.0
+
+      # Inflation Layer Configuration
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
         cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        inflation_radius: 0.55     # Safety expansion padding beyond the footprint boundary
 
 global_costmap:
-  global_costmap:
-    ros__parameters:
-      always_send_full_costmap: false
-      update_frequency: 1.0
-      publish_frequency: 1.0
-      global_frame: map
-      robot_base_frame: base_link
-      use_sim_time: False
-      #robot_radius: 0.22
-      footprint: "[[0.1143, 0.1524], [0.3175, -0.1524], [-0.3175, -0.1524], [0.1143, -0.1524]]"
-      resolution: 0.05
-      track_unknown_space: true
-      rolling_window: true
-      # Layer setup: Static 2D Map + STVL Voxel Clearing/Marking + Inflation Layer
-      plugins: ["static_layer", "stvl_layer", "inflation_layer"]
+  ros__parameters:
+    update_frequency: 1.0
+    publish_frequency: 1.0
+    global_frame: map
+    robot_base_frame: base_link
+    use_sim_time: False
+    robot_radius: 0.22  # Adjust to your robot's size
+    resolution: 0.05
+    plugins: ["static_layer", "voxel_layer", "inflation_layer"]
+    
+    static_layer:
+      plugin: "nav2_costmap_2d::StaticLayer"
+      map_subscribe_transient_local: True
+      enabled: True
 
-      # 1. Static Layer: Loads the projected 2D map from map_server
-      static_layer:
-       plugin: "nav2_costmap_2d::StaticLayer"
-       map_subscribe_transient_local: True
-       enabled: true
-       subscribe_to_updates: true
+    voxel_layer:
+      plugin: "nav2_costmap_2d::VoxelLayer"
+      enabled: True
+      publish_voxel_grid: True
+      origin_z: 0.0
+      z_resolution: 0.05
+      z_voxels: 16
+      max_obstacle_height: 2.0
+      unknown_threshold: 15
+      mark_threshold: 0
+      # Define two distinct observation sources for the same topic
+      observation_sources: pc_marking pc_clearing
 
-      # 2. STVL Layer: Dynamically clears/marks 3D obstacles (e.g. temporary obstacles on ramps)
-      stvl_layer:
-        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
-        enabled: true
-        voxel_decay: -1.0             # Seconds before transient obstacles disappear
-        decay_model: 0               # Linear decay
-        voxel_size: 0.05
-        publish_voxel_map: true
-        track_unknown_space: true
-        max_obstacle_height: 2.0
+      pc_marking:
+        topic: /cloud_registered_body
+        data_type: "PointCloud2"
+        marking: True
+        clearing: False
         min_obstacle_height: 0.1
-        observation_sources: pointcloud
-        pointcloud:
-          data_type: PointCloud2
-          topic: /map_localizer/map_cloud  # CRITICAL: Always use ground-filtered cloud!
-          marking: true
-          clearing: true
-          min_obstacle_height: 0.15      # Minimum height above ramp surface to treat as obstacle
-          max_obstacle_height: 1.8
-          vertical_fov_angle: 0.78
-          horizontal_fov_angle: 6.28
-          decay_acceleration: 1.0
-          model_type: 0                  # 0 = Raytrace/Voxel model
+        max_obstacle_height: 2.0
+        obstacle_max_range: 3.0
 
-      # # 3. Inflation Layer: Adds safety buffer around obstacles
-      inflation_layer:
-        plugin: "nav2_costmap_2d::InflationLayer"
-        enabled: true
-        cost_scaling_factor: 3.0    # Exponential decay rate (higher = steeper drop-off)
-        inflation_radius: 0.55      # Distance from obstacle to inflate cost (meters)
-   
+      pc_clearing:
+        topic: /cloud_registered_body
+        data_type: "PointCloud2"
+        marking: False
+        clearing: True
+        min_obstacle_height: 0.0
+        max_obstacle_height: 2.0
+        raytrace_max_range: 3.5  # Slightly larger than obstacle_max_range to clear far away noise
+
+    inflation_layer:
+      plugin: "nav2_costmap_2d::InflationLayer"
+      enabled: True
+      inflation_radius: 0.55
+      cost_scaling_factor: 3.0
+
 map_server:
   ros__parameters:
     use_sim_time: False
@@ -289,12 +352,12 @@ behavior_server:
       plugin: "nav2_behaviors/AssistedTeleop"
     global_frame: odom
     robot_base_frame: base_link
-    transform_tolerance: 2.0
+    transform_tolerance: 0.1
+    use_sim_time: False
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
     min_rotational_vel: 0.4
     rotational_acc_lim: 3.2
-    use_sim_time: False
 
 robot_state_publisher:
   ros__parameters:

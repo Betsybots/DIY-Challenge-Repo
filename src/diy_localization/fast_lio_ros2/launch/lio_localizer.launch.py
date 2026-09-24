@@ -24,6 +24,8 @@ def generate_launch_description():
     rviz_use = LaunchConfiguration('rviz')
     rviz_cfg = LaunchConfiguration('rviz_cfg')
     pcd_save_en = LaunchConfiguration('pcd_save_en')
+    output_topic = LaunchConfiguration('output_topic')
+    publish_tf = LaunchConfiguration('publish_tf')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time', default_value='false',
@@ -41,6 +43,14 @@ def generate_launch_description():
         'pcd_save_en', default_value='false',
         description='Enable PCD saving for the FAST-LIO map'
     )
+    declare_output_topic_cmd = DeclareLaunchArgument(
+        'output_topic', default_value='/Odometry',
+        description='Output topic for Odometry'
+    )
+    declare_publish_tf_cmd = DeclareLaunchArgument(
+        'publish_tf', default_value='true',
+        description='Enable publishing TF for the FAST-LIO map'
+    )
 
     fast_lio_node = Node(
         package='fast_lio_ros2',
@@ -48,11 +58,13 @@ def generate_launch_description():
         parameters=[
             os.path.join(default_config_path, 'qt64.yaml'),
             {'use_sim_time': use_sim_time},
-            {'pcd_save.pcd_save_en': pcd_save_en}
+            {'pcd_save.pcd_save_en': pcd_save_en},
+            {'common.publish_tf': publish_tf}
         ],
         output='screen',
-        # remappings=[('/Odometry', '/odom')]
+        remappings=[('/Odometry', output_topic)]
     )
+
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
@@ -65,6 +77,8 @@ def generate_launch_description():
     ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_rviz_config_path_cmd)
     ld.add_action(declare_pcd_save_en_cmd)
+    ld.add_action(declare_publish_tf_cmd)
+    ld.add_action(declare_output_topic_cmd)
     ld.add_action(fast_lio_node)
     # ld.add_action(rviz_node)
 

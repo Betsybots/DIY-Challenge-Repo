@@ -72,6 +72,14 @@ public:
             m_node_config.imu_topic, rclcpp::SensorDataQoS(),
             std::bind(&PGONode::imuCB, this, std::placeholders::_1));
         m_loop_marker_pub = this->create_publisher<visualization_msgs::msg::MarkerArray>("/loop_pgo/loop_markers", 10000);
+        // Live view of the ACTUAL, currently-optimized map (every keyframe's
+        // stored body cloud re-transformed by its latest post-ISAM2 global
+        // pose) -- republished whenever a loop closure updates the graph, so
+        // the real alignment at the seam can be watched directly in RViz
+        // instead of inferred from ICP fitness or requiring a save_maps call.
+        // transient_local so a late-subscribing RViz still gets the last one.
+        m_corrected_map_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+            "/loop_pgo/corrected_map", rclcpp::QoS(1).reliable().transient_local());
         m_tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
         m_sync = std::make_shared<message_filters::Synchronizer<message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, nav_msgs::msg::Odometry>>>(message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, nav_msgs::msg::Odometry>(10), m_cloud_sub, m_odom_sub);
         m_sync->setAgePenalty(0.1);
@@ -244,6 +252,32 @@ public:
         m_loop_marker_pub->publish(marker_array);
     }
 
+    // Rebuilds and republishes the FULL map from every keyframe's stored
+    // body_cloud, transformed by its CURRENT (post-optimization) global
+    // pose. Reuses getSubMap() with a half_range covering the whole
+    // trajectory -- no separate "full map" logic needed in SimplePGO. Only
+    // called right after a loop closure actually updated the graph (see
+    // timerCB()), not every keyframe, since it's O(all points so far) and
+    // only meaningful to re-publish when something changed.
+    void publishCorrectedMap(builtin_interfaces::msg::Time &time)
+    {
+        if (m_corrected_map_pub->get_subscription_count() == 0)
+            return;
+        if (m_pgo->keyPoses().empty())
+            return;
+
+        CloudType::Ptr merged = m_pgo->getSubMap(
+            static_cast<int>(m_pgo->keyPoses().size()) - 1,
+            static_cast<int>(m_pgo->keyPoses().size()),
+            m_pgo_config.submap_resolution);
+
+        sensor_msgs::msg::PointCloud2 cloud_msg;
+        pcl::toROSMsg(*merged, cloud_msg);
+        cloud_msg.header.frame_id = m_node_config.map_frame;
+        cloud_msg.header.stamp = time;
+        m_corrected_map_pub->publish(cloud_msg);
+    }
+
     // Blends m_state.last_offset_r/t toward the current m_pgo->offsetR()/
     // offsetT() (the raw, possibly just-jumped optimized value) instead of
     // snapping to it in one TF tick. Same exponential-smoothing math as
@@ -315,6 +349,11 @@ public:
 
         m_pgo->searchForLoopPairs();
 
+        // Capture BEFORE smoothAndUpdate() -- it consumes/clears the
+        // pending pairs as part of adding them to the graph, so hasLoop()
+        // would always read false if checked afterward.
+        const bool had_loop_this_cycle = m_pgo->hasLoop();
+
         m_pgo->smoothAndUpdate();
 
         advanceSmoothedOffset();
@@ -322,6 +361,9 @@ public:
         sendBroadCastTF(cur_time);
 
         publishLoopMarkers(cur_time);
+
+        if (had_loop_this_cycle)
+            publishCorrectedMap(cur_time);
     }
 
     void saveMapsCB(const std::shared_ptr<slam_interfaces::srv::SaveMaps::Request> request, std::shared_ptr<slam_interfaces::srv::SaveMaps::Response> response)
@@ -395,6 +437,7 @@ private:
     std::shared_ptr<SimplePGO> m_pgo;
     rclcpp::TimerBase::SharedPtr m_timer;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr m_loop_marker_pub;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_corrected_map_pub;
     rclcpp::Service<slam_interfaces::srv::SaveMaps>::SharedPtr m_save_map_srv;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr m_imu_sub;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> m_cloud_sub;

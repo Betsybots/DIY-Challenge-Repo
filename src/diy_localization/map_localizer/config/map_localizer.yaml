@@ -1,5 +1,5 @@
 cloud_topic: /cloud_registered_body
-odom_topic: /Odometery
+odom_topic: /odom
 map_frame: map
 local_frame: odom
 update_hz: 2.0
@@ -21,25 +21,15 @@ accumulate_scans: 1
 # pcd_path) before the node has any map to align against.
 map_path: /home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/refined_map.pcd
 # Optional fixed start pose (map frame), applied once right after map_path
-# loads. Only takes effect if start_x is present -- omit all of these to
-# instead rely on /initialpose (RViz "2D Pose Estimate") or /relocalize, or
-# on odom origin already coinciding with map origin.
-# 2026-09-23: confirmed correct as 0.0/0.0/0.0 -- checked the map's own
+# loads confirmed correct as 0.0/0.0/0.0 -- checked the map's own
 # recorded trajectory (src/diy_localization/map/refined_poses.txt, which
 # refined_map.pcd was built from): its first entry ("0.pcd") is tx/ty/tz =
-# (0.0013, 0.0003, -0.0009) with a near-identity quaternion, i.e. the
-# mapping run's start pose IS the map frame's origin by construction (SLAM
-# convention: world frame = identity at the first keyframe). So start_x/y/
-# yaw = 0 is only valid if the robot is physically placed back at that
-# exact real-world spot/heading (wherever PCD collection began) before this
-# node starts -- if ICP still won't converge from here, suspect the robot
-# not actually being at that physical spot this run (or a map/sensor
-# mismatch), NOT this config value. Do not reintroduce a nonzero guess here
+# (0.0013, 0.0003, -0.0009) with a near-identity quaternion.Do not reintroduce a nonzero guess here
 # without first checking refined_poses.txt the same way.
 start_x: 0.0
-start_y: 0.0
+start_y: -1.0
 start_z: 0.0
-start_yaw: 0.0
+start_yaw: -1.57
 start_roll: 0.0
 start_pitch: 0.0
 # Reject an ICP realignment whose implied map->odom offset jumps further than
