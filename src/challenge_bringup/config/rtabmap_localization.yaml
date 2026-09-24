@@ -22,7 +22,15 @@
 # switching over, needs to be found in RTAB-Map's own tf_delay/wait_for_transform
 # parameters and verified against the parameter reference
 # (introlab.github.io/rtabmap/api/latest/parameters.html) -- not guessed here.
-rtabmap:
+# NOTE: top-level key must be /** (not a bare "rtabmap:"), because the node
+# is launched with BOTH name='rtabmap' AND namespace='rtabmap', making its
+# fully-qualified name /rtabmap/rtabmap. A bare "rtabmap:" key only matches a
+# node fully-qualified as /rtabmap, so it silently matched nothing and every
+# parameter below was falling back to RTAB-Map's built-in defaults
+# (subscribe_rgb/subscribe_depth true, subscribe_scan_cloud false) -- exactly
+# the RGB-D-camera-topic subscription symptom seen live. /** matches any node
+# regardless of name/namespace.
+/**:
   ros__parameters:
     frame_id: base_link
     odom_frame_id: odom
