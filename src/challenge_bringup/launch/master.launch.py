@@ -109,58 +109,58 @@ def generate_launch_description():
             # NOT remapped — the EKF and map_localizer consume it directly.
             GroupAction(
                 actions=[
-                    SetRemap(src='/tf', dst='/tf_fastlio_unused'),
-                    IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                            os.path.join(
-                                get_package_share_directory('fast_lio_ros2'),
-                                'launch',
-                                'lio_localizer.launch.py',
-                            )
-                        ),
-                    ),
+                    # SetRemap(src='/tf', dst='/tf_fastlio_unused'),
+                    # IncludeLaunchDescription(
+                    #     PythonLaunchDescriptionSource(
+                    #         os.path.join(
+                    #             get_package_share_directory('fast_lio_ros2'),
+                    #             'launch',
+                    #             'lio_localizer.launch.py',
+                    #         )
+                    #     ),
+                    # ),
                 ]
             ),
             # EKF: /wheel_odom (vx, vyaw) + /imu/data (vyaw, down-weighted)
             # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_footprint TF.
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(
+                        get_package_share_directory('diy_state_estimate'),
+                        'launch',
+                        'ekf_fusion.launch.py',
+                    )
+                ),
+                launch_arguments={
+                    'wheel_odom_topic': '/wheel_odom',
+                    'imu_topic': '/imu/data',
+                    'lidar_odom_topic': '/Odometry',
+                    'output_topic': '/odom',
+                }.items(),
+            ),
             # IncludeLaunchDescription(
             #     PythonLaunchDescriptionSource(
             #         os.path.join(
-            #             get_package_share_directory('diy_state_estimate'),
+            #             get_package_share_directory('map_localizer'),
             #             'launch',
-            #             'ekf_fusion.launch.py',
+            #             'map_localizer_launch.py',
             #         )
             #     ),
+            #     condition=IfCondition(autonomous),
             #     launch_arguments={
-            #         'wheel_odom_topic': '/wheel_odom',
-            #         'imu_topic': '/imu/data',
-            #         'lidar_odom_topic': '/Odometry',
-            #         'output_topic': '/odom_ekf',
+            #         'use_rviz': 'false',
             #     }.items(),
             # ),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(
-                        get_package_share_directory('map_localizer'),
-                        'launch',
-                        'map_localizer_launch.py',
-                    )
-                ),
-                condition=IfCondition(autonomous),
-                launch_arguments={
-                    'use_rviz': 'false',
-                }.items(),
-            ),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(
-                        get_package_share_directory('loop_pgo'),
-                        'launch',
-                        'loop_pgo_launch.py',
-                    )
-                ),
-                condition=UnlessCondition(autonomous),
-            ),
+            # IncludeLaunchDescription(
+            #     PythonLaunchDescriptionSource(
+            #         os.path.join(
+            #             get_package_share_directory('loop_pgo'),
+            #             'launch',
+            #             'loop_pgo_launch.py',
+            #         )
+            #     ),
+            #     condition=UnlessCondition(autonomous),
+            # ),
         ]
     )
 
@@ -219,9 +219,9 @@ def generate_launch_description():
     return LaunchDescription([
         declare_startup_delay,
         declare_autonomous,
-        declare_use_rviz,
-        robot_description_launch,
-        hesai_launch,
+        # declare_use_rviz,
+        # robot_description_launch,
+        # hesai_launch,
         delayed_fast_lio,
         # delayed_hba_map,
         #delayed_nav2,

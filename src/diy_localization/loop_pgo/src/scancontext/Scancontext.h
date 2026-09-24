@@ -66,6 +66,8 @@ public:
     // User-side API
     void makeAndSaveScancontextAndKeys( pcl::PointCloud<SCPointType> & _scan_down );
     std::pair<int, float> detectLoopClosureID( void ); // int: nearest node index, float: relative yaw  
+    void setNumExcludeRecent( int _num ) { NUM_EXCLUDE_RECENT = _num; }
+    void setSCDistThres( double _thres ) { SC_DIST_THRES = _thres; }
 
 public:
     // hyper parameters ()
@@ -79,12 +81,23 @@ public:
     const double PC_UNIT_RINGGAP = PC_MAX_RADIUS / double(PC_NUM_RING);
 
     // tree
-    const int    NUM_EXCLUDE_RECENT = 50; // simply just keyframe gap, but node position distance-based exclusion is ok. 
+    // Was `const` (hardcoded 50) -- for a short test loop (fewer than
+    // ~NUM_EXCLUDE_RECENT keyframes / key_pose_delta_trans meters of travel
+    // between the two visits) this fallback never even attempts a match, no
+    // matter how good the actual scan overlap is. Made configurable via
+    // setNumExcludeRecent() so pgo_node can wire it to a YAML parameter.
+    int          NUM_EXCLUDE_RECENT = 50; // simply just keyframe gap, but node position distance-based exclusion is ok. 
     const int    NUM_CANDIDATES_FROM_TREE = 10; // 10 is enough. (refer the IROS 18 paper)
 
     // loop thres
     const double SEARCH_RATIO = 0.1; // for fast comparison, no Brute-force, but search 10 % is okay. // not was in the original conf paper, but improved ver.
-    const double SC_DIST_THRES = 0.13; // empirically 0.1-0.2 is fine (rare false-alarms) for 20x60 polar context (but for 0.15 <, DCS or ICP fit score check (e.g., in LeGO-LOAM) should be required for robustness)
+    // Was `const` (hardcoded 0.13) -- in a small/symmetric room (repetitive
+    // wall geometry at multiple physical poses), descriptor distance alone
+    // can read near-zero for two genuinely different locations (perceptual
+    // aliasing), producing "[Loop found]" against an early keyframe well
+    // before an actual revisit. Made configurable via setSCDistThres() so
+    // pgo_node can wire it to a YAML parameter and tighten it per-environment.
+    double       SC_DIST_THRES = 0.13; // empirically 0.1-0.2 is fine (rare false-alarms) for 20x60 polar context (but for 0.15 <, DCS or ICP fit score check (e.g., in LeGO-LOAM) should be required for robustness)
     // const double SC_DIST_THRES = 0.5; // 0.4-0.6 is good choice for using with robust kernel (e.g., Cauchy, DCS) + icp fitness threshold / if not, recommend 0.1-0.15
 
     // config 

@@ -62,6 +62,7 @@
 #include <so3_math.h>
 #include <rclcpp/rclcpp.hpp>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 #include "IMU_Processing.hpp"
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
@@ -99,6 +100,12 @@ bool   runtime_pos_log = false, pcd_save_en = false, time_sync_en = false, extri
 bool   reject_low_quality_scans = true;
 int    min_effective_features = 10;
 double max_mean_residual = 1.0;
+// Below this min/max rotation-Hessian eigenvalue ratio, a scan's point-to-
+// plane geometry is treated as not constraining that rotation axis at all
+// (LOAM/LIO-SAM style degeneracy handling -- see h_share_model()). Fixed,
+// not exposed as a runtime parameter: matches how LOAM/LIO-SAM hardcode
+// their own degeneracy eigenvalue thresholds rather than tuning them per site.
+constexpr double kDegenerateRotEigenRatioThreshold = 0.02;
 double shock_accel_deviation_threshold = 4.0;
 double shock_process_noise_scale = 25.0;
 double shock_gyro_threshold = 2.5;
@@ -884,6 +891,58 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         ekfom_data.h(i) = -norm_p.intensity;
     }
     solve_time += omp_get_wtime() - solve_start_;
+
+    // Point-to-plane geometry dominated by parallel/flat surfaces (small
+    // symmetric room, long corridor) only weakly constrains attitude --
+    // often yaw specifically -- yet without this check the EKF still applies
+    // a "full strength" correction along that weak direction from whatever
+    // few, easily-aliased residuals exist. That is a direct, code-level
+    // cause of the erratic/aliased yaw seen in symmetric spaces (confirmed
+    // by loop_pgo repeatedly detecting near-identical Scan Context matches
+    // against very different true poses in exactly such rooms).
+    //
+    // This is the standard LOAM/LIO-SAM degeneracy fix (Zhang & Singh, "On
+    // Degeneracy of Optimization-based State Estimation Problems", ICRA
+    // 2016; see also LIO-SAM's `isDegenerate`/`matP` handling in
+    // mapOptmization.cpp::LMOptimization()): eigendecompose the rotation
+    // block's JtJ, and for any eigenvalue far weaker than the strongest one,
+    // project its eigenvector out of every point's rotation-Jacobian row
+    // this scan (r_new = r * (I - v v^T)). The EKF gain along that direction
+    // then collapses to ~0, so gyro-only prediction governs it instead of
+    // noisy/ambiguous LiDAR geometry, until a later scan's geometry actually
+    // observes it.
+    {
+        Eigen::Block<Eigen::MatrixXd> h_rot_cols = ekfom_data.h_x.block(0, 3, effct_feat_num, 3);
+        const Eigen::Matrix3d JtJ_rot = h_rot_cols.transpose() * h_rot_cols;
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> rot_eig(JtJ_rot);
+        if (rot_eig.info() == Eigen::Success)
+        {
+            const Eigen::Vector3d eigenvalues = rot_eig.eigenvalues(); // ascending
+            const double min_eig = eigenvalues(0);
+            const double max_eig = eigenvalues(2);
+            if (max_eig > 1e-6 && min_eig / max_eig < kDegenerateRotEigenRatioThreshold)
+            {
+                const Eigen::Vector3d weak_axis_local = rot_eig.eigenvectors().col(0);
+                const Eigen::Vector3d weak_axis_world = s.rot.toRotationMatrix() * weak_axis_local;
+                const bool yaw_dominant = std::abs(weak_axis_world.z()) >
+                    std::hypot(weak_axis_world.x(), weak_axis_world.y());
+                RCLCPP_WARN_THROTTLE(
+                    rclcpp::get_logger("laserMapping"), *rclcpp::Clock::make_shared(), 2000,
+                    "Weakly-constrained attitude direction this scan (rot eigenvalue ratio=%.4f)%s -- "
+                    "geometry alone (e.g. a corridor / parallel flat walls) isn't fully observing "
+                    "orientation; nulling it so gyro integration (not LiDAR) governs %s between updates",
+                    min_eig / max_eig, yaw_dominant ? " and it looks YAW-dominant" : "",
+                    yaw_dominant ? "yaw" : "that axis");
+
+                // Row-vector projection: for each point's 1x3 rotation
+                // Jacobian row r, remove its component along the weak
+                // direction v: r_new = r - (r.v) v^T = r * (I - v v^T).
+                const Eigen::Matrix3d projector =
+                    Eigen::Matrix3d::Identity() - weak_axis_local * weak_axis_local.transpose();
+                h_rot_cols = h_rot_cols * projector;
+            }
+        }
+    }
 }
 
 class LaserMappingNode : public rclcpp::Node

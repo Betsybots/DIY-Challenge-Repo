@@ -1813,6 +1813,25 @@ public:
 
 			//K_x = K_ * h_x_;
 			Matrix<scalar_type, n, 1> dx_ = K_h + (K_x - Matrix<scalar_type, n, n>::Identity()) * dx_new; 
+			// check_safe_update() below existed in this toolkit but was never
+			// called on any code path (verified: only its own definition
+			// matches a repo-wide search) -- an implausible single-iteration
+			// correction (>20deg rotation or >1m translation) was applied
+			// unclamped. That is a known, reported upstream failure mode
+			// (hku-mars/FAST_LIO#441, "Odometry estimated in the wrong
+			// direction when there is very little translation but a large
+			// rotation"): h_share_model() only recomputes point-to-map
+			// correspondences when the PRIOR iteration converged (see
+			// `if (ekfom_data.converge)` in laserMapping.cpp's h_share_model);
+			// a too-large, unclamped dx_ here both fails that convergence
+			// check AND moves the linearization point somewhere the stale
+			// correspondences no longer support, so the next iteration keeps
+			// refining against geometry that no longer matches -- compounding
+			// away from the true pose instead of recovering, most visibly as
+			// yaw spinning the wrong way under fast rotation. Wiring in the
+			// existing clamp rejects that single bad step (falls back to the
+			// propagated/prior state for this iteration) instead of applying it.
+			dx_ = check_safe_update(dx_);
 			state x_before = x_;
 			x_.boxplus(dx_);
 			dyn_share.converge = true;
@@ -1990,8 +2009,15 @@ private:
             temp_vec.setZero();
             return temp_vec;
         }
-        double angular_dis = temp_vec.block( 0, 0, 3, 1 ).norm() * 57.3;
-        double pos_dis = temp_vec.block( 3, 0, 3, 1 ).norm();
+        // Tangent-vector layout follows state_ikfom's field order in
+        // use-ikfom.hpp: pos (idx 0-2) THEN rot (idx 3-5). Upstream's
+        // original block(0,0,3,1)/block(3,0,3,1) here read that backwards
+        // (labeling the position block "angular_dis" *57.3 and the rotation
+        // block "pos_dis" with no rad->deg conversion) -- since this
+        // function is never called anywhere upstream either, that mislabeling
+        // was never exercised/caught. Corrected to match the real layout.
+        double angular_dis = temp_vec.block( 3, 0, 3, 1 ).norm() * 57.3;
+        double pos_dis = temp_vec.block( 0, 0, 3, 1 ).norm();
         if ( angular_dis >= 20 || pos_dis > 1 )
         {
             printf( "Angular dis = %.2f, pos dis = %.2f\r\n", angular_dis, pos_dis );

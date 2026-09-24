@@ -190,6 +190,15 @@ void Preprocess::hesai_handler(const sensor_msgs::msg::PointCloud2::UniquePtr &m
     {
       if (i % point_filter_num != 0) continue;
 
+      // preprocess.scan_line (N_SCANS) previously only took effect in the
+      // feature_enabled branch above -- with feature_extract_enable: false
+      // (this driver's actual running config), every ring the QT64 reports
+      // was kept regardless of scan_line, silently ignoring any reduced
+      // vertical-FOV setting in qt64.yaml. Ring convention (ascending =
+      // bottom-to-top or vice versa) is driver-defined -- verify in RViz
+      // that the kept rings are actually the half of the FOV you intend.
+      if (pl_orig.points[i].ring >= (uint16_t)N_SCANS) continue;
+
       double range = pl_orig.points[i].x * pl_orig.points[i].x + pl_orig.points[i].y * pl_orig.points[i].y +
                      pl_orig.points[i].z * pl_orig.points[i].z;
       if (range < (blind * blind)) continue;

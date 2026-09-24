@@ -12,14 +12,44 @@ shock_cooldown: 0.3
 key_pose_delta_deg: 10
 key_pose_delta_trans: 0.5
 loop_search_radius: 1.0
-loop_time_tresh: 60.0
-loop_score_tresh: 0.15
+# 2026-09-24: tuned down from 60.0/50 -- at key_pose_delta_trans=0.5m spacing,
+# the old num_exclude_recent=50 required ~25m of travel and the old
+# loop_time_tresh=60.0 required 60s between visits before EITHER loop-closure
+# path (radius search or Scan Context fallback) would even attempt a match.
+# Short test loops (quick out-and-back) never cleared either window, so no
+# correction ever fired and map/odom just showed raw, uncorrected drift.
+loop_time_tresh: 10.0
+num_exclude_recent: 15
+# 2026-09-24: tightened from 0.13/0.15/3/5 -- lowering num_exclude_recent
+# above made Scan Context start proposing candidates after only ~7.5m of
+# travel, which is well within a single small/symmetric room. Terminal logs
+# showed "[Loop found]" against keyframe 0 at several points (e.g. keyframes
+# 21, 36, 39) long before the robot had actually returned -- the room's
+# repeated wall geometry produces near-identical descriptors from different
+# physical poses (perceptual aliasing), and one of these false matches got
+# accepted into the pose graph, producing the rotated/duplicated map ("yaw
+# misaligned" ghosting). Tightened the descriptor threshold, the ICP fitness
+# gate, and the consistency requirement so a one-off aliasing hit is far less
+# likely to be accepted as a real loop closure. If you still see false
+# "[Loop found]" entries, lower sc_dist_thres further (e.g. 0.08) and/or
+# raise num_exclude_recent back up.
+sc_dist_thres: 0.10
+# Minimum submap point count required before ICP is attempted at all (see
+# LIO-SAM's performLoopClosure() in mapOptmization.cpp, which hardcodes
+# 300/1000 for the same reason: too few points lets ICP "converge" on
+# trivially-satisfied correspondences instead of a genuine match). Scaled
+# down from LIO-SAM's Velodyne-scale corner+surf defaults since QT64 is a
+# much sparser, shorter-range (~5m) sensor -- raise these if your logged
+# submap sizes are comfortably larger than this in practice.
+loop_min_source_points: 50
+loop_min_target_points: 200
+loop_score_tresh: 0.08
 loop_submap_half_range: 5
 submap_resolution: 0.1
 min_loop_detect_duration: 5.0
 
-loop_consistency_count: 3
-loop_consistency_target_tolerance: 5
+loop_consistency_count: 5
+loop_consistency_target_tolerance: 2
 loop_huber_k: 1.345
 hessian_eigen_ratio_threshold: 0.001
 hessian_degenerate_scale: 0.01

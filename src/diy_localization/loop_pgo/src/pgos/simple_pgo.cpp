@@ -34,6 +34,8 @@ Eigen::Matrix<double, 6, 6> conditionLoopInformation(
 
 SimplePGO::SimplePGO(const Config &config) : m_config(config)
 {
+    m_sc_manager.setNumExcludeRecent(config.num_exclude_recent);
+    m_sc_manager.setSCDistThres(config.sc_dist_thres);
     gtsam::ISAM2Params isam2_params;
     isam2_params.relinearizeThreshold = 0.01;
     isam2_params.relinearizeSkip = 1;
@@ -227,6 +229,18 @@ void SimplePGO::searchForLoopPairs()
 
     CloudType::Ptr target_cloud = getSubMap(loop_idx, m_config.loop_submap_half_range, m_config.submap_resolution);
     CloudType::Ptr source_cloud = getSubMap(m_key_poses.size() - 1, 0, m_config.submap_resolution);
+
+    // Minimum-overlap sanity gate (matches LIO-SAM's detectLoopClosureDistance()/
+    // performLoopClosure() in mapOptmization.cpp, which rejects a candidate
+    // outright if either cloud is too sparse: "cureKeyframeCloud->size() < 300
+    // || prevKeyframeCloud->size() < 1000"). Without this, a near-empty or
+    // feature-poor submap can still report ICP convergence with a passable
+    // fitness score purely because it has very few, trivially-satisfied
+    // correspondences -- indistinguishable downstream from a genuine match.
+    if (static_cast<int>(source_cloud->size()) < m_config.loop_min_source_points ||
+        static_cast<int>(target_cloud->size()) < m_config.loop_min_target_points)
+        return;
+
     CloudType::Ptr align_cloud(new CloudType);
 
     m_icp.setInputSource(source_cloud);
@@ -236,27 +250,57 @@ void SimplePGO::searchForLoopPairs()
     if (!m_icp.hasConverged() || m_icp.getFitnessScore() > m_config.loop_score_tresh)
         return;
 
-    const bool candidate_is_consistent =
+    // Compute the correction this candidate implies BEFORE gating, so the
+    // consistency check below can compare it to the previous candidate's
+    // correction (not just keyframe indices).
+    M4F loop_transform = m_icp.getFinalTransformation();
+    M3D r_refined = loop_transform.block<3, 3>(0, 0).cast<double>() * m_key_poses[cur_idx].r_global;
+    V3D t_refined = loop_transform.block<3, 3>(0, 0).cast<double>() * m_key_poses[cur_idx].t_global + loop_transform.block<3, 1>(0, 3).cast<double>();
+    M3D r_offset = m_key_poses[loop_idx].r_global.transpose() * r_refined;
+    V3D t_offset = m_key_poses[loop_idx].r_global.transpose() * (t_refined - m_key_poses[loop_idx].t_global);
+
+    // Index-proximity alone (matching nearby target keyframes across
+    // consecutive source keyframes) is not enough to rule out Scan Context
+    // perceptual aliasing: a robot moving along a repeating/symmetric
+    // structure (e.g. a small rectangular room) can keep matching the WRONG
+    // wall consistently for several consecutive keyframes too, since the
+    // aliasing itself tracks the robot's motion. This is the same failure
+    // mode addressed by sequence-based place recognition (Milford & Wyeth,
+    // "SeqSLAM", 2012) and by relative-pose/geometric consistency checks in
+    // robust pose-graph pipelines: a GENUINE revisit implies a pose
+    // correction (r_offset/t_offset) that stays essentially constant across
+    // consecutive detections, because the real drift being corrected for
+    // hasn't changed between two keyframes 1 spacing apart. An aliased match
+    // against unrelated geometry has no reason to reproduce the same
+    // correction each time. Tolerance is derived from the keyframe spacing
+    // itself (a few multiples of it), not a new standalone tunable.
+    const double trans_tolerance = 3.0 * m_config.key_pose_delta_trans;
+    const double rot_tolerance_rad = 3.0 * m_config.key_pose_delta_deg * M_PI / 180.0;
+    bool candidate_is_consistent =
         m_pending_loop_count > 0 && cur_idx == m_pending_loop_source + 1 &&
         std::abs(loop_idx - m_pending_loop_target) <= m_config.loop_consistency_target_tolerance;
+    if (candidate_is_consistent)
+    {
+        const double trans_delta = (t_offset - m_pending_loop_t_offset).norm();
+        const double rot_delta = Eigen::Quaterniond(r_offset).angularDistance(Eigen::Quaterniond(m_pending_loop_r_offset));
+        candidate_is_consistent = trans_delta <= trans_tolerance && rot_delta <= rot_tolerance_rad;
+    }
     m_pending_loop_count = candidate_is_consistent ? m_pending_loop_count + 1 : 1;
     m_pending_loop_source = cur_idx;
     m_pending_loop_target = loop_idx;
+    m_pending_loop_r_offset = r_offset;
+    m_pending_loop_t_offset = t_offset;
     if (m_pending_loop_count < m_config.loop_consistency_count)
         return;
     m_pending_loop_count = 0;
-
-    M4F loop_transform = m_icp.getFinalTransformation();
 
     LoopPair one_pair;
     one_pair.source_id = cur_idx;
     one_pair.target_id = loop_idx;
     one_pair.score = m_icp.getFitnessScore();
     one_pair.information = conditionLoopInformation(m_icp.getFinalHessian(), m_config);
-    M3D r_refined = loop_transform.block<3, 3>(0, 0).cast<double>() * m_key_poses[cur_idx].r_global;
-    V3D t_refined = loop_transform.block<3, 3>(0, 0).cast<double>() * m_key_poses[cur_idx].t_global + loop_transform.block<3, 1>(0, 3).cast<double>();
-    one_pair.r_offset = m_key_poses[loop_idx].r_global.transpose() * r_refined;
-    one_pair.t_offset = m_key_poses[loop_idx].r_global.transpose() * (t_refined - m_key_poses[loop_idx].t_global);
+    one_pair.r_offset = r_offset;
+    one_pair.t_offset = t_offset;
     m_cache_pairs.push_back(one_pair);
     m_history_pairs.emplace_back(one_pair.target_id, one_pair.source_id);
 }

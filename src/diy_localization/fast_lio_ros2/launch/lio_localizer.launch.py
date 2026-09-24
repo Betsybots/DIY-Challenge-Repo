@@ -51,7 +51,7 @@ def generate_launch_description():
             {'pcd_save.pcd_save_en': pcd_save_en}
         ],
         output='screen',
-        remappings=[('/Odometry', '/odom')]
+        # remappings=[('/Odometry', '/odom')]
     )
     rviz_node = Node(
         package='rviz2',

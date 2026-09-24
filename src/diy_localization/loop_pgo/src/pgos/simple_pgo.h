@@ -40,6 +40,24 @@ struct Config
     double loop_search_radius = 1.0;
     double loop_time_tresh = 60.0;
     double loop_score_tresh = 0.15;
+    // Scan Context's keyframe-gap exclusion window (see NUM_EXCLUDE_RECENT in
+    // Scancontext.h). Below this many keyframes of separation, the
+    // descriptor-based fallback never attempts a match -- keep in sync with
+    // how short your actual test/production loops are expected to be.
+    int num_exclude_recent = 50;
+    // Scan Context descriptor-distance acceptance gate (see SC_DIST_THRES in
+    // Scancontext.h). In a small/symmetric room, different physical poses can
+    // produce near-identical descriptors (perceptual aliasing), so a loose
+    // threshold here accepts false candidates well before an actual revisit.
+    // Tighten (lower) if you see "[Loop found]" against an early keyframe
+    // that the robot has not actually returned to.
+    double sc_dist_thres = 0.13;
+    // Minimum point count a candidate submap must have before ICP is even
+    // attempted, matching LIO-SAM's hardcoded 300/1000 sanity gate in
+    // performLoopClosure() (mapOptmization.cpp) -- rejects sparse/degenerate
+    // candidates that could otherwise "converge" trivially.
+    int loop_min_source_points = 300;
+    int loop_min_target_points = 1000;
     int loop_submap_half_range = 5;
     double submap_resolution = 0.1;
     double min_loop_detect_duration = 10.0;
@@ -101,4 +119,9 @@ private:
     size_t m_pending_loop_source = 0;
     int m_pending_loop_target = -1;
     int m_pending_loop_count = 0;
+    // Correction implied by the most recent pending candidate, used to
+    // require consecutive candidates to imply a consistent correction (not
+    // just a consistent target keyframe index) -- see searchForLoopPairs().
+    M3D m_pending_loop_r_offset = M3D::Identity();
+    V3D m_pending_loop_t_offset = V3D::Zero();
 };

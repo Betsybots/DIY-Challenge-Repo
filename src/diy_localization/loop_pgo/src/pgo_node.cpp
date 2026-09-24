@@ -93,6 +93,10 @@ public:
         m_pgo_config.loop_search_radius = config["loop_search_radius"].as<double>();
         m_pgo_config.loop_time_tresh = config["loop_time_tresh"].as<double>();
         m_pgo_config.loop_score_tresh = config["loop_score_tresh"].as<double>();
+        m_pgo_config.num_exclude_recent = config["num_exclude_recent"].as<int>(50);
+        m_pgo_config.sc_dist_thres = config["sc_dist_thres"].as<double>(0.13);
+        m_pgo_config.loop_min_source_points = config["loop_min_source_points"].as<int>(300);
+        m_pgo_config.loop_min_target_points = config["loop_min_target_points"].as<int>(1000);
         m_pgo_config.loop_submap_half_range = config["loop_submap_half_range"].as<int>();
         m_pgo_config.submap_resolution = config["submap_resolution"].as<double>();
         m_pgo_config.min_loop_detect_duration = config["min_loop_detect_duration"].as<double>();
