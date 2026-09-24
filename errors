@@ -1,0 +1,168 @@
+User: [map_localizer_node-1] [INFO] [1790210189.077877074] [map_localizer.map_localizer_node]: LOAD FROM YAML CONFIG PATH: /home/juggernauts/localizer/install/map_localizer/share/map_localizer/config/map_localizer.yaml
+[map_localizer_node-1] [INFO] [1790210189.092875824] [map_localizer.map_localizer_node]: AUTO-LOADED MAP: /home/juggernauts/localizer/src/map/refined_map.pcd
+[map_localizer_node-1] [INFO] [1790210189.093039509] [map_localizer.map_localizer_node]: APPLIED CONFIGURED START POSE: x=0.00 y=0.00 z=0.00 yaw=0.00
+[rviz2-2] [INFO] [1790210189.978524952] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-2] [INFO] [1790210189.978786464] [rviz2]: OpenGl version: 4.6 (GLSL 4.6)
+[rviz2-2] [INFO] [1790210190.032890269] [rviz2]: Stereo is NOT SUPPORTED
+[map_localizer_node-1] [WARN] [1790210196.623307870] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=y score=0.334/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[rviz2-2] [INFO] [1790210200.512557607] [map_localizer.rviz2]: Message Filter dropping message: frame 'base_footprint' at time 1790210190.131 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[map_localizer_node-1] [WARN] [1790210223.671490559] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=n score=0.336/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790210245.683593355] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=n score=0.335/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790210263.176789190] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=y score=0.336/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790210281.150725565] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=n score=0.335/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790210304.137878706] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=y score=0.336/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790210335.630795175] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=y score=0.331/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790210340.674819098] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=n score=0.333/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790210368.197530962] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=n score=0.335/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790210451.345882323] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.73 m / 0.31 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210451.944454170] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 1.13 m / 0.43 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210452.897862631] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.92 m / 0.41 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210453.939550978] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.93 m / 0.62 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210454.409812365] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.94 m / 0.63 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210454.801761677] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.56 m / 0.10 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210455.290151241] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.42 m / 0.45 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210455.805459061] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.36 m / 0.48 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210456.243335600] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.40 m / 0.35 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210456.821589475] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.59 m / 0.04 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210457.381654070] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.69 m / 0.28 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210457.866638340] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.73 m / 0.35 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210458.331273558] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.77 m / 0.44 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210458.955327598] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.72 m / 0.47 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210459.396432140] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.71 m / 0.47 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210459.900822195] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.80 m / 0.68 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210460.373028098] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.82 m / 0.66 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210460.792169574] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.81 m / 0.62 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210461.287499449] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.79 m / 0.59 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210461.816750055] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.78 m / 0.56 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210462.321680131] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.78 m / 0.54 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210462.829695443] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.79 m / 0.51 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210463.328319137] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.81 m / 0.48 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210463.820061710] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.83 m / 0.46 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210464.363559923] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.44 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210464.833642993] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.41 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210465.303968281] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.87 m / 0.39 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210465.866107674] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.88 m / 0.37 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210466.347490369] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.86 m / 0.35 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210466.848942811] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.34 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210467.317221493] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.32 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210467.818351779] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.83 m / 0.31 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210468.333324312] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.31 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210468.827766089] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.30 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210469.296227243] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.30 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210469.858888000] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.29 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210470.336948234] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.28 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210470.839049916] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.28 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210471.310056861] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.83 m / 0.28 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210471.822744573] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.82 m / 0.27 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210472.288367155] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.82 m / 0.27 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210472.843823418] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.83 m / 0.27 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210473.318675339] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.83 m / 0.26 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210473.824421798] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.83 m / 0.26 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210474.322743466] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.26 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210474.839907889] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210475.321135890] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210475.818477809] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210476.300182660] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210476.843104596] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210477.341936746] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210477.841056556] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210478.330658408] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.83 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210478.835538306] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210479.309855711] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210479.776212530] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210480.321073130] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210480.849981611] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210481.324085121] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210481.812938496] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210482.280258679] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210482.783216457] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210483.322979074] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210483.845197927] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210484.349272259] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210484.797377159] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210485.266809774] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210485.799030763] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210486.327870121] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210486.857921301] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210487.337510936] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210487.821150100] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210488.267071367] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210488.820370556] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210489.366275196] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210489.810730295] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210490.334010021] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210490.781700378] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210491.338808414] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210491.806429824] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210492.309439796] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210492.827330999] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210493.335111294] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210493.805716336] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210494.297150993] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210494.837113489] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210495.285956561] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210495.835326547] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210496.304374891] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210496.796863923] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210497.316806883] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210497.802999551] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210498.277185527] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210498.837128774] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210499.320029062] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210499.849378360] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210500.303685286] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210500.852915906] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210501.324398197] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210501.820028211] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210502.316169765] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210502.795026125] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.85 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210503.380354262] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.84 m / 0.25 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790210503.838599736] [map_localizer.map_localizer_node]: 
+
+--------------------------
+
+when robot moves very fast i got these error
+
+to INFO
+[INFO] [map_localizer_node-1]: process started with pid [24511]
+[INFO] [rviz2-2]: process started with pid [24513]
+[map_localizer_node-1] [INFO] [1790212478.836481437] [map_localizer.map_localizer_node]: Map Localizer Node Started
+[map_localizer_node-1] [INFO] [1790212478.839166816] [map_localizer.map_localizer_node]: LOAD FROM YAML CONFIG PATH: /home/juggernauts/localizer/install/map_localizer/share/map_localizer/config/map_localizer.yaml
+[map_localizer_node-1] [INFO] [1790212478.856619359] [map_localizer.map_localizer_node]: AUTO-LOADED MAP: /home/juggernauts/localizer/src/map/refined_map.pcd
+[map_localizer_node-1] [INFO] [1790212478.856765764] [map_localizer.map_localizer_node]: APPLIED CONFIGURED START POSE: x=0.00 y=0.00 z=0.00 yaw=0.00
+[rviz2-2] [INFO] [1790212479.829469924] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-2] [INFO] [1790212479.829689324] [rviz2]: OpenGl version: 4.6 (GLSL 4.6)
+[rviz2-2] [INFO] [1790212479.882222255] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-2] [INFO] [1790212490.162297960] [map_localizer.rviz2]: Message Filter dropping message: frame 'base_footprint' at time 1790212480.002 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[map_localizer_node-1] [WARN] [1790212932.046150041] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 0.78 m / 0.16 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212932.715343408] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 1.85 m / 0.71 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212932.944992680] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=n score=0.348/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212937.566074203] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 1.71 m / 0.24 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212938.016552777] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 1.69 m / 0.23 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212938.604248728] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 1.77 m / 0.23 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212939.167309825] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 1.79 m / 0.23 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212939.636106318] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 1.91 m / 0.23 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212939.995972774] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=y score=0.136/0.200] refine[converged=y score=0.117/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212945.462100791] [map_localizer.map_localizer_node]: ICP alignment failed to converge (12 consecutive attempts) -- rough[converged=n score=0.695/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212950.960586696] [map_localizer.map_localizer_node]: ICP alignment failed to converge (23 consecutive attempts) -- rough[converged=n score=0.420/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212956.411386886] [map_localizer.map_localizer_node]: ICP alignment failed to converge (34 consecutive attempts) -- rough[converged=n score=1.244/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212961.439247751] [map_localizer.map_localizer_node]: ICP alignment failed to converge (44 consecutive attempts) -- rough[converged=n score=1.180/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212962.611755067] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.40 m / 0.74 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212963.141247447] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.38 m / 0.74 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212963.607108056] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.41 m / 0.73 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212964.080568784] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.41 m / 0.72 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212964.542768620] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.37 m / 0.70 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212965.042588489] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.33 m / 0.70 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212965.489632506] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.31 m / 0.69 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212966.074194485] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.37 m / 0.67 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212966.442252538] [map_localizer.map_localizer_node]: ICP alignment failed to converge (1 consecutive attempts) -- rough[converged=n score=0.252/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212967.141595969] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 4.92 m / 0.39 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212967.679998147] [map_localizer.map_localizer_node]: Rejecting map->odom update: jump 5.85 m / 0.49 rad exceeds limit (0.50 m / 0.30 rad) -- keeping last accepted offset
+[map_localizer_node-1] [WARN] [1790212971.933825934] [map_localizer.map_localizer_node]: ICP alignment failed to converge (9 consecutive attempts) -- rough[converged=n score=0.310/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212976.980094193] [map_localizer.map_localizer_node]: ICP alignment failed to converge (19 consecutive attempts) -- rough[converged=n score=0.315/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212982.448970342] [map_localizer.map_localizer_node]: ICP alignment failed to converge (30 consecutive attempts) -- rough[converged=n score=0.290/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212987.944664048] [map_localizer.map_localizer_node]: ICP alignment failed to converge (41 consecutive attempts) -- rough[converged=n score=0.301/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212992.949080023] [map_localizer.map_localizer_node]: ICP alignment failed to converge (51 consecutive attempts) -- rough[converged=n score=0.313/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+[map_localizer_node-1] [WARN] [1790212997.971601268] [map_localizer.map_localizer_node]: ICP alignment failed to converge (61 consecutive attempts) -- rough[converged=n score=0.294/0.200] refine[converged=n score=-1.000/0.100] -- map->odom is holding the last accepted offset
+^C[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[map_localizer_node-1] [INFO] [1790213000.863099685] [rclcpp]: signal_handler(SIGINT/SIGTERM)

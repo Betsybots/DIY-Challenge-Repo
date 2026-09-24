@@ -12,7 +12,7 @@
         # convergence during fast rotation, at a small CPU cost.
         max_iteration: 7                     #5 and 10 working good/best
         filter_size_surf: 0.1                #0.3                # Voxel filter size for surf points
-        filter_size_map:  0.1                #0.3                # Voxel filter size for the map points
+        filter_size_map:  0.15                #0.3                # Voxel filter size for the map points
         cube_side_length: 500.0              # Side length of the cube used for voxel grid filtering, units in meters. This is used to limit the size of the map and reduce memory usage.
         
         # Enable or disable runtime position logging. If enabled, the position will be logged to a file in the PCD directory. This is useful for debugging and analysis, but may slow down the system. If disabled, the position will not be logged to a file.
@@ -33,7 +33,7 @@
 
         preprocess:
             lidar_type: 3                # 3: Hesai QT64
-            scan_line: 32                # 32
+            scan_line: 32                # QT64 has 32 rings (0-31)
             timestamp_unit: 0            # 0-second, 1-millisecond, 2-microsecond, 3-nanosecond
             scan_rate: 10                # Hz
             blind: 0.5                   # Blind zone of the LiDAR in meters (QT64 has a blind zone of ~1 m)
@@ -68,36 +68,6 @@
             # (see offset_R_L_I / offset_T_L_I in laserMapping.cpp), so both
             # extrinsic_R and extrinsic_T must be expressed in the raw IMU frame.
             #
-            # Derived from the IMU driver's own extrinsic calibration
-            # (rotation_rpy: [90deg, 0, 0] about X, i.e. transform_matrix
-            # [[1,0,0],[0,0,-1],[0,1,0]] mapping raw IMU -> base_link), which
-            # is currently disabled ("enabled: false") in that driver's
-            # config -- so /imu/data and /imu/data_raw are published in the
-            # raw, uncorrected IMU sensor frame. This extrinsic_R is that
-            # same rotation applied in the opposite direction (LiDAR ->
-            # raw IMU frame == Rx(-90deg)), so FAST-LIO compensates for it
-            # itself. Confirmed two independent ways:
-            #  1) Live accelerometer: raw (0.05, 9.78, -0.05) means raw +Y
-            #     reads ~+g, i.e. raw +Y is physically "up" == LiDAR +Z.
-            #     Applying the driver's own transform_matrix gives
-            #     (0.05, 0.05, 9.78) -- gravity on Z, as expected for the
-            #     LiDAR's Z-up convention.
-            #  2) Physical mounting: LiDAR +X and raw IMU +X point the same
-            #     way. Combined with (1) (LiDAR +Z == raw IMU +Y) and both
-            #     frames being right-handed, this fixes raw IMU +Z ==
-            #     LiDAR -Y. That gives Rx(-90deg):
-            #       x_imu =  x_lidar
-            #       y_imu =  z_lidar
-            #       z_imu = -y_lidar
-            #     NOTE: a previous version of this matrix used
-            #     [1,0,0; 0,-1,0; 0,0,-1] (Rx(180deg)) -- that does NOT
-            #     match Rx(-90deg) above and was a transcription bug.
-            # NOTE: if the IMU driver's "extrinsic.enabled" is later turned
-            # on instead, /imu/data will already be base_link-aligned and
-            # this should be reverted to identity (do not apply both).
-            # extrinsic_R: [1.0, 0.0, 0.0,
-            #               0.0, 0.0, 1.0,
-            #               0.0, -1.0, 0.0]
 
             # Old values
             extrinsic_R: [1.0, 0.0, 0.0,
@@ -110,18 +80,27 @@
             map_en: true   # Enable or disable map publishing  
             effect_map_en: false # Effective map is the subset of the map that is currently being used
             scan_publish_en: true
-            dense_publish_en: true
+            dense_publish_en: false
             scan_bodyframe_pub_en: true
 
         pcd_save:
-            pcd_save_en: false
+            pcd_save_en: true
             interval: -1
 
         # Frontend scan-quality gate: keeps a shock-corrupted or feature-starved scan
         # out of the persistent ikd-tree map and off the published clouds (so loop_pgo/
         # map_localizer never see it), while odometry/TF keep publishing for continuity.
         frontend:
-            reject_low_quality_scans: false
+            # 2026-09-23: was `false`, which disables this entire gate (and the
+            # shock-rollback fix + gyro-rate criterion below, both built
+            # specifically for this) -- directly contradicts the very next
+            # comment's own stated intent ("Leave the gate enabled..."). Flipped
+            # to `true` (the code's own declare_parameter default, see
+            # laserMapping.cpp) since a disabled gate is a direct, fact-checked
+            # explanation for why fast linear/angular motion produces badly
+            # distorted scans (map_localizer rough fitness scores up to ~1.2,
+            # vs. a 0.2 threshold) with nothing catching/rolling them back.
+            reject_low_quality_scans: true
             # Leave the gate enabled, but keep it realistic for a moving vehicle.
             # A 4.0 m/s^2 threshold is too strict for normal acceleration during
             # turns / starts / stops, which causes false shock detections and scan
@@ -148,4 +127,4 @@
         # Absolute path for the final full-map PCD save (on shutdown or /map_save
         # service call). Used as-is since it starts with "/". Leave empty ("") to
         # fall back to <ROOT_DIR>/PCD/scans.pcd.
-        map_file_path: "/home/u_ikkurd/DIY-Challenge-Repo/src/diy_localization/map/fast_lio_map.pcd"
+        map_file_path: "/home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/fast_lio_map.pcd"

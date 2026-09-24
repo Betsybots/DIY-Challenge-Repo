@@ -19,13 +19,25 @@ accumulate_scans: 1
 # Saved map to auto-load at startup (produced by map_hba). Leave empty to
 # require an explicit /relocalize service call (which also supplies a
 # pcd_path) before the node has any map to align against.
-map_path: /home/u_ikkurd/DIY-Challenge-Repo/src/diy_localization/map/refined_map.pcd
+map_path: /home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/refined_map.pcd
 # Optional fixed start pose (map frame), applied once right after map_path
 # loads. Only takes effect if start_x is present -- omit all of these to
 # instead rely on /initialpose (RViz "2D Pose Estimate") or /relocalize, or
 # on odom origin already coinciding with map origin.
-start_x: 0.0 
-start_y: 0.0 
+# 2026-09-23: confirmed correct as 0.0/0.0/0.0 -- checked the map's own
+# recorded trajectory (src/diy_localization/map/refined_poses.txt, which
+# refined_map.pcd was built from): its first entry ("0.pcd") is tx/ty/tz =
+# (0.0013, 0.0003, -0.0009) with a near-identity quaternion, i.e. the
+# mapping run's start pose IS the map frame's origin by construction (SLAM
+# convention: world frame = identity at the first keyframe). So start_x/y/
+# yaw = 0 is only valid if the robot is physically placed back at that
+# exact real-world spot/heading (wherever PCD collection began) before this
+# node starts -- if ICP still won't converge from here, suspect the robot
+# not actually being at that physical spot this run (or a map/sensor
+# mismatch), NOT this config value. Do not reintroduce a nonzero guess here
+# without first checking refined_poses.txt the same way.
+start_x: 0.0
+start_y: 0.0
 start_z: 0.0
 start_yaw: 0.0
 start_roll: 0.0
@@ -42,6 +54,12 @@ max_offset_jump_yaw: 0.3
 # trying to re-lock from scratch, instead of holding a possibly-stale offset
 # forever. 0 disables auto-recovery. No external waypoints file needed --
 # adapts automatically to whatever map is loaded (map_path or /relocalize).
+# 2026-09-23: localizer_node.cpp's timerCB now also counts repeated
+# jump-rejections toward this threshold (previously only outright align()
+# failures counted -- see that file for the fix). Left at 0/disabled here
+# since there's no measured/observed basis in this session for a specific
+# nonzero value -- pick one deliberately (and how many seconds that implies
+# at your update_hz) before turning this on, rather than trusting a guess.
 recovery_after_failures: 0
 recovery_grid_spacing: 2.0
 recovery_yaw_samples: 4

@@ -130,6 +130,15 @@ struct NodeState
     V3D last_offset_t = V3D::Zero();     // Smoothed, broadcast map->odom translation.
     M3D target_offset_r = M3D::Identity();
     V3D target_offset_t = V3D::Zero();
+    // Odometry pose (odom frame) at the moment of the last ACCEPTED (non-
+    // jump-rejected) offset update -- lets the jump gate in timerCB tell
+    // apart "the required correction is large because the robot has
+    // genuinely moved/turned a lot since that lock, per its own odometry"
+    // from "ICP jumped to a wrong local minimum while odometry shows little
+    // to no motion at all". Updated everywhere target_offset_r/t is (the
+    // normal accept path and attemptRecoverySweep()'s re-lock).
+    M3D last_accept_local_r = M3D::Identity();
+    V3D last_accept_local_t = V3D::Zero();
     rclcpp::Time last_smooth_time;
     rclcpp::Time last_align_time;
     M4F initial_guess = M4F::Identity();
@@ -445,69 +454,132 @@ public:
         }
 
         bool result = m_localizer->align(initial_guess);
+        // Set inside the message_lock scope below when a jump-rejection's
+        // modulo count means a recovery sweep should run -- the actual call
+        // happens after that lock is released (attemptRecoverySweep() takes
+        // message_mutex itself on success; calling it while already holding
+        // that lock would self-deadlock on the non-recursive mutex).
+        bool attempt_recovery_after_jump_reject = false;
         if (result)
         {
-            if (m_state.consecutive_align_failures > 0)
-            {
-                RCLCPP_INFO(
-                    this->get_logger(),
-                    "ICP map alignment RECOVERED after %d consecutive failure(s) (rough fitness=%.3f, refine fitness=%.3f)",
-                    m_state.consecutive_align_failures,
-                    m_localizer->lastRoughFitness(), m_localizer->lastRefineFitness());
-            }
-            m_state.consecutive_align_failures = 0;
             M3D map_body_r = initial_guess.block<3, 3>(0, 0).cast<double>();
             V3D map_body_t = initial_guess.block<3, 1>(0, 3).cast<double>();
             M3D candidate_offset_r = map_body_r * current_local_r.transpose();
             V3D candidate_offset_t = -map_body_r * current_local_r.transpose() * current_local_t + map_body_t;
 
-            std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
-
-            // Gate against a well-scoring but wrong ICP local minimum (long
-            // corridors / flat walls / symmetric rooms are classic traps,
-            // and this is most likely to bite while parked between goals).
-            // Explicit /relocalize calls are exempt -- a jump is exactly what
-            // they are for.
-            const V3D offset_delta_t = candidate_offset_t - m_state.target_offset_t;
-            const M3D offset_delta_r = candidate_offset_r * m_state.target_offset_r.transpose();
-            const double jump_dist = offset_delta_t.norm();
-            const double jump_yaw = std::abs(std::atan2(offset_delta_r(1, 0), offset_delta_r(0, 0)));
-
-            const bool jump_too_large = m_state.has_aligned_once && !m_state.service_received &&
-                (jump_dist > m_config.max_offset_jump_dist || jump_yaw > m_config.max_offset_jump_yaw);
-
-            if (jump_too_large)
             {
-                RCLCPP_WARN(
-                    this->get_logger(),
-                    "Rejecting map->odom update: jump %.2f m / %.2f rad exceeds limit "
-                    "(%.2f m / %.2f rad) -- keeping last accepted offset",
-                    jump_dist, jump_yaw, m_config.max_offset_jump_dist, m_config.max_offset_jump_yaw);
+                std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
+
+                // Gate against a well-scoring but wrong ICP local minimum (long
+                // corridors / flat walls / symmetric rooms are classic traps,
+                // and this is most likely to bite while parked between goals).
+                // Explicit /relocalize calls are exempt -- a jump is exactly what
+                // they are for.
+                const V3D offset_delta_t = candidate_offset_t - m_state.target_offset_t;
+                const M3D offset_delta_r = candidate_offset_r * m_state.target_offset_r.transpose();
+                const double jump_dist = offset_delta_t.norm();
+                const double jump_yaw = std::abs(std::atan2(offset_delta_r(1, 0), offset_delta_r(0, 0)));
+
+                // The static max_offset_jump_dist/yaw alone assumes the robot
+                // is roughly stationary between accepted locks -- fine while
+                // parked, but during fast driving/turning the CORRECT offset
+                // can legitimately need to move by more than that between
+                // updates (update_hz is finite), and a fixed cap then rejects
+                // genuinely-good corrections forever (observed: repeated
+                // "Rejecting" warnings with the required jump growing to
+                // several meters while the static limit stayed 0.5 m).
+                // Fix: widen the allowance by however far the robot's OWN
+                // odometry says it has moved/turned since the last accepted
+                // lock -- if odometry reports little motion, the gate stays
+                // exactly as strict as before (catches a wrong local minimum
+                // while parked); if odometry reports a lot of motion, the
+                // gate proportionally relaxes to match it, since that much
+                // offset change is then expected, not suspicious.
+                const V3D odom_moved_t = current_local_t - m_state.last_accept_local_t;
+                const M3D odom_moved_r = current_local_r * m_state.last_accept_local_r.transpose();
+                const double odom_moved_dist = odom_moved_t.norm();
+                const double odom_moved_yaw = std::abs(std::atan2(odom_moved_r(1, 0), odom_moved_r(0, 0)));
+                const double effective_max_jump_dist = m_config.max_offset_jump_dist + odom_moved_dist;
+                const double effective_max_jump_yaw = m_config.max_offset_jump_yaw + odom_moved_yaw;
+
+                const bool jump_too_large = m_state.has_aligned_once && !m_state.service_received &&
+                    (jump_dist > effective_max_jump_dist || jump_yaw > effective_max_jump_yaw);
+
+                if (jump_too_large)
+                {
+                    // A single rejected jump is usually just a bad local minimum
+                    // and correctly ignored. But if ICP keeps re-converging to
+                    // ~the same "too far" pose cycle after cycle, that's sustained
+                    // disagreement with the current lock -- not a one-off outlier
+                    // -- and map->odom is just as stuck as it would be from an
+                    // outright align() failure. Previously this branch never
+                    // incremented consecutive_align_failures (only the
+                    // align()==false branch did, and the top of this `if(result)`
+                    // unconditionally reset it to 0 before the jump check even
+                    // ran), so a permanently-stuck jump-rejection loop could
+                    // never reach recovery_after_failures/attemptRecoverySweep()
+                    // no matter how long it went on.
+                    m_state.consecutive_align_failures++;
+                    RCLCPP_WARN(
+                        this->get_logger(),
+                        "Rejecting map->odom update: jump %.2f m / %.2f rad exceeds limit "
+                        "(%.2f m / %.2f rad, base %.2f m / %.2f rad + %.2f m / %.2f rad moved per "
+                        "odometry since last lock) -- keeping last accepted offset (%d consecutive "
+                        "rejection(s))",
+                        jump_dist, jump_yaw, effective_max_jump_dist, effective_max_jump_yaw,
+                        m_config.max_offset_jump_dist, m_config.max_offset_jump_yaw,
+                        odom_moved_dist, odom_moved_yaw,
+                        m_state.consecutive_align_failures);
+
+                    attempt_recovery_after_jump_reject =
+                        m_config.recovery_after_failures > 0 && !m_recovery_hypotheses.empty() &&
+                        m_state.consecutive_align_failures % m_config.recovery_after_failures == 0;
+                }
+                else
+                {
+                    if (m_state.consecutive_align_failures > 0)
+                    {
+                        RCLCPP_INFO(
+                            this->get_logger(),
+                            "ICP map alignment RECOVERED after %d consecutive failure(s)/rejection(s) "
+                            "(rough fitness=%.3f, refine fitness=%.3f)",
+                            m_state.consecutive_align_failures,
+                            m_localizer->lastRoughFitness(), m_localizer->lastRefineFitness());
+                    }
+                    m_state.consecutive_align_failures = 0;
+                    m_state.target_offset_r = candidate_offset_r;
+                    m_state.target_offset_t = candidate_offset_t;
+                    m_state.last_accept_local_r = current_local_r;
+                    m_state.last_accept_local_t = current_local_t;
+                    m_state.has_aligned_once = true;
+                    m_state.last_fitness_score = m_localizer->lastFitnessScore();
+                }
+
+                if (!m_state.localize_success && m_state.service_received)
+                {
+                    std::lock_guard<std::mutex> service_lock(m_state.service_mutex);
+                    m_state.localize_success = true;
+                    m_state.service_received = false;
+                    // An explicit /relocalize or /initialpose has no prior localized
+                    // state to stay continuous with -- snap instead of blending.
+                    m_state.last_offset_r = m_state.target_offset_r;
+                    m_state.last_offset_t = m_state.target_offset_t;
+                    // This is the log line that actually confirms localization is
+                    // trustworthy -- the /relocalize service response (see relocCB)
+                    // only ever confirmed the map file loaded.
+                    RCLCPP_INFO(
+                        this->get_logger(),
+                        "Map lock ACQUIRED: map->odom translation=(%.3f, %.3f, %.3f)",
+                        m_state.target_offset_t.x(), m_state.target_offset_t.y(), m_state.target_offset_t.z());
+                }
             }
-            else
-            {
-                m_state.target_offset_r = candidate_offset_r;
-                m_state.target_offset_t = candidate_offset_t;
-                m_state.has_aligned_once = true;
-                m_state.last_fitness_score = m_localizer->lastFitnessScore();
-            }
 
-            if (!m_state.localize_success && m_state.service_received)
+            if (attempt_recovery_after_jump_reject)
             {
-                std::lock_guard<std::mutex> service_lock(m_state.service_mutex);
-                m_state.localize_success = true;
-                m_state.service_received = false;
-                // An explicit /relocalize or /initialpose has no prior localized
-                // state to stay continuous with -- snap instead of blending.
-                m_state.last_offset_r = m_state.target_offset_r;
-                m_state.last_offset_t = m_state.target_offset_t;
-                // This is the log line that actually confirms localization is
-                // trustworthy -- the /relocalize service response (see relocCB)
-                // only ever confirmed the map file loaded.
-                RCLCPP_INFO(
-                    this->get_logger(),
-                    "Map lock ACQUIRED: map->odom translation=(%.3f, %.3f, %.3f)",
-                    m_state.target_offset_t.x(), m_state.target_offset_t.y(), m_state.target_offset_t.z());
+                // attemptRecoverySweep() also touches m_localizer -- relies on
+                // localizer_lock (above) still being held here, does not lock
+                // itself (see its own precondition comment).
+                attemptRecoverySweep(current_local_r, current_local_t);
             }
         }
         else
@@ -585,6 +657,8 @@ public:
                 std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
                 m_state.target_offset_r = recovered_offset_r;
                 m_state.target_offset_t = recovered_offset_t;
+                m_state.last_accept_local_r = local_r;
+                m_state.last_accept_local_t = local_t;
                 // No prior localized state worth staying continuous with -- snap.
                 m_state.last_offset_r = recovered_offset_r;
                 m_state.last_offset_t = recovered_offset_t;

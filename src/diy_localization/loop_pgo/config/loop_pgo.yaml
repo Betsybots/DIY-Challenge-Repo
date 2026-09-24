@@ -1,5 +1,5 @@
 cloud_topic: /cloud_registered_body
-odom_topic: /Odometry
+odom_topic: /odom
 imu_topic: /imu/data
 map_frame: map
 local_frame: odom
