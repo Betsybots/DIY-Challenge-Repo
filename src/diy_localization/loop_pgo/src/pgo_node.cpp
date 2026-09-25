@@ -142,6 +142,13 @@ public:
         m_pgo_config.loop_consistency_count = config["loop_consistency_count"].as<int>(3);
         m_pgo_config.odom_trans_noise_per_meter = config["odom_trans_noise_per_meter"].as<double>(0.05);
         m_pgo_config.odom_rot_noise_per_rad = config["odom_rot_noise_per_rad"].as<double>(0.05);
+        m_pgo_config.isam2_relinearize_threshold = config["isam2_relinearize_threshold"].as<double>(0.01);
+        m_pgo_config.isam2_relinearize_skip = config["isam2_relinearize_skip"].as<int>(1);
+        m_pgo_config.icp_max_correspondence_distance = config["icp_max_correspondence_distance"].as<double>(3.0);
+        m_pgo_config.icp_correspondence_randomness = config["icp_correspondence_randomness"].as<int>(20);
+        m_pgo_config.icp_max_iterations = config["icp_max_iterations"].as<int>(50);
+        m_pgo_config.icp_transformation_epsilon = config["icp_transformation_epsilon"].as<double>(1e-6);
+        m_pgo_config.max_icp_correction_from_guess_deg = config["max_icp_correction_from_guess_deg"].as<double>(45.0);
     }
 
     void imuCB(const sensor_msgs::msg::Imu::ConstSharedPtr &imu_msg)

@@ -72,6 +72,24 @@ struct Config
     // addKeyPose()) only guard the near-zero-delta edge case.
     double odom_trans_noise_per_meter = 0.05; // 1-sigma meters of drift per meter of edge translation
     double odom_rot_noise_per_rad = 0.05;     // 1-sigma radians of drift per radian of edge rotation
+
+    // ISAM2 incremental solver tuning (was hardcoded in SimplePGO's ctor).
+    double isam2_relinearize_threshold = 0.01;
+    int isam2_relinearize_skip = 1;
+
+    // FastGICP loop-closure ICP tuning (was hardcoded in SimplePGO's ctor).
+    // Max correspondence distance should roughly match the submap's real
+    // extent (loop_submap_half_range * key_pose_delta_trans), otherwise ICP
+    // can accept correspondences across open space to the wrong structure.
+    double icp_max_correspondence_distance = 3.0;
+    int icp_correspondence_randomness = 20;
+    int icp_max_iterations = 50;
+    double icp_transformation_epsilon = 1e-6;
+
+    // Max rotation (degrees) an accepted ICP correction may deviate from its
+    // seed guess before being rejected as a likely wrong-basin match (see
+    // searchForLoopPairs()'s correction-vs-guess gate).
+    double max_icp_correction_from_guess_deg = 45.0;
 };
 
 class SimplePGO

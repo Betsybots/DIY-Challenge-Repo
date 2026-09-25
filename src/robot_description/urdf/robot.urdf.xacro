@@ -11,7 +11,7 @@
      └── odom            (published by map_localizer — VGICP against a saved map)
           └── base_footprint  (published by the single EKF via /odometry/filtered)
                └──base_link  (published by URDF via robot_state_publisher)
-                    ├── lidar_link   <- REAL, measured offset (see lidar.urdf.xacro)
+                    ├── hesai_lidar   <- REAL, measured offset (see lidar.urdf.xacro)
                     ├── imu_link     <- REAL, measured offset (see imu.urdf.xacro)
                     ├── camera_link  <- NOT YET DEFINED in this file — see
                     │                  docs/reuse_plan_step1.md open item.

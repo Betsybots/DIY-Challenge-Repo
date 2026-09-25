@@ -611,7 +611,7 @@ void publish_frame_body(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Shared
     sensor_msgs::msg::PointCloud2 laserCloudmsg;
     pcl::toROSMsg(*laserCloudIMUBody, laserCloudmsg);
     laserCloudmsg.header.stamp = get_ros_time(lidar_end_time);
-    laserCloudmsg.header.frame_id = "base_link";
+    laserCloudmsg.header.frame_id = "base_footprint";
     pubLaserCloudFull_body->publish(laserCloudmsg);
     publish_count -= PUBFRAME_PERIOD;
 }
@@ -722,7 +722,7 @@ void set_posestamp(T & out)
 void publish_odometry(const rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pubOdomAftMapped, std::unique_ptr<tf2_ros::TransformBroadcaster> & tf_br)
 {
     odomAftMapped.header.frame_id = "odom";
-    odomAftMapped.child_frame_id = "base_link";
+    odomAftMapped.child_frame_id = "base_footprint";
     odomAftMapped.header.stamp = get_ros_time(lidar_end_time);
     set_posestamp(odomAftMapped.pose);
 
@@ -769,7 +769,7 @@ void publish_odometry(const rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPt
     {
         geometry_msgs::msg::TransformStamped trans;
         trans.header.frame_id = "odom";
-        trans.child_frame_id = "base_link";
+        trans.child_frame_id = "base_footprint";
         trans.header.stamp = get_ros_time(lidar_end_time);
         trans.transform.translation.x = odomAftMapped.pose.pose.position.x;
         trans.transform.translation.y = odomAftMapped.pose.pose.position.y;
@@ -1331,7 +1331,7 @@ private:
             // correction. Previously this gate only protected the persistent map from a bad
             // scan; the actual pose handed to RViz/Nav2/map_localizer/the motion controller
             // was NOT protected, and a single shock-damaged correction could still slip into
-            // odom->base_link and appear as a pose jump/teleport downstream.
+            // odom->base_footprint and appear as a pose jump/teleport downstream.
             // shock_cooldown keeps this gate closed for a settling window *after* a shock
             // clears too -- the scan right after a bump can look individually "clean"
             // (good feature count/residual) while the pose still hasn't fully reconverged,

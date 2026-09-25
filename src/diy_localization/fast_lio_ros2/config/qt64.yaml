@@ -29,7 +29,7 @@
             # Verify your IMU driver's angular_velocity units before running:
             # treating deg/s data as rad/s (or vice versa) causes large
             # stationary drift (a ~57x scale error).
-            imu_gyr_unit: "deg"          # "rad" or "deg"
+            imu_gyr_unit: "rad"          # "rad" or "deg"
 
         preprocess:
             lidar_type: 3                # 3: Hesai QT64
@@ -66,7 +66,10 @@
             # below unless your platform will undergo rich 6-DOF motion.
             extrinsic_est_en: false
             #extrinsic_T: [0.0, 0.0298, -0.13795]
-            extrinsic_T: [-0.0209, 0.0469, -0.1067]
+            #extrinsic_T: [0.0, 0.0298, -0.13795]
+            # extrinsic_T: [-0.0209, 0.0469, -0.1067]
+            # extrinsic_T: [0.083680, 0.58493, -0.107740]
+            extrinsic_T: [0.055, 0.012, 0.152]
             # Rotation from the LiDAR frame to the (raw) IMU frame (row-major).
             # FAST-LIO applies this as: p_imu = extrinsic_R * p_lidar + extrinsic_T
             # (see offset_R_L_I / offset_T_L_I in laserMapping.cpp), so both
@@ -74,12 +77,15 @@
             #
 
             # Old values
-            # extrinsic_R: [1.0, 0.0, 0.0,
-            #               0.0, 1.0, 0.0,
-            #               0.0, 0.0, 1.0]
-            extrinsic_R: [0.998992, -0.044454, -0.006237,
-                        0.044420,  0.998998, -0.005500,
-                        0.006475,  0.005218,  0.999965]
+            extrinsic_R: [1.0, 0.0, 0.0,
+                          0.0, 1.0, 0.0,
+                          0.0, 0.0, 1.0]
+            # extrinsic_R: [0.998992, -0.044454, -0.006237,
+            #             0.044420,  0.998998, -0.005500,
+            #             0.006475,  0.005218,  0.999965]
+            # extrinsic_R: [0.995151, 0.082165, 0.054061,
+            #             0.089198,  -0.985539, -0.144069,
+            #             0.041442,  0.148192,  -0.988090]
 
 
         publish: 
@@ -113,7 +119,7 @@
             # turns / starts / stops, which causes false shock detections and scan
             # rejection even when the cloud itself is valid.
             min_effective_features: 10                # 10
-            max_mean_residual:  1.0                  # 1.0
+            max_mean_residual:  0.1                  # 1.0
             shock_accel_deviation_threshold: 8.0    # 8.0 m/s^2 deviation from gravity; raise to avoid false positives
             shock_process_noise_scale: 25.0           # 25.0 temporary IMU process-noise multiplier during a shock
             # Catches fast rotations (e.g. an in-place spin) that

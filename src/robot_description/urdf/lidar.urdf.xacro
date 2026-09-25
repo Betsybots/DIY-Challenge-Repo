@@ -6,10 +6,10 @@
     <joint name="lidar_joint" type="fixed">
       <xacro:insert_block name="origin" />
       <parent link="${parent}"/>
-      <child link="lidar_link"/>
+      <child link="hesai_lidar"/>
     </joint>
 
-    <link name="lidar_link">
+    <link name="hesai_lidar">
       <inertial>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <mass value="0.83"/>
@@ -35,14 +35,14 @@
     </link>
 
     <xacro:if value="$(arg sim)">
-    <gazebo reference="lidar_link">
+    <gazebo reference="hesai_lidar">
       <sensor type="gpu_lidar" name="gpu_lidar">
         <pose>0 0 0 0 0 0</pose>
         <always_on>true</always_on>
         <update_rate>10</update_rate>
         <visualize>false</visualize>
         <topic>lidar</topic>
-        <ignition_frame_id>lidar_link</ignition_frame_id>
+        <ignition_frame_id>hesai_lidar</ignition_frame_id>
         <ray>
           <scan>
             <horizontal>
@@ -70,7 +70,7 @@
             <argument>~/out:=lidar</argument>
           </ros>
           <output_type>sensor_msgs/PointCloud2</output_type>
-          <frame_name>lidar_link</frame_name>
+          <frame_name>hesai_lidar</frame_name>
         </plugin>
         -->
       </sensor>

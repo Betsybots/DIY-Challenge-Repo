@@ -7,8 +7,8 @@ SimplePGO::SimplePGO(const Config &config) : m_config(config)
     m_sc_manager.setNumExcludeRecent(config.num_exclude_recent);
     m_sc_manager.setSCDistThres(config.sc_dist_thres);
     gtsam::ISAM2Params isam2_params;
-    isam2_params.relinearizeThreshold = 0.01;
-    isam2_params.relinearizeSkip = 1;
+    isam2_params.relinearizeThreshold = config.isam2_relinearize_threshold;
+    isam2_params.relinearizeSkip = config.isam2_relinearize_skip;
     m_isam2 = std::make_shared<gtsam::ISAM2>(isam2_params);
     m_initial_values.clear();
     m_graph.resize(0);
@@ -20,12 +20,12 @@ SimplePGO::SimplePGO(const Config &config) : m_config(config)
     // ICP accept correspondences across open space to the wrong nearby
     // structure (e.g. the wrong corner) instead of only genuinely close
     // geometry. Tightened to roughly match the submap's real extent.
-    m_icp.setMaxCorrespondenceDistance(3.0);
+    m_icp.setMaxCorrespondenceDistance(config.icp_max_correspondence_distance);
     m_icp.setNumThreads(0); // 0 = use all available threads
-    m_icp.setCorrespondenceRandomness(20);
+    m_icp.setCorrespondenceRandomness(config.icp_correspondence_randomness);
     m_icp.setRegularizationMethod(fast_gicp::RegularizationMethod::PLANE);
-    m_icp.setMaximumIterations(50);
-    m_icp.setTransformationEpsilon(1e-6);
+    m_icp.setMaximumIterations(config.icp_max_iterations);
+    m_icp.setTransformationEpsilon(config.icp_transformation_epsilon);
 }
 
 bool SimplePGO::isKeyPose(const PoseWithTime &pose)
@@ -385,7 +385,7 @@ void SimplePGO::searchForLoopPairs()
     const double correction_rot_rad = Eigen::Quaterniond(guess_rotation.transpose() * icp_rotation)
                                            .angularDistance(Eigen::Quaterniond::Identity());
     const double correction_trans = (icp_translation - guess_translation).norm();
-    constexpr double kMaxIcpCorrectionFromGuessRad = 45.0 * M_PI / 180.0;
+    const double kMaxIcpCorrectionFromGuessRad = m_config.max_icp_correction_from_guess_deg * M_PI / 180.0;
     if (correction_rot_rad > kMaxIcpCorrectionFromGuessRad || correction_trans > m_config.loop_search_radius)
     {
         RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),

@@ -17,7 +17,7 @@ shock_cooldown: 0.3
 # repo's motion_controller already does, via costmap_ros_->getGlobalFrameID()) --
 # this setting is purely for smoother visualization/high-level consumers, not
 # a correctness requirement. <= 0 restores instant-snap behavior.
-offset_smoothing_time_constant: 0.5
+offset_smoothing_time_constant: 0.0
 
 # Republish /loop_pgo/corrected_map every N added keyframes (in addition to
 # the always-on on-loop-closure republish), so RViz shows the map building up
@@ -43,7 +43,7 @@ num_exclude_recent: 20  # number of most recent keyframes to exclude from loop c
 # If you see false "[Loop found]" entries again, tighten gradually (e.g. 0.10
 # -> 0.08) rather than jumping straight back to 0.05.
 sc_dist_thres: 0.10
-loop_score_tresh: 0.08
+loop_score_tresh: 0.05      # 0.08
 loop_submap_half_range: 5
 submap_resolution: 0.1
 # 2026-09-24: lowered 5.0 -> 1.0, referencing RTAB-Map's loop-closure design
@@ -59,7 +59,7 @@ submap_resolution: 0.1
 # misaligned: only two nodes (source/target) were ever directly tied
 # together, instead of the whole local neighborhood. 1.0s still avoids
 # re-triggering on the literal same instant.
-min_loop_detect_duration: 1.0
+min_loop_detect_duration: 3.0   #1.0
 
 # Lowered 5 -> 3 (back toward the original default): searchForLoopPairs() now
 # also rejects any candidate whose ICP correction deviates too far from its
@@ -82,5 +82,24 @@ loop_consistency_count: 3
 # fixed floors that used to be separate parameters now live in addKeyPose()
 # directly (they only guard the near-zero-delta edge case, not something
 # that needs per-course tuning).
-odom_trans_noise_per_meter: 0.05
-odom_rot_noise_per_rad: 0.05
+odom_trans_noise_per_meter: 0.02  #0.05
+odom_rot_noise_per_rad: 0.02      #0.05 
+
+# ISAM2 incremental solver tuning. Was hardcoded in SimplePGO's constructor.
+isam2_relinearize_threshold: 0.01
+isam2_relinearize_skip: 1
+
+# FastGICP loop-closure ICP tuning. Was hardcoded in SimplePGO's constructor.
+# icp_max_correspondence_distance should roughly match the submap's real
+# extent (loop_submap_half_range * key_pose_delta_trans) -- too large lets
+# ICP accept correspondences across open space to the wrong nearby structure.
+icp_max_correspondence_distance: 1.0  # 3.0
+icp_correspondence_randomness: 20
+icp_max_iterations: 50
+icp_transformation_epsilon: 1e-6
+
+# Max rotation (degrees) an accepted ICP correction may deviate from its seed
+# guess before being rejected as a likely wrong-basin match (see
+# searchForLoopPairs()'s correction-vs-guess gate). Was hardcoded as
+# kMaxIcpCorrectionFromGuessRad in simple_pgo.cpp.
+max_icp_correction_from_guess_deg: 20.0     # 45.0
