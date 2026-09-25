@@ -148,6 +148,14 @@
             # not have fully reconverged yet -- that's what was causing the duplicated
             # floor/wall layer right at bumps.
             shock_cooldown: 0.3
+            # Point-to-map correspondence gate (max distance to the farthest of
+            # the k=5 nearest map points still accepted as a plane-fit
+            # candidate) is NOT a parameter here -- laserMapping.cpp derives it
+            # directly from filter_size_map at the same ratio upstream
+            # FAST-LIO2's own hardcoded sqrt(5)m implicitly assumes for its
+            # ~0.5m default map voxel, so it self-scales to whatever
+            # filter_size_map this course actually uses instead of needing a
+            # second, separately-tuned distance.
 
         # Absolute path for the final full-map PCD save (on shutdown or /map_save
         # service call). Used as-is since it starts with "/". Leave empty ("") to

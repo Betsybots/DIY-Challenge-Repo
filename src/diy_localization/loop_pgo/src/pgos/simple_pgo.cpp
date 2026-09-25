@@ -336,6 +336,28 @@ void SimplePGO::searchForLoopPairs()
         }
     }
 
+    // Stash target/source-aligned-by-best-guess-so-far for visualization,
+    // REGARDLESS of whether the gates below accept or reject this candidate
+    // -- previously the only way to see loop-closure geometry in RViz was
+    // AFTER a closure was already accepted (m_corrected_map_pub in
+    // pgo_node.cpp), which is useless for seeing what proximity
+    // detection/candidates actually look like while tuning thresholds, and
+    // explains why that topic sat publishing nothing while closures never
+    // fired. Tag intensity so RViz can color the two clouds differently
+    // (target=0, source=100).
+    if (have_result)
+    {
+        m_candidate_target_cloud = target_cloud;
+        CloudType::Ptr source_aligned(new CloudType);
+        pcl::transformPointCloud(*source_cloud, *source_aligned, loop_transform);
+        for (PointType &pt : source_aligned->points)
+            pt.intensity = 100.0f;
+        for (PointType &pt : m_candidate_target_cloud->points)
+            pt.intensity = 0.0f;
+        m_candidate_source_cloud_aligned = source_aligned;
+        m_have_candidate_clouds = true;
+    }
+
     if (!have_result || best_fitness > m_config.loop_score_tresh)
     {
         RCLCPP_INFO(rclcpp::get_logger("loop_pgo"),
@@ -403,8 +425,25 @@ void SimplePGO::searchForLoopPairs()
     // "did we jump to a wildly different target keyframe" sanity bound, not
     // something that needs retuning per course.
     constexpr int kLoopConsistencyIndexTolerance = 2;
+    // Was `cur_idx == m_pending_loop_source + 1` -- required the LITERAL
+    // immediately-next keyframe to independently pass every upstream gate
+    // (radius/ScanContext candidate found, path-length, submap size, ICP
+    // fitness, ICP-vs-guess deviation) with zero misses, 3 times in a row,
+    // before a loop closure could ever be accepted. Real sensor noise means
+    // ICP fitness routinely fluctuates a little above/below threshold
+    // frame-to-frame even for a genuine revisit -- a single missed keyframe
+    // reset the whole count back to 1, which in practice meant closures
+    // almost never fired even when the robot plainly returned to its start.
+    // Allow a bounded gap of a few keyframes between hits instead (RTAB-Map/
+    // pose-graph SLAM systems accumulate evidence for a revisit over a local
+    // window, not literal adjacent-frame agreement) -- still requires the
+    // SAME target (index tolerance) and a consistent implied correction
+    // (trans/rot tolerance below), so this doesn't reopen the aliasing gap
+    // this mechanism exists for, it just tolerates a few individual misses.
+    constexpr size_t kLoopConsistencyMaxKeyframeGap = 4;
     bool candidate_is_consistent =
-        m_pending_loop_count > 0 && cur_idx == m_pending_loop_source + 1 &&
+        m_pending_loop_count > 0 &&
+        (cur_idx - m_pending_loop_source) <= kLoopConsistencyMaxKeyframeGap &&
         std::abs(loop_idx - m_pending_loop_target) <= kLoopConsistencyIndexTolerance;
     if (candidate_is_consistent)
     {

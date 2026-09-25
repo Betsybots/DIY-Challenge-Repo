@@ -96,6 +96,19 @@ public:
     M3D offsetR() { return m_r_offset; }
     V3D offsetT() { return m_t_offset; }
 
+    // Source/target submaps (both already in the CURRENT global frame, same
+    // as getSubMap()'s output) from the most recent candidate that made it
+    // far enough through searchForLoopPairs() to actually run ICP -- set
+    // whether that candidate was ultimately accepted or rejected by a later
+    // gate. Lets pgo_node publish a live "what is loop closure comparing
+    // right now" view (this package had no visibility into proximity/loop
+    // candidates before a closure was actually accepted, which is useless
+    // for diagnosing why closures aren't firing).
+    bool hasCandidateCloudsThisCycle() const { return m_have_candidate_clouds; }
+    CloudType::Ptr candidateTargetCloud() const { return m_candidate_target_cloud; }
+    CloudType::Ptr candidateSourceCloud() const { return m_candidate_source_cloud_aligned; }
+    void clearCandidateCloudsFlag() { m_have_candidate_clouds = false; }
+
 private:
     Config m_config;
     std::vector<KeyPoseWithCloud> m_key_poses;
@@ -116,4 +129,9 @@ private:
     // just a consistent target keyframe index) -- see searchForLoopPairs().
     M3D m_pending_loop_r_offset = M3D::Identity();
     V3D m_pending_loop_t_offset = V3D::Zero();
+
+    // See hasCandidateCloudsThisCycle()/candidateTargetCloud()/candidateSourceCloud().
+    bool m_have_candidate_clouds = false;
+    CloudType::Ptr m_candidate_target_cloud;
+    CloudType::Ptr m_candidate_source_cloud_aligned;
 };

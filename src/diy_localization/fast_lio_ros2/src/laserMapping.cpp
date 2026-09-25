@@ -112,6 +112,19 @@ double shock_gyro_threshold = 2.5;
 double max_imu_gap = 0.05;
 double shock_cooldown = 0.3;
 int    rejected_scan_count = 0;
+// Upstream hardcodes this as a bare `5` (squared meters, i.e. ~2.236m) --
+// implicitly tuned for its own ~0.5m default map voxel size, not derived
+// from anything self-adjusting. At the QT64's actual 0.15m map voxel, that
+// raw constant is ~15x the voxel size instead of upstream's own implicit
+// ~4.5x ratio, so it barely discriminates at all: nearly every candidate
+// correspondence passes regardless of whether it's the true matching
+// surface, letting the point-to-plane update lock onto nearby-but-wrong
+// geometry in symmetric/repetitive rooms -- a direct, code-level
+// contributor to poor scan registration and the yaw instability it causes
+// downstream. Computed from filter_size_map_min (see loadParameters()) at
+// the same ratio upstream's own default implies, instead of a standalone
+// tunable -- self-scales to whatever map resolution a course actually uses.
+double max_point_match_dist = std::sqrt(5.0);
 
 float res_last[100000] = {0.0};
 float DET_RANGE = 300.0f;
@@ -415,6 +428,16 @@ double lidar_mean_scantime = 0.0;
 int    scan_num = 0;
 bool sync_packages(MeasureGroup &meas)
 {
+    // Runs from timer_callback() on the executor's main callback group, while
+    // standard_pcl_cbk()/imu_cbk() run concurrently on sensor_cb_group_'s own
+    // thread (MultiThreadedExecutor, see main()) -- both sides touch
+    // lidar_buffer/time_buffer/imu_buffer/last_timestamp_imu, but only the
+    // callbacks took mtx_buffer before. Upstream FAST-LIO never needed this
+    // lock here because its reference main() is single-threaded (spinOnce()
+    // then sync_packages() in the same loop, never concurrent with the
+    // callbacks); this fork's move to two executor threads reintroduced the
+    // race without porting the corresponding protection.
+    std::lock_guard<mutex> lock(mtx_buffer);
     if (lidar_buffer.empty() || imu_buffer.empty()) {
         return false;
     }
@@ -808,7 +831,7 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         {
             /** Find the closest surfaces in the map **/
             ikdtree.Nearest_Search(point_world, NUM_MATCH_POINTS, points_near, pointSearchSqDis);
-            point_selected_surf[i] = points_near.size() < NUM_MATCH_POINTS ? false : pointSearchSqDis[NUM_MATCH_POINTS - 1] > 5 ? false : true;
+            point_selected_surf[i] = points_near.size() < NUM_MATCH_POINTS ? false : pointSearchSqDis[NUM_MATCH_POINTS - 1] > max_point_match_dist * max_point_match_dist ? false : true;
         }
 
         if (!point_selected_surf[i]) continue;
@@ -1060,6 +1083,18 @@ public:
         this->get_parameter_or<double>("frontend.shock_gyro_threshold", shock_gyro_threshold, 2.5);
         this->get_parameter_or<double>("frontend.max_imu_gap", max_imu_gap, 0.05);
         this->get_parameter_or<double>("frontend.shock_cooldown", shock_cooldown, 0.3);
+
+        // Point-to-map correspondence gate, derived from filter_size_map_min
+        // instead of a separate tunable: upstream FAST-LIO2's own hardcoded
+        // sqrt(5)m gate implicitly assumes its own ~0.5m default map voxel
+        // size (ratio ~4.47x). Reproducing that SAME ratio against whatever
+        // filter_size_map is actually configured makes the gate self-scale
+        // to the map's real point density instead of silently mismatching it
+        // (e.g. the QT64's 0.15m voxels made the raw upstream constant ~15x
+        // voxel size instead of ~4.5x, accepting far looser/wrong-geometry
+        // correspondences than the algorithm was designed to allow).
+        constexpr double kMatchDistToMapVoxelRatio = 4.47213595; // sqrt(5)/0.5
+        max_point_match_dist = kMatchDistToMapVoxelRatio * filter_size_map_min;
 
         RCLCPP_INFO(this->get_logger(), "LiDAR type: %d (%s)", p_pre->lidar_type, lidar_type_name(p_pre->lidar_type));
 

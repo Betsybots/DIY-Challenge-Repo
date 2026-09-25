@@ -19,6 +19,11 @@ shock_cooldown: 0.3
 # a correctness requirement. <= 0 restores instant-snap behavior.
 offset_smoothing_time_constant: 0.5
 
+# Republish /loop_pgo/corrected_map every N added keyframes (in addition to
+# the always-on on-loop-closure republish), so RViz shows the map building up
+# incrementally instead of only updating at rare closure events. 0 disables.
+corrected_map_keyframe_interval: 20
+
 key_pose_delta_deg: 15  # degrees between consecutive key poses
 key_pose_delta_trans: 0.5  # meters between consecutive key poses
 loop_search_radius: 1.0  # meters for the loop search radius

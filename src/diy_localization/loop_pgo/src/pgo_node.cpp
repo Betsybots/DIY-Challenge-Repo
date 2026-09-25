@@ -41,6 +41,11 @@ struct NodeConfig
     // directly is what showed up as map->odom TF jumps. <= 0 restores
     // instant-snap (REP-105-compliant, jump-tolerant) behavior.
     double offset_smoothing_time_constant = 0.5;
+    // Republish /loop_pgo/corrected_map every N *added* keyframes even with
+    // no loop closure, so RViz shows the map building up incrementally
+    // instead of only ever updating at (rare, and previously invisible)
+    // closure events. 0 disables this and falls back to on-closure-only.
+    int corrected_map_keyframe_interval = 20;
 };
 
 struct NodeState
@@ -80,6 +85,17 @@ public:
         // transient_local so a late-subscribing RViz still gets the last one.
         m_corrected_map_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/loop_pgo/corrected_map", rclcpp::QoS(1).reliable().transient_local());
+        // Live "what is loop closure comparing right now" view: target submap
+        // (intensity=0) + source submap aligned by the best ICP guess found
+        // so far (intensity=100), republished on EVERY searchForLoopPairs()
+        // call that reaches ICP -- whether that candidate is ultimately
+        // accepted or rejected by a later gate. Unlike /loop_pgo/corrected_map
+        // (only ever published after a closure is actually accepted, which is
+        // why it sat publishing nothing while closures never fired), this is
+        // meant for watching proximity/loop-closure detection happen live in
+        // RViz, including rejected attempts, while tuning thresholds.
+        m_loop_candidate_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+            "/loop_pgo/loop_candidate_cloud", rclcpp::QoS(1).reliable().transient_local());
         m_tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
         m_sync = std::make_shared<message_filters::Synchronizer<message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, nav_msgs::msg::Odometry>>>(message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, nav_msgs::msg::Odometry>(10), m_cloud_sub, m_odom_sub);
         m_sync->setAgePenalty(0.1);
@@ -112,6 +128,7 @@ public:
         m_node_config.offset_smoothing_time_constant = config["offset_smoothing_time_constant"] ?
             config["offset_smoothing_time_constant"].as<double>() :
             m_node_config.offset_smoothing_time_constant;
+        m_node_config.corrected_map_keyframe_interval = config["corrected_map_keyframe_interval"].as<int>(20);
 
         m_pgo_config.key_pose_delta_deg = config["key_pose_delta_deg"].as<double>();
         m_pgo_config.key_pose_delta_trans = config["key_pose_delta_trans"].as<double>();
@@ -261,8 +278,11 @@ public:
     // only meaningful to re-publish when something changed.
     void publishCorrectedMap(builtin_interfaces::msg::Time &time)
     {
-        if (m_corrected_map_pub->get_subscription_count() == 0)
-            return;
+        // Deliberately NOT gated on get_subscription_count(): this is only
+        // called on an accepted loop closure (rare), and transient_local's
+        // whole point is that a RViz added AFTER that moment still gets the
+        // last one -- which requires publish() to have actually run while
+        // no one was listening yet.
         if (m_pgo->keyPoses().empty())
             return;
 
@@ -276,6 +296,26 @@ public:
         cloud_msg.header.frame_id = m_node_config.map_frame;
         cloud_msg.header.stamp = time;
         m_corrected_map_pub->publish(cloud_msg);
+    }
+
+    // See m_loop_candidate_pub's construction comment -- published every
+    // cycle a candidate reached ICP, accepted or not.
+    void publishLoopCandidateCloud(builtin_interfaces::msg::Time &time)
+    {
+        if (!m_pgo->hasCandidateCloudsThisCycle())
+            return;
+        if (m_loop_candidate_pub->get_subscription_count() > 0)
+        {
+            CloudType::Ptr merged(new CloudType);
+            *merged += *m_pgo->candidateTargetCloud();
+            *merged += *m_pgo->candidateSourceCloud();
+            sensor_msgs::msg::PointCloud2 cloud_msg;
+            pcl::toROSMsg(*merged, cloud_msg);
+            cloud_msg.header.frame_id = m_node_config.map_frame;
+            cloud_msg.header.stamp = time;
+            m_loop_candidate_pub->publish(cloud_msg);
+        }
+        m_pgo->clearCandidateCloudsFlag();
     }
 
     // Blends m_state.last_offset_r/t toward the current m_pgo->offsetR()/
@@ -362,7 +402,16 @@ public:
 
         publishLoopMarkers(cur_time);
 
-        if (had_loop_this_cycle)
+        publishLoopCandidateCloud(cur_time);
+
+        // On-closure publish always fires (rare, and the one case that must
+        // never be missed); the periodic one is just for incremental
+        // feedback between closures, so skip it on a cycle already covered
+        // by the former to avoid rebuilding the full map twice in one tick.
+        const size_t n = m_pgo->keyPoses().size();
+        const bool periodic_due = m_node_config.corrected_map_keyframe_interval > 0 &&
+                                   n % static_cast<size_t>(m_node_config.corrected_map_keyframe_interval) == 0;
+        if (had_loop_this_cycle || periodic_due)
             publishCorrectedMap(cur_time);
     }
 
@@ -438,6 +487,7 @@ private:
     rclcpp::TimerBase::SharedPtr m_timer;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr m_loop_marker_pub;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_corrected_map_pub;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_loop_candidate_pub;
     rclcpp::Service<slam_interfaces::srv::SaveMaps>::SharedPtr m_save_map_srv;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr m_imu_sub;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> m_cloud_sub;

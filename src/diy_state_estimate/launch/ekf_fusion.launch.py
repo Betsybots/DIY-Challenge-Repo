@@ -124,9 +124,12 @@ def generate_launch_description():
         parameters=[
             ekf_config,
             {
-                # 'odom0': wheel_odom_topic,
+                # Was commented out -- meant wheel odometry was never fused
+                # despite odom0 in ekf_fusion.yaml being configured for it
+                # (see that file's own 2026-09-24 comment on this bug).
+                'odom0': wheel_odom_topic,
                 'imu0': imu_ekf_topic,
-                'odom0': lidar_ekf_topic,
+                'odom1': lidar_ekf_topic,
             },
         ],
         remappings=[('odometry/filtered', output_topic)],
