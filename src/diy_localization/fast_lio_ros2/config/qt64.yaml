@@ -104,7 +104,7 @@
         # out of the persistent ikd-tree map and off the published clouds (so loop_pgo/
         # map_localizer never see it), while odometry/TF keep publishing for continuity.
         frontend:
-            # 2026-09-23: was `false`, which disables this entire gate (and the
+            # `false`, which disables this entire gate (and the
             # shock-rollback fix + gyro-rate criterion below, both built
             # specifically for this) -- directly contradicts the very next
             # comment's own stated intent ("Leave the gate enabled..."). Flipped
@@ -129,8 +129,7 @@
             # so this is set above normal commanded turning to avoid false
             # positives during intentional in-place rotation.
             #
-            # 2026-09-24: raised 2.5 -> 4.0. Confirmed (laserMapping.cpp,
-            # scan_is_low_quality branch) that whenever p_imu->hadGyroShock()
+            # InlaserMapping.cpp,scan_is_low_quality branch) that whenever p_imu->hadGyroShock()
             # trips, the ENTIRE scan's LiDAR correction is discarded and the
             # published pose is rolled back to pure IMU (gyro-only) dead
             # reckoning for that cycle + shock_cooldown afterward -- nothing
@@ -153,15 +152,7 @@
             # clean gets trusted immediately even though the pose (esp. Z/pitch) may
             # not have fully reconverged yet -- that's what was causing the duplicated
             # floor/wall layer right at bumps.
-            shock_cooldown: 0.3
-            # Point-to-map correspondence gate (max distance to the farthest of
-            # the k=5 nearest map points still accepted as a plane-fit
-            # candidate) is NOT a parameter here -- laserMapping.cpp derives it
-            # directly from filter_size_map at the same ratio upstream
-            # FAST-LIO2's own hardcoded sqrt(5)m implicitly assumes for its
-            # ~0.5m default map voxel, so it self-scales to whatever
-            # filter_size_map this course actually uses instead of needing a
-            # second, separately-tuned distance.
+            shock_cooldown: 0.3 # seconds to keep rejecting scans after a shock
 
         # Absolute path for the final full-map PCD save (on shutdown or /map_save
         # service call). Used as-is since it starts with "/". Leave empty ("") to

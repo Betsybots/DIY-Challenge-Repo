@@ -35,7 +35,14 @@ struct LoopPair
     size_t target_id;
     M3D r_offset;
     V3D t_offset;
-    double score; // FastGICP fitness score, used directly as the loop factor's noise variance
+    double score; // FastGICP fitness score, used as the loop factor's isotropic noise floor
+    // ICP's Gauss-Newton Hessian (JtJ) at convergence for this pair's best-fitness
+    // guess, tangent order [rot xyz, trans xyz] -- see conditionLoopInformation()
+    // in simple_pgo.cpp. Only its eigen-DIRECTIONS and RELATIVE eigenvalue ratios
+    // are used (never its absolute magnitudes directly), so a miscalibrated
+    // Hessian scale can only ever loosen trust in a direction, never make the
+    // factor more confident than the fitness-based floor alone would allow.
+    Eigen::Matrix<double, 6, 6> hessian = Eigen::Matrix<double, 6, 6>::Identity();
 };
 
 struct Config
@@ -86,10 +93,20 @@ struct Config
     int icp_max_iterations = 50;
     double icp_transformation_epsilon = 1e-6;
 
-    // Max rotation (degrees) an accepted ICP correction may deviate from its
-    // seed guess before being rejected as a likely wrong-basin match (see
-    // searchForLoopPairs()'s correction-vs-guess gate).
-    double max_icp_correction_from_guess_deg = 45.0;
+    // Hybrid loop-factor noise model (see conditionLoopInformation() in
+    // simple_pgo.cpp): the ICP fitness score sets an isotropic variance FLOOR
+    // for all 6 DOF (matches LIO-SAM/SC-A-LOAM's own approach, never more
+    // confident than that baseline). The Hessian's eigen-directions are used
+    // ONLY to detect genuinely degenerate directions (eigenvalue ratio to the
+    // strongest direction below this threshold) and loosen those specific
+    // directions further -- it can never tighten a direction below the
+    // fitness-based floor, so a miscalibrated/overconfident raw Hessian can't
+    // silently make the solver over-trust a bad loop closure.
+    double hessian_degeneracy_ratio_threshold = 0.05;
+    // Upper bound on the loosened variance for a degenerate direction, so a
+    // near-zero eigenvalue ratio can't blow up to a numerically unusable
+    // value in ISAM2.
+    double hessian_max_variance = 4.0;
 };
 
 class SimplePGO
@@ -101,7 +118,6 @@ public:
 
     bool addKeyPose(const CloudWithPose &cloud_with_pose);
 
-    bool hasLoop(){return m_cache_pairs.size() > 0;}
 
     void searchForLoopPairs();
 
@@ -113,19 +129,6 @@ public:
 
     M3D offsetR() { return m_r_offset; }
     V3D offsetT() { return m_t_offset; }
-
-    // Source/target submaps (both already in the CURRENT global frame, same
-    // as getSubMap()'s output) from the most recent candidate that made it
-    // far enough through searchForLoopPairs() to actually run ICP -- set
-    // whether that candidate was ultimately accepted or rejected by a later
-    // gate. Lets pgo_node publish a live "what is loop closure comparing
-    // right now" view (this package had no visibility into proximity/loop
-    // candidates before a closure was actually accepted, which is useless
-    // for diagnosing why closures aren't firing).
-    bool hasCandidateCloudsThisCycle() const { return m_have_candidate_clouds; }
-    CloudType::Ptr candidateTargetCloud() const { return m_candidate_target_cloud; }
-    CloudType::Ptr candidateSourceCloud() const { return m_candidate_source_cloud_aligned; }
-    void clearCandidateCloudsFlag() { m_have_candidate_clouds = false; }
 
 private:
     Config m_config;
@@ -147,9 +150,4 @@ private:
     // just a consistent target keyframe index) -- see searchForLoopPairs().
     M3D m_pending_loop_r_offset = M3D::Identity();
     V3D m_pending_loop_t_offset = V3D::Zero();
-
-    // See hasCandidateCloudsThisCycle()/candidateTargetCloud()/candidateSourceCloud().
-    bool m_have_candidate_clouds = false;
-    CloudType::Ptr m_candidate_target_cloud;
-    CloudType::Ptr m_candidate_source_cloud_aligned;
 };

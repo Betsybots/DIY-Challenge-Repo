@@ -1,7 +1,5 @@
 #include <queue>
-#include <deque>
 #include <mutex>
-#include <atomic>
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
@@ -36,17 +34,6 @@ struct RecoveryHypothesis
 {
     double x = 0.0;
     double y = 0.0;
-};
-
-// One synced (cloud, odometry pose) sample kept for scan accumulation (see
-// buildAccumulatedCloud()). The cloud is a fresh object per callback (never
-// mutated in place), so aliasing between history entries and last_cloud is
-// safe.
-struct ScanRecord
-{
-    CloudType::Ptr cloud;
-    M3D r = M3D::Identity();
-    V3D t = V3D::Zero();
 };
 
 struct NodeConfig
@@ -98,13 +85,6 @@ struct NodeConfig
     // 90 deg). Grid points carry no heading information, unlike a hand-picked
     // waypoint, so more samples are needed here to cover orientation.
     int recovery_yaw_samples = 4;
-    // Merge this many of the most recent synced scans (via their own paired
-    // odometry) into one cloud before each ICP alignment, instead of aligning
-    // a single scan against the map. 1 (default) = disabled, this repo's
-    // original behavior. Higher values (2-5) give ICP a denser, more
-    // geometrically-constrained input -- useful given the QT64's ~1m blind
-    // zone -- at a small added per-cycle transform cost. Clamped to [1, 10].
-    int accumulate_scans = 1;
 };
 
 struct NodeState
@@ -112,20 +92,13 @@ struct NodeState
     std::mutex message_mutex;
     std::mutex service_mutex;
 
-    // Touched from both the ICP-timer callback group and the default group
-    // (services/subscriptions) once timerCB runs on its own callback group
-    // (see LocalizerNode's constructor) -- atomic so those cross-group reads
-    // and writes aren't a data race.
-    std::atomic<bool> message_received{false};
-    std::atomic<bool> service_received{false};
-    std::atomic<bool> localize_success{false};
+    bool message_received = false;
+    bool service_received = false;
+    bool localize_success = false;
     builtin_interfaces::msg::Time last_message_time;
     CloudType::Ptr last_cloud = std::make_shared<CloudType>();
     M3D last_r;                          // localmap_body_r
     V3D last_t;                          // localmap_body_t
-    // Bounded to accumulate_scans entries (see syncCB), most recent last --
-    // consumed by buildAccumulatedCloud().
-    std::deque<ScanRecord> scan_history;
     M3D last_offset_r = M3D::Identity(); // Smoothed, broadcast map->odom rotation.
     V3D last_offset_t = V3D::Zero();     // Smoothed, broadcast map->odom translation.
     M3D target_offset_r = M3D::Identity();
@@ -153,12 +126,7 @@ struct NodeState
     // fitness score from the last accepted offset, used as a rough proxy
     // for /amcl_pose covariance.
     double last_fitness_score = -1.0;
-    // Written from timerCB's align-failure branch with NO lock held (ICP
-    // callback group) and reset to 0 from applyInitialGuess() under
-    // service_mutex (default group, via relocCB/initialPoseCB) -- a plain
-    // int here is a data race between those two threads, same reasoning as
-    // the atomic<bool> members above.
-    std::atomic<int> consecutive_align_failures{0};
+    int consecutive_align_failures = 0;
 };
 
 class LocalizerNode : public rclcpp::Node
@@ -181,7 +149,6 @@ public:
 
         if (!m_config.map_path.empty())
         {
-            std::lock_guard<std::mutex> localizer_lock(m_localizer_mutex);
             if (std::filesystem::exists(m_config.map_path) && m_localizer->loadMap(m_config.map_path))
             {
                 m_map_loaded = true;
@@ -215,14 +182,7 @@ public:
         // indirectly via a pose jump.
         m_status_pub = this->create_publisher<slam_interfaces::msg::LocalizationStatus>("localization_status", 10);
 
-        // timerCB (ICP) runs in its own callback group so a slow align() or
-        // recovery sweep can't delay syncCB's TF broadcast / the smoothing
-        // tick, which stay in the node's default group -- requires
-        // MultiThreadedExecutor in main() to actually run concurrently.
-        // m_localizer_mutex (see below) protects the one thing genuinely
-        // shared between the two groups: m_localizer itself.
-        m_icp_callback_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-        m_timer = this->create_wall_timer(10ms, std::bind(&LocalizerNode::timerCB, this), m_icp_callback_group);
+        m_timer = this->create_wall_timer(10ms, std::bind(&LocalizerNode::timerCB, this));
     }
 
     void loadParameters()
@@ -283,9 +243,6 @@ public:
             config["recovery_grid_spacing"].as<double>() : m_config.recovery_grid_spacing;
         m_config.recovery_yaw_samples = config["recovery_yaw_samples"] ?
             config["recovery_yaw_samples"].as<int>() : m_config.recovery_yaw_samples;
-        m_config.accumulate_scans = config["accumulate_scans"] ?
-            config["accumulate_scans"].as<int>() : m_config.accumulate_scans;
-        m_config.accumulate_scans = std::clamp(m_config.accumulate_scans, 1, 10);
     }
 
     // Derives map-frame seed hypotheses for auto-recovery directly from the
@@ -294,8 +251,6 @@ public:
     // nearby (an occupancy check against the map cloud voxelized at half that
     // spacing) so hypotheses aren't wasted on open space outside the mapped
     // area's footprint.
-    // Precondition: caller holds m_localizer_mutex (this touches m_localizer
-    // and m_recovery_hypotheses, both shared with the ICP callback group).
     void computeRecoveryHypotheses()
     {
         m_recovery_hypotheses.clear();
@@ -353,34 +308,6 @@ public:
             m_recovery_hypotheses.size(), spacing);
     }
 
-    // Merges scan_history entries into one cloud expressed in target_r/target_t's
-    // body frame (same-frame composition math as the map->odom offset elsewhere
-    // in this file), instead of aligning ICP against a single, possibly
-    // feature-thin scan (QT64 has a ~1m blind zone). No-op (returns the most
-    // recent scan verbatim, zero extra cost) when accumulate_scans <= 1 or
-    // fewer than 2 scans are available yet.
-    CloudType::Ptr buildAccumulatedCloud(const std::vector<ScanRecord> &history, const M3D &target_r, const V3D &target_t)
-    {
-        if (history.empty())
-            return std::make_shared<CloudType>();
-        if (history.size() == 1 || m_config.accumulate_scans <= 1)
-            return history.back().cloud;
-
-        CloudType::Ptr accumulated = std::make_shared<CloudType>(*history.back().cloud);
-        for (size_t i = 0; i + 1 < history.size(); ++i)
-        {
-            const ScanRecord &hist = history[i];
-            const M3D rel_r = target_r.transpose() * hist.r;
-            const V3D rel_t = target_r.transpose() * (hist.t - target_t);
-            M4F transform = M4F::Identity();
-            transform.block<3, 3>(0, 0) = rel_r.cast<float>();
-            transform.block<3, 1>(0, 3) = rel_t.cast<float>();
-            CloudType transformed;
-            pcl::transformPointCloud(*hist.cloud, transformed, transform);
-            accumulated->operator+=(transformed);
-        }
-        return accumulated;
-    }
     void timerCB()
     {
         if (!m_state.message_received)
@@ -408,24 +335,16 @@ public:
         CloudType::Ptr current_cloud;
         M3D current_target_offset_r;
         V3D current_target_offset_t;
-        std::vector<ScanRecord> history_snapshot;
         {
             std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
             current_local_r = m_state.last_r;
             current_local_t = m_state.last_t;
             current_time = m_state.last_message_time;
+            current_cloud = m_state.last_cloud;
             current_target_offset_r = m_state.target_offset_r;
             current_target_offset_t = m_state.target_offset_t;
-            history_snapshot.assign(m_state.scan_history.begin(), m_state.scan_history.end());
         }
-        current_cloud = buildAccumulatedCloud(history_snapshot, current_local_r, current_local_t);
 
-        // Guards every m_localizer call/m_recovery_hypotheses access below --
-        // m_localizer is also touched by relocCB/the constructor (default
-        // callback group) via loadMap(). Held through publishLocalizationStatus()/
-        // publishMapCloud() at the end of this function (both also read
-        // m_localizer and are only ever called from here).
-        std::lock_guard<std::mutex> localizer_lock(m_localizer_mutex);
         m_localizer->setInput(current_cloud);
 
         M4F initial_guess = M4F::Identity();
@@ -534,7 +453,7 @@ public:
                         jump_dist, jump_yaw, effective_max_jump_dist, effective_max_jump_yaw,
                         m_config.max_offset_jump_dist, m_config.max_offset_jump_yaw,
                         odom_moved_dist, odom_moved_yaw,
-                        m_state.consecutive_align_failures.load());
+                        m_state.consecutive_align_failures);
 
                     attempt_recovery_after_jump_reject =
                         m_config.recovery_after_failures > 0 && !m_recovery_hypotheses.empty() &&
@@ -548,7 +467,7 @@ public:
                             this->get_logger(),
                             "ICP map alignment RECOVERED after %d consecutive failure(s)/rejection(s) "
                             "(rough fitness=%.3f, refine fitness=%.3f)",
-                            m_state.consecutive_align_failures.load(),
+                            m_state.consecutive_align_failures,
                             m_localizer->lastRoughFitness(), m_localizer->lastRefineFitness());
                     }
                     m_state.consecutive_align_failures = 0;
@@ -581,9 +500,6 @@ public:
 
             if (attempt_recovery_after_jump_reject)
             {
-                // attemptRecoverySweep() also touches m_localizer -- relies on
-                // localizer_lock (above) still being held here, does not lock
-                // itself (see its own precondition comment).
                 attemptRecoverySweep(current_local_r, current_local_t);
             }
         }
@@ -599,7 +515,7 @@ public:
                 "ICP alignment failed to converge (%d consecutive attempts) -- "
                 "rough[converged=%s score=%.3f/%.3f] refine[converged=%s score=%.3f/%.3f] -- "
                 "map->odom is holding the last accepted offset",
-                m_state.consecutive_align_failures.load(),
+                m_state.consecutive_align_failures,
                 m_localizer->lastRoughConverged() ? "y" : "n", m_localizer->lastRoughFitness(),
                 m_localizer_config.rough_score_thresh,
                 m_localizer->lastRefineConverged() ? "y" : "n", m_localizer->lastRefineFitness(),
@@ -608,9 +524,6 @@ public:
             if (m_config.recovery_after_failures > 0 && !m_recovery_hypotheses.empty() &&
                 m_state.consecutive_align_failures % m_config.recovery_after_failures == 0)
             {
-                // attemptRecoverySweep() also touches m_localizer -- relies on
-                // localizer_lock (above) still being held here, does not lock
-                // itself (see its own precondition comment).
                 attemptRecoverySweep(current_local_r, current_local_t);
             }
         }
@@ -629,9 +542,6 @@ public:
     // Precondition: m_localizer->setInput() has already been called with this
     // scan (true for its only caller, timerCB's failure branch) -- not
     // repeated here since fast_gicp caches by cloud pointer identity anyway.
-    // Precondition: caller holds m_localizer_mutex (true for its only caller,
-    // timerCB's failure branch) -- not acquired here to avoid deadlocking on
-    // a non-recursive mutex already held by that caller.
     bool attemptRecoverySweep(const M3D &local_r, const V3D &local_t)
     {
         const int yaw_samples = std::max(1, m_config.recovery_yaw_samples);
@@ -639,7 +549,7 @@ public:
             this->get_logger(),
             "Auto-recovery: %d consecutive alignment failures -- sweeping %zu grid hypothesis(es) "
             "x %d yaw sample(s) to attempt re-lock",
-            m_state.consecutive_align_failures.load(), m_recovery_hypotheses.size(), yaw_samples);
+            m_state.consecutive_align_failures, m_recovery_hypotheses.size(), yaw_samples);
 
         for (size_t i = 0; i < m_recovery_hypotheses.size(); ++i)
         {
@@ -689,9 +599,6 @@ public:
         return false;
     }
 
-    // Precondition: caller holds m_localizer_mutex (true for its only caller,
-    // timerCB, via the lock held for the whole ICP section -- not acquired
-    // here to avoid deadlocking on a non-recursive mutex already held).
     void publishLocalizationStatus(builtin_interfaces::msg::Time &time)
     {
         slam_interfaces::msg::LocalizationStatus status;
@@ -743,11 +650,7 @@ public:
         {
             std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
 
-            // Fresh object per callback (not reused in place) so history entries
-            // pushed below stay valid/unmutated once earlier scans are appended.
-            CloudType::Ptr fresh_cloud = std::make_shared<CloudType>();
-            pcl::fromROSMsg(*cloud_msg, *fresh_cloud);
-            m_state.last_cloud = fresh_cloud;
+            pcl::fromROSMsg(*cloud_msg, *m_state.last_cloud);
 
             m_state.last_r = Eigen::Quaterniond(odom_msg->pose.pose.orientation.w,
                                                 odom_msg->pose.pose.orientation.x,
@@ -758,11 +661,6 @@ public:
                                  odom_msg->pose.pose.position.y,
                                  odom_msg->pose.pose.position.z);
             m_state.last_message_time = stamp;
-
-            m_state.scan_history.push_back({fresh_cloud, m_state.last_r, m_state.last_t});
-            const size_t max_history = static_cast<size_t>(std::max(1, m_config.accumulate_scans));
-            while (m_state.scan_history.size() > max_history)
-                m_state.scan_history.pop_front();
 
             if (!m_state.message_received)
             {
@@ -917,13 +815,9 @@ public:
             return;
         }
 
-        bool load_flag;
-        {
-            std::lock_guard<std::mutex> localizer_lock(m_localizer_mutex);
-            load_flag = m_localizer->loadMap(pcd_path);
-            if (load_flag)
-                computeRecoveryHypotheses();
-        }
+        bool load_flag = m_localizer->loadMap(pcd_path);
+        if (load_flag)
+            computeRecoveryHypotheses();
         if (!load_flag)
         {
             RCLCPP_ERROR(this->get_logger(), "relocalize REJECTED: failed to load pcd map: %s", pcd_path.c_str());
@@ -956,8 +850,6 @@ public:
             response->valid = m_state.localize_success;
         return;
     }
-    // Precondition: caller holds m_localizer_mutex (true for its only caller,
-    // timerCB, via the lock held for the whole ICP section).
     void publishMapCloud(builtin_interfaces::msg::Time &time)
     {
         if (m_map_cloud_pub->get_subscription_count() < 1)
@@ -979,10 +871,6 @@ private:
 
     ICPConfig m_localizer_config;
     std::shared_ptr<ICPLocalizer> m_localizer;
-    // Guards every m_localizer call and m_recovery_hypotheses access -- both
-    // are reachable from the ICP callback group (timerCB) and the default
-    // group (relocCB/constructor via loadMap()).
-    std::mutex m_localizer_mutex;
     std::vector<RecoveryHypothesis> m_recovery_hypotheses;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> m_cloud_sub;
     message_filters::Subscriber<nav_msgs::msg::Odometry> m_odom_sub;
@@ -995,19 +883,11 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_map_cloud_pub;
     rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr m_pose_pub;
     rclcpp::Publisher<slam_interfaces::msg::LocalizationStatus>::SharedPtr m_status_pub;
-    rclcpp::CallbackGroup::SharedPtr m_icp_callback_group;
 };
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<LocalizerNode>();
-    // MultiThreadedExecutor is required for timerCB's dedicated callback
-    // group (see the constructor) to actually run concurrently with syncCB/
-    // the services, instead of the default single-threaded executor still
-    // serializing everything regardless of group.
-    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
-    executor.add_node(node);
-    executor.spin();
+    rclcpp::spin(std::make_shared<LocalizerNode>());
     rclcpp::shutdown();
     return 0;
 }

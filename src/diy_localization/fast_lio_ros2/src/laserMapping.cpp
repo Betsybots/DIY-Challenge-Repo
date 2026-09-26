@@ -62,7 +62,6 @@
 #include <so3_math.h>
 #include <rclcpp/rclcpp.hpp>
 #include <Eigen/Core>
-#include <Eigen/Eigenvalues>
 #include "IMU_Processing.hpp"
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
@@ -100,31 +99,12 @@ bool   runtime_pos_log = false, pcd_save_en = false, time_sync_en = false, extri
 bool   reject_low_quality_scans = true;
 int    min_effective_features = 10;
 double max_mean_residual = 1.0;
-// Below this min/max rotation-Hessian eigenvalue ratio, a scan's point-to-
-// plane geometry is treated as not constraining that rotation axis at all
-// (LOAM/LIO-SAM style degeneracy handling -- see h_share_model()). Fixed,
-// not exposed as a runtime parameter: matches how LOAM/LIO-SAM hardcode
-// their own degeneracy eigenvalue thresholds rather than tuning them per site.
-constexpr double kDegenerateRotEigenRatioThreshold = 0.02;
 double shock_accel_deviation_threshold = 4.0;
 double shock_process_noise_scale = 25.0;
 double shock_gyro_threshold = 2.5;
 double max_imu_gap = 0.05;
 double shock_cooldown = 0.3;
 int    rejected_scan_count = 0;
-// Upstream hardcodes this as a bare `5` (squared meters, i.e. ~2.236m) --
-// implicitly tuned for its own ~0.5m default map voxel size, not derived
-// from anything self-adjusting. At the QT64's actual 0.15m map voxel, that
-// raw constant is ~15x the voxel size instead of upstream's own implicit
-// ~4.5x ratio, so it barely discriminates at all: nearly every candidate
-// correspondence passes regardless of whether it's the true matching
-// surface, letting the point-to-plane update lock onto nearby-but-wrong
-// geometry in symmetric/repetitive rooms -- a direct, code-level
-// contributor to poor scan registration and the yaw instability it causes
-// downstream. Computed from filter_size_map_min (see loadParameters()) at
-// the same ratio upstream's own default implies, instead of a standalone
-// tunable -- self-scales to whatever map resolution a course actually uses.
-double max_point_match_dist = std::sqrt(5.0);
 
 float res_last[100000] = {0.0};
 float DET_RANGE = 300.0f;
@@ -831,7 +811,7 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         {
             /** Find the closest surfaces in the map **/
             ikdtree.Nearest_Search(point_world, NUM_MATCH_POINTS, points_near, pointSearchSqDis);
-            point_selected_surf[i] = points_near.size() < NUM_MATCH_POINTS ? false : pointSearchSqDis[NUM_MATCH_POINTS - 1] > max_point_match_dist * max_point_match_dist ? false : true;
+            point_selected_surf[i] = points_near.size() < NUM_MATCH_POINTS ? false : pointSearchSqDis[NUM_MATCH_POINTS - 1] > 5 ? false : true;
         }
 
         if (!point_selected_surf[i]) continue;
@@ -915,63 +895,6 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         ekfom_data.h(i) = -norm_p.intensity;
     }
     solve_time += omp_get_wtime() - solve_start_;
-
-    // Point-to-plane geometry dominated by parallel/flat surfaces (small
-    // symmetric room, long corridor) only weakly constrains attitude --
-    // often yaw specifically -- yet without this check the EKF still applies
-    // a "full strength" correction along that weak direction from whatever
-    // few, easily-aliased residuals exist. That is a direct, code-level
-    // cause of the erratic/aliased yaw seen in symmetric spaces (confirmed
-    // by loop_pgo repeatedly detecting near-identical Scan Context matches
-    // against very different true poses in exactly such rooms).
-    //
-    // This is the standard LOAM/LIO-SAM degeneracy fix (Zhang & Singh, "On
-    // Degeneracy of Optimization-based State Estimation Problems", ICRA
-    // 2016; see also LIO-SAM's `isDegenerate`/`matP` handling in
-    // mapOptmization.cpp::LMOptimization()): eigendecompose the rotation
-    // block's JtJ, and for any eigenvalue far weaker than the strongest one,
-    // project its eigenvector out of every point's rotation-Jacobian row
-    // this scan (r_new = r * (I - v v^T)). The EKF gain along that direction
-    // then collapses to ~0, so gyro-only prediction governs it instead of
-    // noisy/ambiguous LiDAR geometry, until a later scan's geometry actually
-    // observes it.
-    {
-        Eigen::Block<Eigen::MatrixXd> h_rot_cols = ekfom_data.h_x.block(0, 3, effct_feat_num, 3);
-        const Eigen::Matrix3d JtJ_rot = h_rot_cols.transpose() * h_rot_cols;
-        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> rot_eig(JtJ_rot);
-        if (rot_eig.info() == Eigen::Success)
-        {
-            const Eigen::Vector3d eigenvalues = rot_eig.eigenvalues(); // ascending
-            const double max_eig = eigenvalues(2);
-            // Bug: this only ever tested/nulled eigenvalues(0), the single
-            // smallest eigenvector. A corridor/single-wall scene commonly has
-            // TWO weak rotational DOFs (only one axis, e.g. yaw about the wall
-            // normal, is actually constrained) -- eigenvalues(1) was computed
-            // and never even read. Loop ascending like LIO-SAM's LMOptimization
-            // does and null every eigenvector that fails the ratio test, not
-            // just the smallest, so a second weak direction isn't left exposed
-            // to a full-strength update from ambiguous geometry.
-            Eigen::Matrix3d projector = Eigen::Matrix3d::Identity();
-            bool any_weak = false;
-            if (max_eig > 1e-6)
-            {
-                for (int idx = 0; idx < 3; ++idx)
-                {
-                    if (eigenvalues(idx) / max_eig >= kDegenerateRotEigenRatioThreshold) break;
-                    const Eigen::Vector3d v = rot_eig.eigenvectors().col(idx);
-                    projector -= v * v.transpose();
-                    any_weak = true;
-                }
-            }
-            if (any_weak)
-            {
-                // Row-vector projection: for each point's 1x3 rotation
-                // Jacobian row r, remove its component along each weak
-                // direction v: r_new = r * (I - sum(v v^T)).
-                h_rot_cols = h_rot_cols * projector;
-            }
-        }
-    }
 }
 
 class LaserMappingNode : public rclcpp::Node
@@ -1083,18 +1006,6 @@ public:
         this->get_parameter_or<double>("frontend.shock_gyro_threshold", shock_gyro_threshold, 2.5);
         this->get_parameter_or<double>("frontend.max_imu_gap", max_imu_gap, 0.05);
         this->get_parameter_or<double>("frontend.shock_cooldown", shock_cooldown, 0.3);
-
-        // Point-to-map correspondence gate, derived from filter_size_map_min
-        // instead of a separate tunable: upstream FAST-LIO2's own hardcoded
-        // sqrt(5)m gate implicitly assumes its own ~0.5m default map voxel
-        // size (ratio ~4.47x). Reproducing that SAME ratio against whatever
-        // filter_size_map is actually configured makes the gate self-scale
-        // to the map's real point density instead of silently mismatching it
-        // (e.g. the QT64's 0.15m voxels made the raw upstream constant ~15x
-        // voxel size instead of ~4.5x, accepting far looser/wrong-geometry
-        // correspondences than the algorithm was designed to allow).
-        constexpr double kMatchDistToMapVoxelRatio = 4.47213595; // sqrt(5)/0.5
-        max_point_match_dist = kMatchDistToMapVoxelRatio * filter_size_map_min;
 
         RCLCPP_INFO(this->get_logger(), "LiDAR type: %d (%s)", p_pre->lidar_type, lidar_type_name(p_pre->lidar_type));
 

@@ -9,13 +9,6 @@ update_hz: 2.0
 # Too small -> "old data"/timeout warnings; too large -> Nav2 accepts a more
 # stale correction without complaint. 0.2-0.5s is a reasonable range here.
 transform_tolerance: 0.3
-# Merge this many of the most recent LiDAR scans (via their own paired
-# odometry) into one cloud before each ICP alignment, instead of aligning a
-# single scan against the map. 1 = disabled (this repo's original behavior).
-# Higher values (2-5) give ICP a denser, more geometrically-constrained input
-# -- useful given the QT64's ~1m blind zone -- at a small added per-cycle
-# transform cost. Clamped to [1, 10].
-accumulate_scans: 1
 # Saved map to auto-load at startup (produced by map_hba). Leave empty to
 # require an explicit /relocalize service call (which also supplies a
 # pcd_path) before the node has any map to align against.
@@ -27,9 +20,9 @@ map_path: /home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/refined_
 # (0.0013, 0.0003, -0.0009) with a near-identity quaternion.Do not reintroduce a nonzero guess here
 # without first checking refined_poses.txt the same way.
 start_x: 0.0
-start_y: -1.0
+start_y: 0.0
 start_z: 0.0
-start_yaw: -1.57
+start_yaw: 0.0
 start_roll: 0.0
 start_pitch: 0.0
 # Reject an ICP realignment whose implied map->odom offset jumps further than

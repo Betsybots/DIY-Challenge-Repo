@@ -1813,46 +1813,19 @@ public:
 
 			//K_x = K_ * h_x_;
 			Matrix<scalar_type, n, 1> dx_ = K_h + (K_x - Matrix<scalar_type, n, n>::Identity()) * dx_new; 
-			// check_safe_update() guards against a wrong/divergent single-iteration
-			// correction (hku-mars/FAST_LIO#441). It used to zero out dx_ entirely
-			// once over its (deg/m) threshold. That is worse than doing nothing:
-			// h_share_model() only re-searches point-to-map correspondences when the
-			// PRIOR iteration converged (`if (ekfom_data.converge)`); zeroing dx_
-			// leaves the state exactly where it was, so the very next iteration
-			// re-derives the identical (still too-large) correction from the same
-			// unmoved correspondences, gets zeroed again, and the iteration count
-			// (t>1) exits the whole measurement update after just 2 no-op passes --
-			// silently discarding the entire LiDAR correction for that scan instead
-			// of using the `max_iteration` budget to converge. That is exactly what
-			// produces yaw drift through a turn followed by a delayed catch-up TF
-			// jump once residual drift finally shrinks the needed correction back
-			// under the threshold. Clamping (direction-preserving scale-down) instead
-			// of zeroing lets each iteration make bounded real progress toward
-			// convergence, the same trust-region idea an iterated EKF depends on.
-			//
-			// Separately (hku-mars/FAST_LIO#441, reporter's own diagnosis): the
-			// *correspondence refresh* in h_share_model() is gated on this same
-			// dyn_share.converge flag (`if (ekfom_data.converge)`). If a clamped
-			// step still leaves dx_ above the tiny per-element `limit[i]` below,
-			// converge would stay false and the *next* iteration would reuse
-			// correspondences computed before this step, now evaluated at the new,
-			// meaningfully-moved position -- a mismatch that can point the next
-			// correction in the wrong direction. Force a refresh after any clamped
-			// step, without letting that also count as real numeric convergence.
-			const bool large_step_this_iter = check_safe_update(dx_);
+			dx_ = check_safe_update(dx_);
 			state x_before = x_;
 			x_.boxplus(dx_);
-			bool numerically_converged = true;
+			dyn_share.converge = true;
 			for(int i = 0; i < n ; i++)
 			{
 				if(std::fabs(dx_[i]) > limit[i])
 				{
-					numerically_converged = false;
+					dyn_share.converge = false;
 					break;
 				}
 			}
-			dyn_share.converge = numerically_converged || large_step_this_iter;
-			if(numerically_converged) t++;
+			if(dyn_share.converge) t++;
 			
 			if(!t && i == maximum_iter - 2)
 			{
@@ -2008,43 +1981,24 @@ private:
 
 	int maximum_iter = 0;
 	scalar_type limit[n];
-	
-	// Returns true if the step was clamped (angular or positional). Takes
-	// dx_ by reference instead of by value so the caller can also see whether
-	// clamping happened (hku-mars/FAST_LIO#441: a clamped/oversized step means
-	// the ikd-tree correspondences the next iteration would otherwise reuse
-	// were computed too far from where the state ends up -- see call site).
+
 	template <typename T>
-    bool check_safe_update( T &temp_vec )
+    T check_safe_update( T _temp_vec )
     {
+        T temp_vec = _temp_vec;
         if ( std::isnan( temp_vec(0, 0) ) )
         {
             temp_vec.setZero();
-            return true;
+            return temp_vec;
         }
-        // Tangent-vector layout follows state_ikfom's field order in
-        // use-ikfom.hpp: pos (idx 0-2) THEN rot (idx 3-5).
-        const double angular_dis = temp_vec.block( 3, 0, 3, 1 ).norm() * 57.3;
-        const double pos_dis = temp_vec.block( 0, 0, 3, 1 ).norm();
-        constexpr double kMaxAngularDegPerIter = 20.0;
-        constexpr double kMaxPosPerIter = 1.0;
-        // Scale the offending block down to the limit instead of discarding the
-        // whole step: preserves direction/axis so subsequent iterations keep
-        // making real progress toward convergence rather than silently no-op'ing.
-        bool clamped = false;
-        if ( angular_dis > kMaxAngularDegPerIter )
+        double angular_dis = temp_vec.block( 0, 0, 3, 1 ).norm() * 57.3;
+        double pos_dis = temp_vec.block( 3, 0, 3, 1 ).norm();
+        if ( angular_dis >= 20 || pos_dis > 1 )
         {
-            printf( "check_safe_update: clamping angular step %.2f -> %.2f deg\r\n", angular_dis, kMaxAngularDegPerIter );
-            temp_vec.block( 3, 0, 3, 1 ) *= (kMaxAngularDegPerIter / angular_dis);
-            clamped = true;
+            printf( "Angular dis = %.2f, pos dis = %.2f\r\n", angular_dis, pos_dis );
+            temp_vec.setZero();
         }
-        if ( pos_dis > kMaxPosPerIter )
-        {
-            printf( "check_safe_update: clamping position step %.2f -> %.2f m\r\n", pos_dis, kMaxPosPerIter );
-            temp_vec.block( 0, 0, 3, 1 ) *= (kMaxPosPerIter / pos_dis);
-            clamped = true;
-        }
-        return clamped;
+        return temp_vec;
     }
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

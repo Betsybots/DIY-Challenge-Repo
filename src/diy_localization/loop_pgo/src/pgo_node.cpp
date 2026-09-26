@@ -33,19 +33,6 @@ struct NodeConfig
     double gravity_magnitude = 9.81;
     double shock_accel_deviation_threshold = 4.0;
     double shock_cooldown = 0.3;
-    // Ported from map_localizer's own fix for the same problem (see its
-    // CHANGES_REPORT.md, "TF smoothing (no more teleport on recovery)"):
-    // m_pgo->offsetR()/offsetT() can shift instantly whenever
-    // smoothAndUpdate() reoptimizes (every new keyframe, and especially
-    // right after a loop-closure factor is added) -- broadcasting that
-    // directly is what showed up as map->odom TF jumps. <= 0 restores
-    // instant-snap (REP-105-compliant, jump-tolerant) behavior.
-    double offset_smoothing_time_constant = 0.5;
-    // Republish /loop_pgo/corrected_map every N *added* keyframes even with
-    // no loop closure, so RViz shows the map building up incrementally
-    // instead of only ever updating at (rare, and previously invisible)
-    // closure events. 0 disables this and falls back to on-closure-only.
-    int corrected_map_keyframe_interval = 20;
 };
 
 struct NodeState
@@ -54,12 +41,6 @@ struct NodeState
     std::queue<CloudWithPose> cloud_buffer;
     double last_message_time = 0.0;
     double reject_clouds_until = 0.0;
-    // Smoothed map->odom offset actually broadcast over TF -- see
-    // advanceSmoothedOffset(). m_pgo->offsetR()/offsetT() itself is left
-    // untouched (still the raw optimized value everything else uses).
-    M3D last_offset_r = M3D::Identity();
-    V3D last_offset_t = V3D::Zero();
-    rclcpp::Time last_smooth_time;
 };
 
 class PGONode : public rclcpp::Node
@@ -77,25 +58,6 @@ public:
             m_node_config.imu_topic, rclcpp::SensorDataQoS(),
             std::bind(&PGONode::imuCB, this, std::placeholders::_1));
         m_loop_marker_pub = this->create_publisher<visualization_msgs::msg::MarkerArray>("/loop_pgo/loop_markers", 10000);
-        // Live view of the ACTUAL, currently-optimized map (every keyframe's
-        // stored body cloud re-transformed by its latest post-ISAM2 global
-        // pose) -- republished whenever a loop closure updates the graph, so
-        // the real alignment at the seam can be watched directly in RViz
-        // instead of inferred from ICP fitness or requiring a save_maps call.
-        // transient_local so a late-subscribing RViz still gets the last one.
-        m_corrected_map_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-            "/loop_pgo/corrected_map", rclcpp::QoS(1).reliable().transient_local());
-        // Live "what is loop closure comparing right now" view: target submap
-        // (intensity=0) + source submap aligned by the best ICP guess found
-        // so far (intensity=100), republished on EVERY searchForLoopPairs()
-        // call that reaches ICP -- whether that candidate is ultimately
-        // accepted or rejected by a later gate. Unlike /loop_pgo/corrected_map
-        // (only ever published after a closure is actually accepted, which is
-        // why it sat publishing nothing while closures never fired), this is
-        // meant for watching proximity/loop-closure detection happen live in
-        // RViz, including rejected attempts, while tuning thresholds.
-        m_loop_candidate_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-            "/loop_pgo/loop_candidate_cloud", rclcpp::QoS(1).reliable().transient_local());
         m_tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
         m_sync = std::make_shared<message_filters::Synchronizer<message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, nav_msgs::msg::Odometry>>>(message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, nav_msgs::msg::Odometry>(10), m_cloud_sub, m_odom_sub);
         m_sync->setAgePenalty(0.1);
@@ -125,10 +87,6 @@ public:
         m_node_config.gravity_magnitude = config["gravity_magnitude"].as<double>(9.81);
         m_node_config.shock_accel_deviation_threshold = config["shock_accel_deviation_threshold"].as<double>(4.0);
         m_node_config.shock_cooldown = config["shock_cooldown"].as<double>(0.3);
-        m_node_config.offset_smoothing_time_constant = config["offset_smoothing_time_constant"] ?
-            config["offset_smoothing_time_constant"].as<double>() :
-            m_node_config.offset_smoothing_time_constant;
-        m_node_config.corrected_map_keyframe_interval = config["corrected_map_keyframe_interval"].as<int>(20);
 
         m_pgo_config.key_pose_delta_deg = config["key_pose_delta_deg"].as<double>();
         m_pgo_config.key_pose_delta_trans = config["key_pose_delta_trans"].as<double>();
@@ -148,7 +106,8 @@ public:
         m_pgo_config.icp_correspondence_randomness = config["icp_correspondence_randomness"].as<int>(20);
         m_pgo_config.icp_max_iterations = config["icp_max_iterations"].as<int>(50);
         m_pgo_config.icp_transformation_epsilon = config["icp_transformation_epsilon"].as<double>(1e-6);
-        m_pgo_config.max_icp_correction_from_guess_deg = config["max_icp_correction_from_guess_deg"].as<double>(45.0);
+        m_pgo_config.hessian_degeneracy_ratio_threshold = config["hessian_degeneracy_ratio_threshold"].as<double>(0.05);
+        m_pgo_config.hessian_max_variance = config["hessian_max_variance"].as<double>(4.0);
     }
 
     void imuCB(const sensor_msgs::msg::Imu::ConstSharedPtr &imu_msg)
@@ -200,8 +159,8 @@ public:
         transformStamped.header.frame_id = m_node_config.map_frame;
         transformStamped.child_frame_id = m_node_config.local_frame;
         transformStamped.header.stamp = time;
-        Eigen::Quaterniond q(m_state.last_offset_r);
-        V3D t = m_state.last_offset_t;
+        Eigen::Quaterniond q(m_pgo->offsetR());
+        V3D t = m_pgo->offsetT();
         transformStamped.transform.translation.x = t.x();
         transformStamped.transform.translation.y = t.y();
         transformStamped.transform.translation.z = t.z();
@@ -276,91 +235,6 @@ public:
         m_loop_marker_pub->publish(marker_array);
     }
 
-    // Rebuilds and republishes the FULL map from every keyframe's stored
-    // body_cloud, transformed by its CURRENT (post-optimization) global
-    // pose. Reuses getSubMap() with a half_range covering the whole
-    // trajectory -- no separate "full map" logic needed in SimplePGO. Only
-    // called right after a loop closure actually updated the graph (see
-    // timerCB()), not every keyframe, since it's O(all points so far) and
-    // only meaningful to re-publish when something changed.
-    void publishCorrectedMap(builtin_interfaces::msg::Time &time)
-    {
-        // Deliberately NOT gated on get_subscription_count(): this is only
-        // called on an accepted loop closure (rare), and transient_local's
-        // whole point is that a RViz added AFTER that moment still gets the
-        // last one -- which requires publish() to have actually run while
-        // no one was listening yet.
-        if (m_pgo->keyPoses().empty())
-            return;
-
-        CloudType::Ptr merged = m_pgo->getSubMap(
-            static_cast<int>(m_pgo->keyPoses().size()) - 1,
-            static_cast<int>(m_pgo->keyPoses().size()),
-            m_pgo_config.submap_resolution);
-
-        sensor_msgs::msg::PointCloud2 cloud_msg;
-        pcl::toROSMsg(*merged, cloud_msg);
-        cloud_msg.header.frame_id = m_node_config.map_frame;
-        cloud_msg.header.stamp = time;
-        m_corrected_map_pub->publish(cloud_msg);
-    }
-
-    // See m_loop_candidate_pub's construction comment -- published every
-    // cycle a candidate reached ICP, accepted or not.
-    void publishLoopCandidateCloud(builtin_interfaces::msg::Time &time)
-    {
-        if (!m_pgo->hasCandidateCloudsThisCycle())
-            return;
-        if (m_loop_candidate_pub->get_subscription_count() > 0)
-        {
-            CloudType::Ptr merged(new CloudType);
-            *merged += *m_pgo->candidateTargetCloud();
-            *merged += *m_pgo->candidateSourceCloud();
-            sensor_msgs::msg::PointCloud2 cloud_msg;
-            pcl::toROSMsg(*merged, cloud_msg);
-            cloud_msg.header.frame_id = m_node_config.map_frame;
-            cloud_msg.header.stamp = time;
-            m_loop_candidate_pub->publish(cloud_msg);
-        }
-        m_pgo->clearCandidateCloudsFlag();
-    }
-
-    // Blends m_state.last_offset_r/t toward the current m_pgo->offsetR()/
-    // offsetT() (the raw, possibly just-jumped optimized value) instead of
-    // snapping to it in one TF tick. Same exponential-smoothing math as
-    // map_localizer's advanceSmoothedOffset().
-    void advanceSmoothedOffset()
-    {
-        const rclcpp::Time now = this->now();
-        if (m_state.last_smooth_time.nanoseconds() == 0)
-        {
-            m_state.last_smooth_time = now;
-            m_state.last_offset_r = m_pgo->offsetR();
-            m_state.last_offset_t = m_pgo->offsetT();
-            return;
-        }
-
-        const double dt = (now - m_state.last_smooth_time).seconds();
-        m_state.last_smooth_time = now;
-        if (dt <= 0.0 || dt > 1.0)
-            return;
-
-        if (m_node_config.offset_smoothing_time_constant <= 0.0)
-        {
-            m_state.last_offset_r = m_pgo->offsetR();
-            m_state.last_offset_t = m_pgo->offsetT();
-            return;
-        }
-
-        const double alpha = 1.0 - std::exp(-dt / m_node_config.offset_smoothing_time_constant);
-        m_state.last_offset_t = (1.0 - alpha) * m_state.last_offset_t + alpha * m_pgo->offsetT();
-        Eigen::Quaterniond current(m_state.last_offset_r);
-        Eigen::Quaterniond target(m_pgo->offsetR());
-        current.normalize();
-        target.normalize();
-        m_state.last_offset_r = current.slerp(alpha, target).toRotationMatrix();
-    }
-
     void timerCB()
     {
         // Was `std::lock_guard<std::mutex>(m_state.message_mutex);` (no
@@ -388,38 +262,17 @@ public:
         cur_time.nanosec = cp.pose.nsec;
         if (!m_pgo->addKeyPose(cp))
         {
-
-            advanceSmoothedOffset();
             sendBroadCastTF(cur_time);
             return;
         }
 
         m_pgo->searchForLoopPairs();
 
-        // Capture BEFORE smoothAndUpdate() -- it consumes/clears the
-        // pending pairs as part of adding them to the graph, so hasLoop()
-        // would always read false if checked afterward.
-        const bool had_loop_this_cycle = m_pgo->hasLoop();
-
         m_pgo->smoothAndUpdate();
-
-        advanceSmoothedOffset();
 
         sendBroadCastTF(cur_time);
 
         publishLoopMarkers(cur_time);
-
-        publishLoopCandidateCloud(cur_time);
-
-        // On-closure publish always fires (rare, and the one case that must
-        // never be missed); the periodic one is just for incremental
-        // feedback between closures, so skip it on a cycle already covered
-        // by the former to avoid rebuilding the full map twice in one tick.
-        const size_t n = m_pgo->keyPoses().size();
-        const bool periodic_due = m_node_config.corrected_map_keyframe_interval > 0 &&
-                                   n % static_cast<size_t>(m_node_config.corrected_map_keyframe_interval) == 0;
-        if (had_loop_this_cycle || periodic_due)
-            publishCorrectedMap(cur_time);
     }
 
     void saveMapsCB(const std::shared_ptr<slam_interfaces::srv::SaveMaps::Request> request, std::shared_ptr<slam_interfaces::srv::SaveMaps::Response> response)
@@ -493,8 +346,6 @@ private:
     std::shared_ptr<SimplePGO> m_pgo;
     rclcpp::TimerBase::SharedPtr m_timer;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr m_loop_marker_pub;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_corrected_map_pub;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_loop_candidate_pub;
     rclcpp::Service<slam_interfaces::srv::SaveMaps>::SharedPtr m_save_map_srv;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr m_imu_sub;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> m_cloud_sub;
