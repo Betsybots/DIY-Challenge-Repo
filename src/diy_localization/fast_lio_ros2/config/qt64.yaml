@@ -113,7 +113,7 @@
             # explanation for why fast linear/angular motion produces badly
             # distorted scans (map_localizer rough fitness scores up to ~1.2,
             # vs. a 0.2 threshold) with nothing catching/rolling them back.
-            reject_low_quality_scans: true
+            reject_low_quality_scans: false
             # Leave the gate enabled, but keep it realistic for a moving vehicle.
             # A 4.0 m/s^2 threshold is too strict for normal acceleration during
             # turns / starts / stops, which causes false shock detections and scan

@@ -26,6 +26,21 @@ def generate_launch_description():
                 ("/cloud", "/cloud_registered_body")
             ],
         ),
+            #ros2 run pcl_ros pcd_to_pointcloud   
+            # --ros-args   -p file_name:=/home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/refined_map.pcd  
+            # -p publish_rate:=1.0 
+            # -r cloud_pcd:=/mapcloud 
+            # -p tf_frame:=map
+        Node( 
+            package="pcl_ros",
+            executable="pcd_to_pointcloud",
+            name="pcd_to_pointcloud",
+            output="screen",
+            parameters=[config_file],
+            remappings=[
+                ("/cloud_pcd", "/mapcloud")
+            ]
+        ),
         Node(
             package="rviz2",
             executable="rviz2",
@@ -35,4 +50,5 @@ def generate_launch_description():
             ])],
             condition=IfCondition(LaunchConfiguration("use_rviz")),
         ),
+
     ])

@@ -14,5 +14,7 @@ obj_to_pointcloud:
     downsample_grid: 0.1
 pcd_to_pointcloud:
   ros__parameters:
-    frame_id: "map"
+    file_name: "/home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/refined_map.pcd"
+    publish_rate: 1.0
+    tf_frame: "map"
     latch: true
