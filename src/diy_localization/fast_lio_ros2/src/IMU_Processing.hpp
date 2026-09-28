@@ -68,6 +68,15 @@ class ImuProcess
   // cooldown window after a shock clears, instead of trusting the very next
   // scan immediately even though the pose may not have fully reconverged.
   double getLastShockTime() const { return last_shock_time_; }
+  // TEMP DIAGNOSIS INSTRUMENTATION (2026-09-24 bag replay investigation):
+  // last per-interval gyro/accel magnitudes, regardless of whether they
+  // tripped a shock. Remove once the diagnosis is complete.
+  double getLastGyroNorm() const { return last_gyro_norm_; }
+  double getLastAccelDeviation() const { return last_accel_deviation_; }
+  // Yaw-axis-only (IMU frame z) angular rate, to disambiguate a pure
+  // gyro/scan-matching scale-factor error from 3-axis vibration/roll/pitch
+  // contamination in getLastGyroNorm().
+  double getLastGyroZ() const { return last_gyro_z_; }
   Eigen::Matrix<double, 12, 12> Q;
   void Process(const MeasureGroup &meas,  esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI::Ptr pcl_un_);
 
@@ -111,6 +120,10 @@ class ImuProcess
   bool   last_had_accel_shock_ = false;
   bool   last_had_gyro_shock_ = false;
   double last_shock_time_ = -1e9;
+  // TEMP DIAGNOSIS INSTRUMENTATION -- see getLastGyroNorm()/getLastAccelDeviation().
+  double last_gyro_norm_ = 0.0;
+  double last_accel_deviation_ = 0.0;
+  double last_gyro_z_ = 0.0;
 };
 
 ImuProcess::ImuProcess()
@@ -315,6 +328,10 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
     const bool accel_shock_this_step = std::abs(acc_avr.norm() - gravity_mag_) > shock_accel_deviation_threshold_;
     const bool gyro_shock_this_step = angvel_avr.norm() > shock_gyro_threshold_;
     const bool shock_this_step = accel_shock_this_step || gyro_shock_this_step;
+    // TEMP DIAGNOSIS INSTRUMENTATION -- see getLastGyroNorm()/getLastAccelDeviation().
+    last_gyro_norm_ = angvel_avr.norm();
+    last_accel_deviation_ = std::abs(acc_avr.norm() - gravity_mag_);
+    last_gyro_z_ = angvel_avr.z();
     if (shock_this_step)
     {
       last_had_shock_ = true;

@@ -121,8 +121,9 @@ def generate_launch_description():
                     ),
                 ]
             ),
-            # EKF: /wheel_odom (vx, vyaw) + /imu/data (vyaw, down-weighted)
-            # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_footprint TF.
+            # EKF: gated FAST-LIO2 body twist + /wheel_odom vx + bias-corrected
+            # /imu/data yaw rate → /odom + odom→base_footprint TF; see
+            # diy_state_estimate/config/ekf_fusion.yaml.
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(

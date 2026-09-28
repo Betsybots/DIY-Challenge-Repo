@@ -1,5 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# ekf_fusion.yaml — single odom-frame EKF: wheel + IMU yaw-rate + FAST-LIO2
+# ekf_fusion.yaml — single odom-frame EKF: gated FAST-LIO2 body twist,
+#                   wheel forward speed, bias-corrected gyro yaw rate
 # ─────────────────────────────────────────────────────────────────────────────
 # OUTPUT
 #   /odom                       (remapped from odometry/filtered in the launch file)
@@ -12,19 +13,35 @@
 #                          base_link -> (sensors, wheels, etc.)
 #
 # INPUTS (topics are overridden from the launch file; values here are the
-# defaults that match it)
-#   odom0  /wheel_odom      differential-drive encoders — VELOCITY ONLY (vx, vyaw).
-#                           Wheel-integrated position drifts and slips; the
-#                           lidar pose corrects position, the wheels anchor
-#                           velocity. This is what stops a moving obstacle from
-#                           "moving" a stationary robot.
-#   imu0   /imu/data_ekf    ACEINNA gyro via sensor_covariance_relay — YAW RATE
-#                           ONLY. FAST-LIO2 already fuses the full IMU, so this
-#                           is deliberately down-weighted (see relay floor) and
-#                           only there to bridge wheel slip between lidar fixes.
-#   odom1  /lidar_odom_ekf  FAST-LIO2 /Odometry via sensor_covariance_relay —
-#                           PLANAR POSE ONLY (x, y, yaw). FAST-LIO2 does not fill
-#                           the twist field, so velocities are not available.
+# defaults that match it). All three come through sensor_covariance_relay.
+#   odom0  /lidar_twist_ekf  FAST-LIO2 body twist (vx, vy, vyaw) derived from
+#                           consecutive /Odometry poses. PRIMARY motion input.
+#                           The relay checks each step against the wheels and
+#                           gyro and gives any disagreeing component a huge
+#                           variance, so the EKF ignores it for that step.
+#   odom1  /wheel_odom_ekf   encoders, vx variance floored to 0.04. Fused: vx
+#                           and vy (= 0, diff-drive no-sideslip).
+#   imu0   /imu/data_ekf     gyro with z bias removed, variance floored.
+#                           Fused: vyaw. MAIN heading source.
+#
+# WHY (2026-09-27, scripts/bags/speed-course run-1/run-2; offline tests in
+# scripts/testing-scripts/map_sharpness_compare.py). Stacking the raw LiDAR
+# scans along each candidate trajectory and scoring wall sharpness:
+#   * FAST-LIO2 alone: sharpest walls, but in the long straight corridor it
+#     slides backward (LiDAR cannot see along-corridor motion); run-2 ended
+#     11.2 m from its start.
+#   * wheel vx + gyro heading: closes the lap to <1 m but visibly doubles
+#     walls in places -- its errors cancel over a lap, not locally correct.
+#   * FAST-LIO2 motion, falling back to wheel vx / gyro yaw rate only when
+#     FAST-LIO2 disagrees with them (this config): walls as sharp as
+#     FAST-LIO2, corridor ghost removed, run-2 end error 3.0 m.
+# Weighting (after update rates, 10 Hz vs 100 / 200 Hz): FAST-LIO2 ~10x the
+# wheels on vx; the gyro ~250x FAST-LIO2 on vyaw. The gyro leads heading
+# because FAST-LIO2's yaw drifted ~45 deg through a hairpin on a re-timed
+# run-2 replay -- gradually enough to pass the relay's per-step gate -- while
+# the bias-corrected gyro closed both laps at -360 deg. Remaining
+# drift (a few m per ~112 m lap) is for map_localizer (map -> odom).
+# No absolute pose is fused, so /odom stays smooth and continuous (REP-105).
 #
 # Filter choice: plain EKF (robot_localization ekf_node). Planar diff-drive at
 # competition speeds is close to linear between 30 Hz updates; a UKF adds
@@ -54,69 +71,51 @@ ekf_filter_node:
     world_frame: odom
 
 
-    # ── odom0: wheel encoders — velocity only ──────────────────────────────
-    # 2026-09-24: THIS BLOCK, and the ekf_node parameter override in
-    # ekf_fusion.launch.py that pointed odom0 at wheel_odom_topic, were both
-    # found commented out -- i.e. wheel odometry was NOT being fused at all,
-    # despite the file header above and every other comment in this repo
-    # documenting it as one of three required inputs. Without it, the only
-    # source of vx between FAST-LIO2's ~10 Hz pose corrections was the
-    # process model's own accel (ax) integration, which drifts fast (double
-    # integration of noisy/biased accelerometer data) -- the predicted state
-    # would run away from the true pose between LiDAR fixes, and
-    # odom1_pose_rejection_threshold's Mahalanobis gate would then start
-    # rejecting perfectly good FAST-LIO2 corrections for "disagreeing too
-    # much" with that already-diverged prediction. That is a direct,
-    # mechanism-level explanation for "odom and base_link stay a constant
-    # ~0.8 m apart" -- a stable EKF divergence, not just sensor noise.
-    # Re-enabled to restore the documented 3-sensor design.
-    odom0: /wheel_odom
+    # FAST-LIO2 twist arrives ~0.1-0.5 s after the scan it describes;
+    # re-run the filter from that time instead of applying it late.
+    smooth_lagged_data: true
+    history_length: 1.0
+
+    # ── odom0: FAST-LIO2 body twist (gated by the relay) ─────────────────
+    # No EKF rejection threshold: gating is done in the relay against the
+    # wheels/gyro directly (an EKF gate compares to the fused state, which
+    # this input dominates, so a gradual slide would drag the state along).
+    odom0: /lidar_twist_ekf
     odom0_config: [false, false, false,
                    false, false, false,
-                   true,  false, false,
+                   true,  true,  false,
                    false, false, true,
                    false, false, false]
     odom0_queue_size: 10
-    odom0_nodelay: true
+    odom0_nodelay: false
     odom0_differential: false
     odom0_relative: false
-    # Mahalanobis gate on the twist. 3-sigma: a genuine encoder glitch is
-    # dropped, normal slip noise is not.
-    odom0_twist_rejection_threshold: 3.0
 
-    # ── imu0: gyro yaw rate only (covariance floored by the relay) ─────────
+    # ── odom1: wheel encoders — forward speed (+ no-sideslip vy = 0) ───────
+    odom1: /wheel_odom_ekf
+    odom1_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, false,
+                   false, false, false]
+    odom1_queue_size: 20
+    odom1_nodelay: true
+    odom1_differential: false
+    odom1_relative: false
+
+    # ── imu0: gyro yaw rate only (bias removed, variance floored by relay) ──
+    # No accelerations: raw ax/ay include gravity on the ramps.
     imu0: /imu/data_ekf
     imu0_config: [false, false, false,
                   false, false, false,
                   false, false, false,
                   false, false, true,
-                  true, false, false]
-    imu0_queue_size: 10
+                  false, false, false]
+    imu0_queue_size: 20
     imu0_nodelay: true
     imu0_differential: false
     imu0_relative: false
     imu0_remove_gravitational_acceleration: false   # accel not fused
-    imu0_twist_rejection_threshold: 3.0
-
-    # ── odom1: FAST-LIO2 planar pose (covariance floored by the relay) ─────
-    odom1: /lidar_odom_ekf
-    odom1_config: [true,  true,  false,
-                   false, false, true,
-                   false, false, false,
-                   false, false, false,
-                   false, false, false]
-    odom1_queue_size: 5
-    odom1_nodelay: false
-    odom1_differential: false
-    odom1_relative: false
-    # First line of defence against the moving-obstacle case: a lidar pose
-    # that disagrees with the wheel-predicted state by more than this many
-    # sigma is rejected outright. Only meaningful because the relay floors the
-    # lidar covariance to something realistic, AND because odom0 (wheel) is
-    # actually fused above -- otherwise this gates FAST-LIO2 against its own
-    # process-model drift instead of a real independent prediction. Lower →
-    # more aggressive rejection (risk: reject real corrections after slip).
-    odom1_pose_rejection_threshold: 2.0
 
     use_control: false
 
@@ -161,3 +160,20 @@ ekf_filter_node:
                     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,
                     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,
                     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0]
+
+# ── sensor_covariance_relay (diy_state_estimate) ─────────────────────────────
+# The relay prepares the EKF inputs above (gated FAST-LIO2 twist, wheel vx,
+# bias-corrected gyro). ekf_fusion.launch.py loads this file into the relay as
+# well; topic names and the covariance knobs exposed as launch arguments are
+# set there. See the relay's module docstring for every parameter.
+sensor_covariance_relay:
+  ros__parameters:
+    # Wheel stall / spin handling. When FAST-LIO2 says the robot is still but
+    # the wheels say it is moving, trust FAST-LIO2 and (after 0.3 s) ignore
+    # wheel vx. Replay results (2026-09-28):
+    #   true : obstacle run-2 lap error 2.4 -> 1.1 m (fixes the stuck-while-
+    #          manoeuvring case), run-3 1.6 -> 0.6 m; speed course 0.6 ->
+    #          1.4-2.0 m (fires on long straight corridors, where FAST-LIO2
+    #          can also read "still" while the robot moves).
+    #   false: the previous behaviour -- wheels win whenever they disagree.
+    stall_detection: false

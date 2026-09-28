@@ -274,8 +274,11 @@ global_costmap:
         cost_scaling_factor: 3.0
         # Same reasoning as local_costmap's inflation_radius above: must be
         # >= robot_radius (0.22) for the inscribed-obstacle zone to cover the
-        # robot's full body.
-        inflation_radius: 0.30
+        # robot's full body. Set above the footprint's own computed inscribed
+        # radius (~0.225m, per Nav2's own startup warning) so there is an
+        # actual graded cost ring beyond the lethal/inscribed zone, instead of
+        # a near-zero-width buffer.
+        inflation_radius: 0.26
       always_send_full_costmap: True
 
 # local_costmap:

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-ekf_fusion.launch.py — wheel + IMU + FAST-LIO2 → /odom and odom→base_footprint TF
+ekf_fusion.launch.py — wheel + FAST-LIO2 → /odom and odom→base_footprint TF
 ═══════════════════════════════════════════════════════════════════════════
-Starts two nodes:
+Starts three nodes:
 
-  sensor_covariance_relay  floors the IMU gyro and FAST-LIO2 pose covariances
-                           (see diy_state_estimate/sensor_covariance_relay.py)
-  ekf_filter_node          robot_localization EKF, config/ekf_fusion.yaml
+  sensor_covariance_relay  derives a FAST-LIO2 body twist and gates it
+                           against wheels/gyro, removes gyro bias, floors
+                           covariances (diy_state_estimate/sensor_covariance_relay.py)
+  ekf_filter_node          robot_localization EKF, config/ekf_fusion.yaml:
+                           gated FAST-LIO2 vx/vy + wheel vx + gyro vyaw
+  localization_watchdog    holds cmd_vel at zero if /odom diverges
 
 Included from challenge_bringup/master.launch.py. Can also be run alone
 against a bag or the live robot:
@@ -54,6 +57,8 @@ def generate_launch_description():
     # purpose — nothing else should consume them.
     imu_ekf_topic = '/imu/data_ekf'
     lidar_ekf_topic = '/lidar_odom_ekf'
+    lidar_twist_ekf_topic = '/lidar_twist_ekf'
+    wheel_ekf_topic = '/wheel_odom_ekf'
 
     declare_args = [
         DeclareLaunchArgument(
@@ -62,13 +67,13 @@ def generate_launch_description():
             description='robot_localization EKF parameter file'),
         DeclareLaunchArgument(
             'wheel_odom_topic', default_value='/wheel_odom',
-            description='differential-drive encoder odometry (velocities fused)'),
+            description='differential-drive encoder odometry (forward speed vx fused)'),
         DeclareLaunchArgument(
             'imu_topic', default_value='/imu/data',
-            description='ACEINNA IMU topic (yaw rate fused, down-weighted)'),
+            description='ACEINNA IMU topic (bias-corrected yaw rate fused as fallback)'),
         DeclareLaunchArgument(
             'lidar_odom_topic', default_value='/Odometry',
-            description='FAST-LIO2 odometry (planar pose fused)'),
+            description='FAST-LIO2 odometry (differentiated into a gated body twist by the relay)'),
         DeclareLaunchArgument(
             'output_topic', default_value='/odom',
             description='Fused odometry topic consumed by Nav2'),
@@ -77,8 +82,9 @@ def generate_launch_description():
             description='Multiplier on the IMU gyro covariance before flooring'),
         DeclareLaunchArgument(
             'imu_gyro_cov_floor', default_value='0.004',
-            description='Minimum IMU gyro variance (rad/s)^2; wheel yaw-rate '
-                        'covariance is 0.001, so 0.004 ≈ wheels weighted 4x'),
+            description='Minimum IMU gyro variance (rad/s)^2. At 200 Hz vs the '
+                        '10 Hz FAST-LIO2 twist (vyaw var 0.05) the bias-'
+                        'corrected gyro dominates yaw rate (~250x)'),
         DeclareLaunchArgument(
             'lidar_pose_cov_scale', default_value='1.0',
             description='Multiplier on the FAST-LIO2 pose covariance before flooring'),
@@ -103,13 +109,19 @@ def generate_launch_description():
         executable='sensor_covariance_relay',
         name='sensor_covariance_relay',
         output='screen',
-        parameters=[{
+        # ekf_config also carries a sensor_covariance_relay section
+        # (e.g. stall_detection); the dict below overrides it for topics and
+        # the launch-argument covariance knobs.
+        parameters=[ekf_config, {
             'imu_in': imu_topic,
             'imu_out': imu_ekf_topic,
             'imu_gyro_cov_scale': ParameterValue(imu_gyro_cov_scale, value_type=float),
             'imu_gyro_cov_floor': ParameterValue(imu_gyro_cov_floor, value_type=float),
             'lidar_odom_in': lidar_odom_topic,
             'lidar_odom_out': lidar_ekf_topic,
+            'lidar_twist_out': lidar_twist_ekf_topic,
+            'wheel_odom_in': wheel_odom_topic,
+            'wheel_odom_out': wheel_ekf_topic,
             'lidar_pose_cov_scale': ParameterValue(lidar_pose_cov_scale, value_type=float),
             # lidar_pose_cov_floor stays at the node default [0.09, 0.09, 0.04];
             # edit sensor_covariance_relay.py or pass a params file to change it.
@@ -124,12 +136,12 @@ def generate_launch_description():
         parameters=[
             ekf_config,
             {
-                # Was commented out -- meant wheel odometry was never fused
-                # despite odom0 in ekf_fusion.yaml being configured for it
-                # (see that file's own 2026-09-24 comment on this bug).
-                'odom0': wheel_odom_topic,
+                # Gated FAST-LIO2 body twist (primary), wheel forward speed and
+                # bias-corrected gyro yaw rate (fallbacks), all via the relay.
+                # See the header of config/ekf_fusion.yaml.
+                'odom0': lidar_twist_ekf_topic,
+                'odom1': wheel_ekf_topic,
                 'imu0': imu_ekf_topic,
-                'odom1': lidar_ekf_topic,
             },
         ],
         remappings=[('odometry/filtered', output_topic)],
