@@ -1,0 +1,11 @@
+<library path="wall_follower_controller_plugin">
+  <class
+    type="wall_follower_controller::WallFollowerController"
+    base_class_type="nav2_core::Controller">
+    <description>
+      Ackermann speed-course controller that combines global-path pure-pursuit
+      feedforward with robust left/right LiDAR wall centering, curvature-preview
+      speed control, and footprint collision prediction.
+    </description>
+  </class>
+</library>
