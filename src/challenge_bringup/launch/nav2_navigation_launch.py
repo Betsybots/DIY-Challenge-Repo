@@ -98,7 +98,7 @@ def generate_launch_description():
 
     declare_params_file_cmd = DeclareLaunchArgument(
         'params_file',
-        default_value=os.path.join(bringup_dir, 'config', 'nav2_params-new.yaml'),
+        default_value=os.path.join(bringup_dir, 'config', 'nav2_params_3d_ackermann.yaml'),
         description='Full path to the ROS2 parameters file to use for all launched nodes')
 
     declare_override_params_file_cmd = DeclareLaunchArgument(
