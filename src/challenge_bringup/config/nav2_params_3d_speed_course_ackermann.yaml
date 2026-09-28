@@ -17,7 +17,7 @@ bt_navigator:
   ros__parameters:
     use_sim_time: False
     global_frame: map
-    robot_base_frame: base_footprint
+    robot_base_frame: base_link
     odom_topic: /odom
     bt_loop_duration: 10
     default_server_timeout: 20
@@ -148,7 +148,7 @@ local_costmap:
       update_frequency: 10.0
       publish_frequency: 5.0
       global_frame: odom
-      robot_base_frame: base_footprint
+      robot_base_frame: base_link
       rolling_window: true
       width: 6.0
       height: 6.0
@@ -207,7 +207,7 @@ global_costmap:
 map_server:
   ros__parameters:
     use_sim_time: False
-    yaml_filename: "/home/juggernauts/DIY-Challenge-Repo/src/challenge_bringup/maps/global_map.yaml"
+    yaml_filename: "$(find-pkg-share challenge_bringup)/maps/speed_run1_ekf_map.yaml"
 
 map_saver:
   ros__parameters:
@@ -285,7 +285,7 @@ behavior_server:
     wait:
       plugin: "nav2_behaviors/Wait"
     global_frame: odom
-    robot_base_frame: base_footprint
+    robot_base_frame: base_link
     transform_tolerance: 0.10
     simulate_ahead_time: 2.0
 

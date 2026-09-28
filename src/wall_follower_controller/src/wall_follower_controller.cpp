@@ -271,6 +271,15 @@ nav_msgs::msg::Path WallFollowerController::transformPlan(
   return transformed;
 }
 
+double WallFollowerController::pointCurvature(const LocalPathPoint & point)
+{
+  const double squared_distance = point.x * point.x + point.y * point.y;
+  if (squared_distance < 1e-6) {
+    return 0.0;
+  }
+  return 2.0 * point.y / squared_distance;
+}
+
 std::vector<WallFollowerController::LocalPathPoint>
 WallFollowerController::buildLocalPath(
   const geometry_msgs::msg::PoseStamped & pose,
@@ -279,15 +288,6 @@ WallFollowerController::buildLocalPath(
   std::vector<LocalPathPoint> local_path;
   if (transformed_plan_.poses.empty()) {
     return local_path;
-  }
-
-  double WallFollowerController::pointCurvature(const LocalPathPoint & point)
-  {
-    const double squared_distance = point.x * point.x + point.y * point.y;
-    if (squared_distance < 1e-6) {
-      return 0.0;
-    }
-    return 2.0 * point.y / squared_distance;
   }
 
   std::size_t closest_index = 0;
