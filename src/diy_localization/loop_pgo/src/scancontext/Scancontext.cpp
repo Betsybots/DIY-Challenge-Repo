@@ -319,8 +319,14 @@ std::pair<int, float> SCManager::detectLoopClosureID ( void )
         loop_id = nn_idx; 
     
         // std::cout.precision(3); 
-        cout << "[Loop found] Nearest distance: " << min_dist << " btn " << polarcontexts_.size()-1 << " and " << nn_idx << "." << endl;
-        cout << "[Loop found] yaw diff: " << nn_align * PC_UNIT_SECTORANGLE << " deg." << endl;
+        // NOTE: this is only a preliminary ScanContext descriptor-distance candidate --
+        // it has NOT yet passed ICP verification or the consistency-count check in
+        // simple_pgo.cpp's searchForLoopPairs(), so it is not necessarily a real revisit
+        // (the source keyframe can still be meters away from the target here). Labeled
+        // "[Loop candidate]", distinct from simple_pgo.cpp's "[Loop found]" WARN, which
+        // only fires once a candidate is fully accepted as a pose-graph edge.
+        cout << "[Loop candidate] Nearest distance: " << min_dist << " btn " << polarcontexts_.size()-1 << " and " << nn_idx << "." << endl;
+        cout << "[Loop candidate] yaw diff: " << nn_align * PC_UNIT_SECTORANGLE << " deg." << endl;
     }
     else
     {

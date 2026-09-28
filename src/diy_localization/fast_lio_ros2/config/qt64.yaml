@@ -10,6 +10,14 @@
         # The frontend uses an iterated EKF to fit the current scan to the map.
         # Raised from 3: more iterated-EKF passes per scan improve plane-fit
         # convergence during fast rotation, at a small CPU cost.
+        # 2026-09-25: tested raising further (7->15) + finer filter_size_surf/map
+        # (0.1/0.15 -> 0.05/0.08) as a fix for scan-to-scan wall-thickness jitter
+        # found via loop_pgo/map_hba investigation. Measured result: consistently
+        # SLIGHTLY WORSE wall thickness in every tested region (e.g. 18.6->25.2cm),
+        # not better -- reverted. Finer voxels likely remove the implicit spatial
+        # averaging/denoising coarser voxels provide, letting the matcher converge
+        # more precisely to per-scan noise instead of the true surface. Root cause
+        # of the jitter itself is still open -- see session notes/README.
         max_iteration: 7                     #5 and 10 working good/best
         filter_size_surf: 0.1                #0.3                # Voxel filter size for surf points
         filter_size_map:  0.15                #0.3                # Voxel filter size for the map points
@@ -29,7 +37,13 @@
             # Verify your IMU driver's angular_velocity units before running:
             # treating deg/s data as rad/s (or vice versa) causes large
             # stationary drift (a ~57x scale error).
-            imu_gyr_unit: "deg"          # "rad" or "deg"
+            imu_gyr_unit: "rad"          # "rad" or "deg" -- CONFIRMED 2026-09-24: this bag's
+            # /imu/data angular_velocity + its own published covariance
+            # (stationary noise ~2e-4 rad/s; peak turn ~0.9 rad/s, matching
+            # the same turns' wheel-odom |wz| order of magnitude) are
+            # unambiguously rad/s. The committed "deg" here made imu_cbk()
+            # multiply every gyro sample by pi/180 (~57x too small) before it
+            # ever reached the filter.
 
         preprocess:
             lidar_type: 3                # 3: Hesai QT64
@@ -43,6 +57,11 @@
             blind: 0.5                   # Blind zone of the LiDAR in meters (QT64 has a blind zone of ~1 m)
 
         mapping:
+            # 2026-09-25: tested 0.1 -> 0.02 for both acc_cov/gyr_cov (see history for
+            # reasoning -- the gyr_cov comment below cites the now-fixed imu_gyr_unit bug
+            # as a reason to keep this high, which no longer applies). Measured result:
+            # no meaningful change to scan-to-scan wall-thickness jitter (mixed,
+            # mostly-flat/slightly-worse across all tested regions) -- reverted to 0.1/0.1.
             acc_cov: 0.1
             # gyr_cov is the gyro measurement/process-noise variance in
             # (rad/s)^2: how much the EKF trusts gyro-driven propagation
@@ -57,6 +76,10 @@
             b_gyr_cov: 0.0001
             fov_degree: 360.0   # Field of view of the LiDAR in degrees
             det_range: 10.0      #30.0   # Detection range of the LiDAR in meters (QT64 is a short-range LiDAR, ~30 m max)
+            # 2026-09-24: confirmed this bag's own point cloud never exceeds ~8.5 m range --
+            # det_range:10.0 is not limiting anything for this data; raising it would be a
+            # no-op here. Left at 10.0; only worth revisiting if a future bag/course actually
+            # produces returns beyond it.
             # Online LiDAR-IMU extrinsic estimation needs rich 6-DOF excitation
             # (rotation about all axes). Motion that is mostly translational
             # (e.g. back-and-forth driving) cannot observe the rotational
@@ -64,22 +87,74 @@
             # transform and can cascade into "No Effective Points" / pure-IMU
             # drift. Keep this false and provide a good initial extrinsic
             # below unless your platform will undergo rich 6-DOF motion.
-            extrinsic_est_en: false
+            extrinsic_est_en: false          # 2026-09-25: back off after the identity-start
+            # experiment below identified which components are actually observable. See the
+            # extrinsic_R/T notes for what was concluded and baked in.
             #extrinsic_T: [0.0, 0.0298, -0.13795]
-            extrinsic_T: [-0.0209, 0.0469, -0.1067]
+            # 2026-09-25: flipped the Z sign. offset_T_L_I is the LiDAR origin's position
+            # expressed in the IMU's OWN local axes (confirmed from
+            # p_global = rot*(offset_R_L_I*p_body + offset_T_L_I) + pos in laserMapping.cpp).
+            # The IMU's own +Z reads +9.80 m/s^2 at rest in this bag's /imu/data (i.e. +Z is
+            # physically up), and the LiDAR is mounted physically ABOVE the IMU -- so this
+            # value should be positive, not the previously-committed -0.1067. This alone (with
+            # X/Y unchanged) cut the closed-loop position error from ~10-12m to 3.28m.
+            # Then replaced X/Y/Z with values visually confirmed in RViz to align
+            # /cloud_registered_body against the raw /lidar_points while stationary.
+            extrinsic_T: [0.055, 0.012, 0.152]
             # Rotation from the LiDAR frame to the (raw) IMU frame (row-major).
             # FAST-LIO applies this as: p_imu = extrinsic_R * p_lidar + extrinsic_T
             # (see offset_R_L_I / offset_T_L_I in laserMapping.cpp), so both
             # extrinsic_R and extrinsic_T must be expressed in the raw IMU frame.
             #
+            # 2026-09-25: ran extrinsic_est_en:true TWICE more -- once starting from the
+            # baked-in value above (biased start), once starting from identity/zero (neutral
+            # start) -- and logged pose (x,y,yaw) alongside the extrinsic every scan (not just
+            # throttled) to see which components are actually observable vs. just drifting
+            # with whatever they were initialized to:
+            #   - PITCH (rotation about the LiDAR's Y axis) converged to the SAME ~-1.0 to
+            #     -1.3 deg regardless of starting point (neutral-start settled region t>=90s:
+            #     mean -1.056 deg, std only 0.028 deg over 675 samples/65+ s) -- a real,
+            #     robustly observed miscalibration.
+            #   - ROLL and YAW did NOT converge consistently -- very different final values
+            #     depending on starting point, and ~8-10x noisier (std ~0.23-0.27 deg) than
+            #     pitch even within one run -- NOT reliably observable from this bag's motion,
+            #     any specific converged value for these is likely just wherever it started.
+            #   - extrinsic_T barely moved from its initial value in EITHER experiment (stayed
+            #     near hardcoded when started there, stayed near zero when started at zero) --
+            #     NOT observable from this bag either way. This confirms the ~10-12m position
+            #     loop-closure error (see below) is not an extrinsic-translation calibration
+            #     bug -- the filter has no signal telling it to move T anywhere.
+            # CONCLUSION: only bake in the pitch correction (isolated, roll/yaw left at
+            # identity); keep extrinsic_T at the original physically-measured value above
+            # rather than either online estimate, since neither is trustworthy. Still not a
+            # substitute for a proper offline LiDAR-IMU calibration procedure.
 
-            # Old values
+            # Old values (hardcoded, pre-2026-09-24 diagnosis)
             # extrinsic_R: [1.0, 0.0, 0.0,
             #               0.0, 1.0, 0.0,
             #               0.0, 0.0, 1.0]
-            extrinsic_R: [0.998992, -0.044454, -0.006237,
-                        0.044420,  0.998998, -0.005500,
-                        0.006475,  0.005218,  0.999965]
+            # extrinsic_R: [0.998992, -0.044454, -0.006237,
+            #             0.044420,  0.998998, -0.005500,
+            #             0.006475,  0.005218,  0.999965]
+            # Baked-in online-estimated value (2026-09-24 full estimate, superseded --
+            # roll/yaw components not trustworthy, see note above):
+            # extrinsic_R: [0.9993422, -0.03391722, -0.01283691,
+            #             0.03366458,  0.99924468, -0.01941043,
+            #             0.01348556,  0.01896551,  0.99972919]
+            # 2026-09-25: isolated -1.05 deg rotation about the LiDAR's Y axis (pitch) only --
+            # the one component confirmed to converge consistently regardless of starting
+            # extrinsic (see note above). Roll/yaw left at identity (0 deg).
+            # extrinsic_R: [0.9998321, 0.0, -0.0183249,
+            #             0.0, 1.0, 0.0,
+            #             0.0183249, 0.0, 0.9998321]
+            # TEMP EXPERIMENT (2026-09-25): identity, to check whether the pitch correction
+            # above still matters now that the much larger IMU gyro_z yaw-sign bug is fixed
+            # (see imu_yaw_sign_fix_relay.py test) -- much of what the earlier online
+            # extrinsic-estimation experiments attributed to "pitch miscalibration" may have
+            # actually been the filter compensating for the corrupted yaw signal.
+            extrinsic_R: [1.0, 0.0, 0.0,
+                        0.0, 1.0, 0.0,
+                        0.0, 0.0, 1.0]
 
 
         publish: 
@@ -112,8 +187,47 @@
             # A 4.0 m/s^2 threshold is too strict for normal acceleration during
             # turns / starts / stops, which causes false shock detections and scan
             # rejection even when the cloud itself is valid.
-            min_effective_features: 10                # 10
-            max_mean_residual:  1.0                  # 1.0
+            # 2026-09-26: tried raising 10 -> 150 to catch the ~5-56 feature
+            # collapses found during the speed-course's periodic ~2.7s LiDAR
+            # dropout bursts (see frontend.accumulate_on_low_points below for
+            # the real root cause and the fix actually adopted). REVERTED:
+            # confirmed via a second full-run replay of run-2 that 150 is
+            # dangerously aggressive -- it caused 1347/1937 scans (~70%) to be
+            # rejected, and once enough CONSECUTIVE scans reject in a row, the
+            # filter runs on unconstrained IMU-only dead reckoning long enough
+            # to diverge from the persistent map; every subsequent scan's ICP
+            # then fails against the now-wrong pose (features crashing to
+            # exactly 0), which is unrecoverable (FAST-LIO2 has no built-in
+            # relocalization) -- confirmed as a smoothly ACCELERATING runaway
+            # trajectory (path_length blew up to ~110,800m vs wheel odometry's
+            # 111.3m). Back to 10: this frontend gate should stay a narrow
+            # backstop, not the primary defense against the dropout -- that is
+            # what frontend.accumulate_on_low_points is for instead.
+            # 2026-09-27: testing 60 as a middle ground -- catches nearly as many
+            # real dropout scans as 150 did (run-1: 10 vs 16 scans <60 vs <150;
+            # run-2: 8 vs 16) while staying well clear of legitimate low-normal
+            # scans. NOTE: the run-2 catastrophic divergence traced to a single
+            # scan with features=92 (above even 150), rejected instead via the
+            # SEPARATE max_imu_gap condition -- so no min_effective_features
+            # value alone would have prevented that event; it is unrelated to
+            # this threshold. Validate across >=2 replay passes per bag before
+            # trusting any single result (this repo's own replay is confirmed
+            # non-deterministic run-to-run -- see qt64.yaml's other notes).
+            min_effective_features: 60
+            # 2026-09-24: was 1.0 -- confirmed via replay against
+            # scripts/bags/rosbag2_2026_09_24-21_28_18_0.db3 (instrumented
+            # laserMapping.cpp to log res_mean_last every scan) that this
+            # filter's actual per-scan mean residual never exceeds ~0.061
+            # across the whole 159s run (quiet: ~0.008-0.012, active driving/
+            # turning: ~0.012-0.061), so 1.0 was ~16x higher than the worst
+            # real value ever seen -- this half of the quality gate could
+            # never fire, regardless of how bad a scan got. 0.1 sits with
+            # real margin above the observed max (0.0606) so normal scans
+            # (including real turns) still pass, but a genuinely degraded
+            # scan can now actually trip it. Re-tune from real data once a
+            # bag with confirmed-bad scans (or reliable wheel odom for
+            # cross-checking) is available.
+            max_mean_residual: 0.1
             shock_accel_deviation_threshold: 8.0    # 8.0 m/s^2 deviation from gravity; raise to avoid false positives
             shock_process_noise_scale: 25.0           # 25.0 temporary IMU process-noise multiplier during a shock
             # Catches fast rotations (e.g. an in-place spin) that
@@ -148,8 +262,28 @@
             # not have fully reconverged yet -- that's what was causing the duplicated
             # floor/wall layer right at bumps.
             shock_cooldown: 0.3
-
-        # Absolute path for the final full-map PCD save (on shutdown or /map_save
+            # 2026-09-27 (speed-course periodic-dropout investigation): the QT64
+            # driver periodically (~every 2.7s, confirmed via direct bag
+            # inspection of scripts/bags/speed-course/run-1 and run-2) loses a
+            # large contiguous azimuth sector of a single scan -- e.g. a full
+            # -90 to +30 degree gap with EXACTLY zero points, not gradual
+            # thinning -- collapsing that scan's usable point count from a
+            # normal ~11700-12100 down to a few hundred or less. This is
+            # confirmed genuine raw-data loss (not measurement noise or
+            # feature-poor geometry), so it cannot be fixed by ESKF process/
+            # measurement covariance tuning -- there is nothing to reweight
+            # when the data never arrived. When enabled, a scan whose raw
+            # (pre-downsample) point count falls below
+            # accumulate_trigger_raw_points is supplemented with points from
+            # the last accumulate_max_history_scans GOOD scans (re-projected
+            # into the current scan's own frame using the filter's own
+            # tracked pose at each scan), so a single ~0.3s dropout burst
+            # doesn't starve the frontend of usable geometry. Disabled by
+            # default: calibrate accumulate_trigger_raw_points against real
+            # feats_undistort sizes for your own bag/course before enabling.
+            accumulate_on_low_points: false
+            accumulate_trigger_raw_points: 3000
+            accumulate_max_history_scans: 3
         # service call). Used as-is since it starts with "/". Leave empty ("") to
         # fall back to <ROOT_DIR>/PCD/scans.pcd.
         map_file_path: "/home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/fast_lio_map.pcd"

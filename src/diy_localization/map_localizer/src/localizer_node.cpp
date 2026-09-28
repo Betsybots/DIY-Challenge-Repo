@@ -78,6 +78,25 @@ struct NodeConfig
     // rooms, especially while the robot sits still between goals).
     double max_offset_jump_dist = 0.5;
     double max_offset_jump_yaw = 0.3;
+    // 2026-09-26: the widened allowance below (see effective_max_jump_dist/yaw
+    // at the call site) used to add the FULL distance/angle the robot's own
+    // odometry has moved since the last accepted lock -- i.e. assumed up to
+    // 100% of distance traveled could be real, uncorrected odometry drift.
+    // Measured (scripts/bags/loop-3, closed ~25-30m loop, raw FAST-LIO2
+    // odometry): actual drift is ~0.18m / ~0.87deg over the whole loop, only
+    // ~0.7% of distance traveled -- the old 100% allowance was ~140x looser
+    // than this platform's real behavior, so during any stretch of repeated
+    // rejections (a genuinely ambiguous/repetitive room, not a fast-motion
+    // event) the allowance ballooned to multiple meters and let a
+    // well-scoring but WRONG ICP local minimum through outright, no
+    // cross-check at all (measured: map->odom snapping ~0.3-0.9m sideways
+    // mid-run, see scripts/testing-scripts/README.md). Scaling the moved
+    // distance/angle by this rate instead keeps genuine, proportionally-small
+    // drift correction unblocked while no longer treating "the robot drove
+    // a couple meters without a fix" as license to jump a couple meters too.
+    // Deliberately left several times larger than the ~0.7% actually measured
+    // (headroom for a worse run) without reintroducing the old 100% case.
+    double odom_drift_rate = 0.1;
     // AMCL-style transform_tolerance: the broadcast map->odom TF is stamped
     // this far ahead of the sensor capture time, so a lookup at "now()"
     // (always a little later, due to processing/network latency) isn't
@@ -98,6 +117,22 @@ struct NodeConfig
     // 90 deg). Grid points carry no heading information, unlike a hand-picked
     // waypoint, so more samples are needed here to cover orientation.
     int recovery_yaw_samples = 4;
+    // 2026-09-26: a passing rough/refine fitness score alone does not rule
+    // out a wrong local minimum during recovery -- unlike the normal
+    // incremental-update path (gated by max_offset_jump_dist/yaw against the
+    // last accepted offset), a cold recovery sweep has no prior offset to
+    // sanity-check against, so a well-scoring but wrong grid hypothesis was
+    // observed being accepted outright (measured: loop-3 bag, small
+    // rectangular room with an inner enclosure -- repeated re-locks onto
+    // wrong locations, map->odom translation jumping between ~0m/~1.8m/
+    // ~11.6m/~4.2m plateaus over one 71s run; see
+    // scripts/testing-scripts/README.md). Fix: evaluate every (grid point,
+    // yaw) candidate instead of accepting the first pass, and only commit to
+    // the best-scoring one if it beats the runner-up by at least this fitness
+    // margin -- otherwise treat the scan as genuinely ambiguous (classic
+    // symmetric/repetitive-room trap) and keep searching next sweep instead
+    // of locking onto a coin flip.
+    double recovery_min_fitness_margin = 0.02;
     // Merge this many of the most recent synced scans (via their own paired
     // odometry) into one cloud before each ICP alignment, instead of aligning
     // a single scan against the map. 1 (default) = disabled, this repo's
@@ -272,6 +307,8 @@ public:
             config["max_offset_jump_dist"].as<double>() : m_config.max_offset_jump_dist;
         m_config.max_offset_jump_yaw = config["max_offset_jump_yaw"] ?
             config["max_offset_jump_yaw"].as<double>() : m_config.max_offset_jump_yaw;
+        m_config.odom_drift_rate = config["odom_drift_rate"] ?
+            config["odom_drift_rate"].as<double>() : m_config.odom_drift_rate;
         m_config.transform_tolerance = config["transform_tolerance"] ?
             config["transform_tolerance"].as<double>() : m_config.transform_tolerance;
         m_config.offset_smoothing_time_constant = config["offset_smoothing_time_constant"] ?
@@ -283,6 +320,8 @@ public:
             config["recovery_grid_spacing"].as<double>() : m_config.recovery_grid_spacing;
         m_config.recovery_yaw_samples = config["recovery_yaw_samples"] ?
             config["recovery_yaw_samples"].as<int>() : m_config.recovery_yaw_samples;
+        m_config.recovery_min_fitness_margin = config["recovery_min_fitness_margin"] ?
+            config["recovery_min_fitness_margin"].as<double>() : m_config.recovery_min_fitness_margin;
         m_config.accumulate_scans = config["accumulate_scans"] ?
             config["accumulate_scans"].as<int>() : m_config.accumulate_scans;
         m_config.accumulate_scans = std::clamp(m_config.accumulate_scans, 1, 10);
@@ -495,17 +534,29 @@ public:
                 // several meters while the static limit stayed 0.5 m).
                 // Fix: widen the allowance by however far the robot's OWN
                 // odometry says it has moved/turned since the last accepted
-                // lock -- if odometry reports little motion, the gate stays
-                // exactly as strict as before (catches a wrong local minimum
-                // while parked); if odometry reports a lot of motion, the
-                // gate proportionally relaxes to match it, since that much
-                // offset change is then expected, not suspicious.
+                // lock, scaled by odom_drift_rate -- if odometry reports
+                // little motion, the gate stays exactly as strict as before
+                // (catches a wrong local minimum while parked); if odometry
+                // reports a lot of motion, the gate relaxes in proportion to
+                // this platform's own MEASURED drift rate (see
+                // odom_drift_rate's own comment), not to the full distance
+                // moved. 2026-09-26: was previously `+ odom_moved_dist`
+                // (unscaled, i.e. assumed up to 100% of distance traveled
+                // could be real drift) -- ~140x looser than this platform's
+                // actual measured drift, so a long stretch of rejections in a
+                // genuinely ambiguous/repetitive room (not a fast-motion
+                // event) let the allowance balloon to multiple meters and
+                // accepted a well-scoring but WRONG ICP local minimum
+                // outright, with no cross-check at all.
                 const V3D odom_moved_t = current_local_t - m_state.last_accept_local_t;
                 const M3D odom_moved_r = current_local_r * m_state.last_accept_local_r.transpose();
                 const double odom_moved_dist = odom_moved_t.norm();
                 const double odom_moved_yaw = std::abs(std::atan2(odom_moved_r(1, 0), odom_moved_r(0, 0)));
-                const double effective_max_jump_dist = m_config.max_offset_jump_dist + odom_moved_dist;
-                const double effective_max_jump_yaw = m_config.max_offset_jump_yaw + odom_moved_yaw;
+                const double effective_max_jump_dist =
+                    m_config.max_offset_jump_dist + m_config.odom_drift_rate * odom_moved_dist;
+                const double effective_max_jump_yaw =
+                    m_config.max_offset_jump_yaw + m_config.odom_drift_rate * odom_moved_yaw;
+
 
                 const bool jump_too_large = m_state.has_aligned_once && !m_state.service_received &&
                     (jump_dist > effective_max_jump_dist || jump_yaw > effective_max_jump_yaw);
@@ -528,12 +579,13 @@ public:
                     RCLCPP_WARN(
                         this->get_logger(),
                         "Rejecting map->odom update: jump %.2f m / %.2f rad exceeds limit "
-                        "(%.2f m / %.2f rad, base %.2f m / %.2f rad + %.2f m / %.2f rad moved per "
-                        "odometry since last lock) -- keeping last accepted offset (%d consecutive "
-                        "rejection(s))",
+                        "(%.2f m / %.2f rad, base %.2f m / %.2f rad + %.2f m / %.2f rad = "
+                        "odom_drift_rate %.2f x %.2f m / %.2f rad moved per odometry since last lock) "
+                        "-- keeping last accepted offset (%d consecutive rejection(s))",
                         jump_dist, jump_yaw, effective_max_jump_dist, effective_max_jump_yaw,
                         m_config.max_offset_jump_dist, m_config.max_offset_jump_yaw,
-                        odom_moved_dist, odom_moved_yaw,
+                        m_config.odom_drift_rate * odom_moved_dist, m_config.odom_drift_rate * odom_moved_yaw,
+                        m_config.odom_drift_rate, odom_moved_dist, odom_moved_yaw,
                         m_state.consecutive_align_failures.load());
 
                     attempt_recovery_after_jump_reject =
@@ -624,8 +676,25 @@ public:
     // beyond the offset's convergence basin). Blocking (like the regular
     // align() call this augments) -- runs on the same timer thread, so a full
     // sweep briefly delays the next TF/status publish; acceptable since the
-    // alternative is staying lost indefinitely. Returns on the first
-    // hypothesis that converges rather than exhaustively scoring all of them.
+    // alternative is staying lost indefinitely.
+    //
+    // 2026-09-26: evaluates every (grid point, yaw) candidate and only
+    // commits to the best-fitness one if it clearly beats the runner-up
+    // (recovery_min_fitness_margin) -- previously returned on the first
+    // hypothesis whose fitness merely passed align()'s rough/refine score
+    // thresholds. That is not enough on its own: align()'s fitness gate says
+    // "this location explains the scan acceptably," not "this is the ONLY
+    // location that does" -- in a small/symmetric/repetitive room (measured:
+    // a rectangular room with an inner enclosure, see
+    // scripts/testing-scripts/README.md) multiple grid cells/yaws can pass
+    // that same bar, and accepting whichever happened to be tried first
+    // reliably locked onto the wrong one, repeatedly, each subsequent
+    // recovery often wronger than the last. The normal incremental-update
+    // path already guards against exactly this failure mode via
+    // max_offset_jump_dist/yaw (rejecting a new offset that's suspiciously
+    // far from the last accepted one) -- but a cold recovery has no prior
+    // offset to sanity-check against, so the only available signal is
+    // uniqueness: does just one location explain this scan well, or several?
     // Precondition: m_localizer->setInput() has already been called with this
     // scan (true for its only caller, timerCB's failure branch) -- not
     // repeated here since fast_gicp caches by cloud pointer identity anyway.
@@ -640,6 +709,16 @@ public:
             "Auto-recovery: %d consecutive alignment failures -- sweeping %zu grid hypothesis(es) "
             "x %d yaw sample(s) to attempt re-lock",
             m_state.consecutive_align_failures.load(), m_recovery_hypotheses.size(), yaw_samples);
+
+        struct Candidate
+        {
+            size_t hyp_index;
+            double yaw;
+            double fitness;
+            M3D offset_r;
+            V3D offset_t;
+        };
+        std::vector<Candidate> passing;
 
         for (size_t i = 0; i < m_recovery_hypotheses.size(); ++i)
         {
@@ -656,37 +735,69 @@ public:
 
                 const M3D map_body_r = guess.block<3, 3>(0, 0).cast<double>();
                 const V3D map_body_t = guess.block<3, 1>(0, 3).cast<double>();
-                const M3D recovered_offset_r = map_body_r * local_r.transpose();
-                const V3D recovered_offset_t = -map_body_r * local_r.transpose() * local_t + map_body_t;
-
-                std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
-                m_state.target_offset_r = recovered_offset_r;
-                m_state.target_offset_t = recovered_offset_t;
-                m_state.last_accept_local_r = local_r;
-                m_state.last_accept_local_t = local_t;
-                // No prior localized state worth staying continuous with -- snap.
-                m_state.last_offset_r = recovered_offset_r;
-                m_state.last_offset_t = recovered_offset_t;
-                m_state.has_aligned_once = true;
-                m_state.localize_success = true;
-                m_state.last_fitness_score = m_localizer->lastFitnessScore();
-                m_state.consecutive_align_failures = 0;
-
-                RCLCPP_INFO(
-                    this->get_logger(),
-                    "Auto-recovery: Map lock RE-ACQUIRED from grid hypothesis #%zu (x=%.2f y=%.2f) yaw=%.2f -- "
-                    "map->odom translation=(%.3f, %.3f, %.3f)",
-                    i, hyp.x, hyp.y, yaw,
-                    recovered_offset_t.x(), recovered_offset_t.y(), recovered_offset_t.z());
-                return true;
+                Candidate c;
+                c.hyp_index = i;
+                c.yaw = yaw;
+                c.fitness = m_localizer->lastFitnessScore();
+                c.offset_r = map_body_r * local_r.transpose();
+                c.offset_t = -map_body_r * local_r.transpose() * local_t + map_body_t;
+                passing.push_back(c);
             }
         }
-        RCLCPP_WARN(
+
+        if (passing.empty())
+        {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "Auto-recovery: none of %zu grid hypothesis(es) x %d yaw sample(s) converged -- still lost, "
+                "will retry after another %d consecutive failure(s)",
+                m_recovery_hypotheses.size(), yaw_samples, m_config.recovery_after_failures);
+            return false;
+        }
+
+        std::sort(passing.begin(), passing.end(),
+                  [](const Candidate &a, const Candidate &b) { return a.fitness < b.fitness; });
+
+        if (passing.size() > 1 &&
+            passing[1].fitness - passing[0].fitness < m_config.recovery_min_fitness_margin)
+        {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "Auto-recovery: AMBIGUOUS -- %zu of %zu candidate(s) passed the fitness gate and the "
+                "best two are within %.4f of each other (best=%.4f, 2nd=%.4f, margin required=%.4f). "
+                "Refusing to lock onto a possibly-wrong local minimum; will retry after another %d "
+                "consecutive failure(s).",
+                passing.size(), m_recovery_hypotheses.size() * yaw_samples,
+                passing[1].fitness - passing[0].fitness, passing[0].fitness, passing[1].fitness,
+                m_config.recovery_min_fitness_margin, m_config.recovery_after_failures);
+            return false;
+        }
+
+        const Candidate &best = passing[0];
+        {
+            std::lock_guard<std::mutex> message_lock(m_state.message_mutex);
+            m_state.target_offset_r = best.offset_r;
+            m_state.target_offset_t = best.offset_t;
+            m_state.last_accept_local_r = local_r;
+            m_state.last_accept_local_t = local_t;
+            // No prior localized state worth staying continuous with -- snap.
+            m_state.last_offset_r = best.offset_r;
+            m_state.last_offset_t = best.offset_t;
+            m_state.has_aligned_once = true;
+            m_state.localize_success = true;
+            m_state.last_fitness_score = best.fitness;
+            m_state.consecutive_align_failures = 0;
+        }
+
+        RCLCPP_INFO(
             this->get_logger(),
-            "Auto-recovery: none of %zu grid hypothesis(es) x %d yaw sample(s) converged -- still lost, "
-            "will retry after another %d consecutive failure(s)",
-            m_recovery_hypotheses.size(), yaw_samples, m_config.recovery_after_failures);
-        return false;
+            "Auto-recovery: Map lock RE-ACQUIRED from grid hypothesis #%zu (x=%.2f y=%.2f) yaw=%.2f "
+            "fitness=%.4f (%zu candidate(s) passed, next-best=%.4f) -- map->odom translation=(%.3f, %.3f, %.3f)",
+            best.hyp_index, m_recovery_hypotheses[best.hyp_index].x, m_recovery_hypotheses[best.hyp_index].y,
+            best.yaw, best.fitness, passing.size(),
+            passing.size() > 1 ? passing[1].fitness : -1.0,
+            best.offset_t.x(), best.offset_t.y(), best.offset_t.z());
+        return true;
     }
 
     // Precondition: caller holds m_localizer_mutex (true for its only caller,
