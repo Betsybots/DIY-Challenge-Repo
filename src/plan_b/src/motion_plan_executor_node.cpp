@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "yaml-cpp/yaml.h"
 
@@ -41,7 +41,7 @@ public:
   {
     plan_file_ = this->declare_parameter<std::string>("plan_file", "");
     pose_topic_ = this->declare_parameter<std::string>("pose_topic", "/ground_truth_pose");
-    cmd_topic_ = this->declare_parameter<std::string>("cmd_topic", "/cmd_vel");
+    cmd_topic_ = this->declare_parameter<std::string>("cmd_topic", "/cmd_vel_smoothed");
     if (plan_file_.empty()) {
       RCLCPP_FATAL(this->get_logger(), "Parameter 'plan_file' is required.");
       throw std::runtime_error("Missing required parameter: plan_file");
@@ -49,7 +49,7 @@ public:
 
     load_plan(plan_file_);
 
-    pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+    pose_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
       pose_topic_,
       rclcpp::QoS(10),
       std::bind(&MotionPlanExecutor::pose_callback, this, std::placeholders::_1));
@@ -169,7 +169,7 @@ private:
     }
   }
 
-  void pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
+  void pose_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
   {
     last_pose_ = *msg;
     has_pose_ = true;
@@ -195,9 +195,9 @@ private:
 
     if (!segment_started_) {
       segment_started_ = true;
-      start_x_ = last_pose_.pose.position.x;
-      start_y_ = last_pose_.pose.position.y;
-      start_yaw_ = yaw_from_quaternion(last_pose_.pose.orientation);
+      start_x_ = last_pose_.pose.pose.position.x;
+      start_y_ = last_pose_.pose.pose.position.y;
+      start_yaw_ = yaw_from_quaternion(last_pose_.pose.pose.orientation);
       last_turn_yaw_ = start_yaw_;
       accumulated_turn_angle_ = 0.0;
 
@@ -214,8 +214,8 @@ private:
     geometry_msgs::msg::Twist twist;
 
     if (cmd.type == CommandType::STRAIGHT) {
-      const double dx = last_pose_.pose.position.x - start_x_;
-      const double dy = last_pose_.pose.position.y - start_y_;
+      const double dx = last_pose_.pose.pose.position.x - start_x_;
+      const double dy = last_pose_.pose.pose.position.y - start_y_;
       const double traveled = std::hypot(dx, dy);
       const double target_distance = std::abs(cmd.target);
 
@@ -229,7 +229,7 @@ private:
       twist.linear.x = speed;
       twist.angular.z = 0.0;
     } else {
-      const double current_yaw = yaw_from_quaternion(last_pose_.pose.orientation);
+      const double current_yaw = yaw_from_quaternion(last_pose_.pose.pose.orientation);
       accumulated_turn_angle_ += normalize_angle(current_yaw - last_turn_yaw_);
       last_turn_yaw_ = current_yaw;
 
@@ -269,11 +269,11 @@ private:
 
   std::vector<Command> commands_;
 
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
-  geometry_msgs::msg::PoseStamped last_pose_;
+  nav_msgs::msg::Odometry last_pose_;
   bool has_pose_{false};
 
   std::size_t current_index_{0};
