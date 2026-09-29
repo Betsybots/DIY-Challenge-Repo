@@ -1,0 +1,53 @@
+# Optional third parameter layer for map-based speed zones.
+#
+# Load order:
+#   1. nav2_params_3d_ackermann.yaml
+#   2. nav2_params_3d_obstacle_course_mppi_ackermann.yaml
+#   3. this file
+#
+# This file does not contain the filter map. Before using its launch file,
+# create:
+#   maps/obstacle_course_speed_mask.pgm
+#   maps/obstacle_course_speed_mask.yaml
+#
+# The mask must match the navigation map's dimensions, resolution, and origin.
+# Absolute conversion:
+#   speed_limit_mps = mask_value * 0.01
+# Mask value 0 means no speed limit. Valid limited values are 1 through 100.
+
+controller_server:
+  ros__parameters:
+    # Must match local_costmap.speed_filter.speed_limit_topic.
+    speed_limit_topic: "speed_limit"
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      # Costmap filters are evaluated after normal obstacle/inflation plugins.
+      # The local costmap runs at 10 Hz in the MPPI override, allowing speed
+      # limits to change quickly at section boundaries.
+      filters: ["speed_filter"]
+
+      speed_filter:
+        plugin: "nav2_costmap_2d::SpeedFilter"
+        enabled: true
+        filter_info_topic: "speed_filter_info"
+        speed_limit_topic: "speed_limit"
+        transform_tolerance: 0.10  # TUNE: increase only for measured TF delay.
+
+filter_mask_server:
+  ros__parameters:
+    use_sim_time: false
+    frame_id: "map"
+    topic_name: "speed_filter_mask"
+    # The launch file overrides this with mask_yaml_file.
+    yaml_filename: ""
+
+costmap_filter_info_server:
+  ros__parameters:
+    use_sim_time: false
+    type: 2  # Absolute speed limit in m/s.
+    filter_info_topic: "speed_filter_info"
+    mask_topic: "speed_filter_mask"
+    base: 0.0
+    multiplier: 0.01  # Mask 15 -> 0.15 m/s; mask 50 -> 0.50 m/s.

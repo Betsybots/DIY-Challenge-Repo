@@ -35,11 +35,14 @@ def generate_launch_description():
     autostart = LaunchConfiguration('autostart')
     params_file = LaunchConfiguration('params_file')
     override_params_file = LaunchConfiguration('override_params_file')
+    additional_params_file = LaunchConfiguration('additional_params_file')
     use_composition = LaunchConfiguration('use_composition')
     container_name = LaunchConfiguration('container_name')
     container_name_full = (namespace, '/', container_name)
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
+    behavior_cmd_vel_topic = LaunchConfiguration('behavior_cmd_vel_topic')
+    controller_cmd_vel_topic = LaunchConfiguration('controller_cmd_vel_topic')
     behavior_cmd_vel_topic = LaunchConfiguration('behavior_cmd_vel_topic')
 
     lifecycle_nodes = ['map_server',
@@ -81,6 +84,28 @@ def generate_launch_description():
             convert_types=True),
         allow_substs=True)
 
+    configured_additional_params = ParameterFile(
+        RewrittenYaml(
+            source_file=additional_params_file,
+            root_key=namespace,
+            param_rewrites=param_substitutions,
+            convert_types=True),
+        allow_substs=True)
+
+    node_params = [
+        configured_params,
+        configured_override_params,
+        configured_additional_params,
+    ]
+
+    configured_override_params = ParameterFile(
+        RewrittenYaml(
+            source_file=override_params_file,
+            root_key=namespace,
+            param_rewrites=param_substitutions,
+            convert_types=True),
+        allow_substs=True)
+
     node_params = [configured_params, configured_override_params]
 
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -107,6 +132,18 @@ def generate_launch_description():
             bringup_dir, 'config', 'nav2_params_no_overrides.yaml'),
         description='Optional parameter file loaded after params_file')
 
+    declare_override_params_file_cmd = DeclareLaunchArgument(
+        'override_params_file',
+        default_value=os.path.join(
+            bringup_dir, 'config', 'nav2_params_no_overrides.yaml'),
+        description='Optional parameter file loaded after params_file')
+
+    declare_additional_params_file_cmd = DeclareLaunchArgument(
+        'additional_params_file',
+        default_value=os.path.join(
+            bringup_dir, 'config', 'nav2_params_no_overrides.yaml'),
+        description='Optional parameter file loaded after override_params_file')
+
     declare_autostart_cmd = DeclareLaunchArgument(
         'autostart', default_value='true',
         description='Automatically startup the nav2 stack')
@@ -127,9 +164,14 @@ def generate_launch_description():
         'log_level', default_value='info',
         description='log level')
 
+    declare_controller_cmd_vel_topic_cmd = DeclareLaunchArgument(
+        'controller_cmd_vel_topic',
+        default_value='cmd_vel_nav',
+        description='Controller output topic')
+
     declare_behavior_cmd_vel_topic_cmd = DeclareLaunchArgument(
         'behavior_cmd_vel_topic',
-        default_value='cmd_vel_behavior',
+        default_value='cmd_vel_nav',
         description='Output topic for Nav2 recovery behavior velocity commands')
 
     load_nodes = GroupAction(
@@ -140,7 +182,10 @@ def generate_launch_description():
                 executable='map_server',
                 name='map_server',
                 output='screen',
-                parameters=node_params,
+                parameters=node_params + [{
+                    'use_sim_time': use_sim_time,
+                    'yaml_filename': map_yaml,
+                }],
             ),
             Node(
                 package='nav2_controller',
@@ -150,7 +195,7 @@ def generate_launch_description():
                 respawn_delay=2.0,
                 parameters=node_params,
                 arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings + [('cmd_vel', 'cmd_vel')]
+                remappings=remappings + [('cmd_vel', controller_cmd_vel_topic)]),
                 ),
                 Node(
                     package='nav2_smoother',
@@ -181,8 +226,7 @@ def generate_launch_description():
                 respawn_delay=2.0,
                 parameters=node_params,
                 arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings + [('cmd_vel', behavior_cmd_vel_topic)]
-                ),
+                remappings=remappings + [('cmd_vel', behavior_cmd_vel_topic)]),
             Node(
                 package='nav2_bt_navigator',
                 executable='bt_navigator',
@@ -251,7 +295,7 @@ def generate_launch_description():
                 plugin='nav2_controller::ControllerServer',
                 name='controller_server',
                 parameters=node_params,
-                remappings=remappings + [('cmd_vel', 'cmd_vel')]
+                remappings=remappings + [('cmd_vel', controller_cmd_vel_topic)]),
                 ),
             ComposableNode(
                 package='nav2_smoother',
@@ -270,7 +314,7 @@ def generate_launch_description():
                 plugin='behavior_server::BehaviorServer',
                 name='behavior_server',
                 parameters=node_params,
-                remappings=remappings + [('cmd_vel', behavior_cmd_vel_topic)]
+                remappings=remappings + [('cmd_vel', behavior_cmd_vel_topic)]),
                 ),
             ComposableNode(
                 package='nav2_bt_navigator',
@@ -313,11 +357,13 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_params_file_cmd)
     ld.add_action(declare_override_params_file_cmd)
+    ld.add_action(declare_additional_params_file_cmd)
     ld.add_action(declare_autostart_cmd)
     ld.add_action(declare_use_composition_cmd)
     ld.add_action(declare_container_name_cmd)
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
+    ld.add_action(declare_controller_cmd_vel_topic_cmd)
     ld.add_action(declare_behavior_cmd_vel_topic_cmd)
     # Add the actions to launch all of the navigation nodes
     ld.add_action(load_nodes)

@@ -61,19 +61,26 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node, SetRemap
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     pkg_dir = get_package_share_directory('challenge_bringup')
     autonomous = LaunchConfiguration('autonomous')
     use_rviz = LaunchConfiguration('use_rviz')
     startup_delay = LaunchConfiguration('startup_delay')
+    nav2_launch_file = LaunchConfiguration('nav2_launch_file')
 
     # ── Argument declarations ──────────────────────────────────────────────
 
     declare_use_rviz = DeclareLaunchArgument('use_rviz', default_value='false')
     declare_autonomous = DeclareLaunchArgument('autonomous', default_value='true')
+    declare_nav2_launch_file = DeclareLaunchArgument(
+        'nav2_launch_file',
+        default_value='nav2_navigation_launch.py',
+        description='Nav2 launch file from challenge_bringup/launch',
+    )
 
     declare_startup_delay = DeclareLaunchArgument(
         'startup_delay',
@@ -195,11 +202,11 @@ def generate_launch_description():
     # ── BLOCK 6: Nav2 autonomous navigation stack ─────────────────────────────
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(
+            PathJoinSubstitution([
                 get_package_share_directory('challenge_bringup'),
                 'launch',
-                'nav2_navigation_launch.py',
-            )
+                nav2_launch_file,
+            ])
         ),
         condition=IfCondition(autonomous),
     )
@@ -222,6 +229,7 @@ def generate_launch_description():
     return LaunchDescription([
         declare_startup_delay,
         declare_autonomous,
+        declare_nav2_launch_file,
         declare_use_rviz,
         robot_description_launch,        # always
         hesai_launch,                    # always

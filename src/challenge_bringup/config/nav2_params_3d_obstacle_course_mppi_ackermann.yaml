@@ -1,0 +1,303 @@
+# Additive overrides for Ackermann MPPI on the obstacle-avoidance course.
+# Base file: nav2_params_3d_ackermann.yaml
+#
+# FIELD-TUNE-MPPI QUICK INDEX
+#   FIELD-TUNE-MPPI-01: speed and steering-rate limits
+#   FIELD-TUNE-MPPI-02: prediction horizon and sample count
+#   FIELD-TUNE-MPPI-03: obstacle clearance
+#   FIELD-TUNE-MPPI-04: path tracking versus obstacle deviation
+#   FIELD-TUNE-MPPI-05: acceleration and braking
+#
+# COURSE BASELINE
+# - Narrow/tunnel/start sections are approximately 32 in (0.81 m) wide.
+# - The robot footprint is approximately 0.36 m wide, leaving about 0.23 m
+#   clearance per side only when perfectly centered.
+# - The route is forward-only and includes buckets, hoops, ramps, gravel,
+#   potholes, a banked turn, and a tight loop.
+# - Begin at 0.5 m/s. Rough-terrain sections need separate speed zones if they
+#   must run slower than the rest of the course.
+# Change one group at a time and record at least three successful runs.
+
+bt_navigator:
+  ros__parameters:
+    robot_base_frame: base_link
+    default_nav_to_pose_bt_xml: "$(find-pkg-share challenge_bringup)/behavior_trees/navigate_to_pose_obstacle_course_mppi_ackermann.xml"
+    default_nav_through_poses_bt_xml: "$(find-pkg-share challenge_bringup)/behavior_trees/navigate_through_poses_obstacle_course_mppi_ackermann.xml"
+
+controller_server:
+  ros__parameters:
+    odom_topic: /odom
+    controller_frequency: 20.0  # TUNE: raise only if the computer maintains this rate.
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.0
+    min_theta_velocity_threshold: 0.0
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.20
+      movement_time_allowance: 8.0
+
+    general_goal_checker:
+      stateful: true
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.20
+      yaw_goal_tolerance: 0.35
+
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+
+      # FIELD-TUNE-MPPI-02 PREDICTION
+      # Horizon = time_steps * model_dt = 72 * 0.05 = 3.6 seconds.
+      # At 0.5 m/s this evaluates approximately 1.8 m ahead, giving MPPI room
+      # to choose a smooth Ackermann path around the bucket pattern.
+      time_steps: 72  # TUNE: reduce to 64 or 56 if controller misses 20 Hz.
+      model_dt: 0.05  # TUNE: trajectory step time; must not exceed 1/controller_frequency.
+      batch_size: 2000  # TUNE: reduce to 1500 before shortening the horizon.
+      iteration_count: 1  # TUNE: keep 1; increase batch_size before this value.
+      vx_std: 0.15  # TUNE: moderate speed exploration for narrow/rough sections.
+      vy_std: 0.0  # Ackermann cannot move sideways; do not tune above zero.
+      wz_std: 0.50  # TUNE: steering exploration for weaving around buckets.
+
+      # FIELD-TUNE-MPPI-01 SPEED AND STEERING
+      # At the 0.371 m minimum radius, 0.5 / 0.371 = 1.35 rad/s.
+      # Keep these synchronized with velocity_smoother below.
+      vx_max: 0.50  # TUNE: conservative whole-course speed for ramps and potholes.
+      vx_min: 0.0  # Forward-only course; recovery backup is handled separately.
+      vy_max: 0.0  # Ackermann cannot move sideways; keep zero.
+      wz_max: 1.35  # TUNE: max yaw rate; keep consistent with speed/turn radius.
+
+      motion_model: "Ackermann"
+      AckermannConstraints:
+        # Replace only with the measured full-lock path radius.
+        min_turning_r: 0.371  # TUNE: measured minimum radius; never set artificially low.
+
+      prune_distance: 2.5  # TUNE: keep beyond the 1.8 m prediction distance.
+      transform_tolerance: 0.10  # TUNE: increase slightly only for measured TF delay.
+      temperature: 0.30  # TUNE: lower selects best paths more aggressively.
+      gamma: 0.015  # TUNE: higher favors smoother, lower-energy commands.
+      visualize: false  # TUNE: true for debugging only; it increases CPU load.
+      retry_attempt_limit: 1  # TUNE: optimizer retries before controller failure.
+      reset_period: 1.0  # TUNE: inactivity time before MPPI resets its solution.
+      regenerate_noises: false  # TUNE: true resamples every cycle but adds CPU jitter.
+
+      # The course arrows define a forward-only route. Recovery backup remains
+      # available through the behavior tree but is not part of normal tracking.
+      enforce_path_inversion: false  # Keep false with the Dubins global planner.
+      inversion_xy_tolerance: 0.20  # Unused while path inversion is disabled.
+      inversion_yaw_tolerance: 0.40  # Unused while path inversion is disabled.
+
+      TrajectoryVisualizer:
+        trajectory_step: 5  # TUNE: larger publishes fewer sampled trajectories.
+        time_step: 3  # TUNE: larger publishes fewer points per trajectory.
+
+      critics:
+        - "ConstraintCritic"
+        - "CostCritic"
+        - "GoalCritic"
+        - "GoalAngleCritic"
+        - "PathAlignCritic"
+        - "PathFollowCritic"
+        - "PathAngleCritic"
+        - "PreferForwardCritic"
+
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1  # TUNE: keep 1 initially; higher makes penalties nonlinear.
+        cost_weight: 6.0  # TUNE: strong Ackermann feasibility for narrow turns.
+
+      GoalCritic:
+        enabled: true
+        cost_power: 1  # TUNE: keep 1 initially.
+        cost_weight: 5.0  # TUNE: raise if the car is weakly attracted to the goal.
+        threshold_to_consider: 1.4  # TUNE: distance where goal-position scoring begins.
+
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1  # TUNE: keep 1 initially.
+        cost_weight: 3.0  # TUNE: raise if final heading alignment is poor.
+        threshold_to_consider: 0.5  # TUNE: distance where final-heading scoring begins.
+
+      PreferForwardCritic:
+        enabled: true
+        cost_power: 1  # TUNE: keep 1 initially.
+        cost_weight: 8.0  # TUNE: strong forward preference for course direction.
+        threshold_to_consider: 0.5  # TUNE: stop forward preference near the goal.
+
+      # FIELD-TUNE-MPPI-03 OBSTACLE CLEARANCE
+      # Uses the live local costmap and the complete rectangular footprint.
+      # The 0.30 m inflation gradient is intentionally smaller than the base
+      # configuration so the 0.81 m passages remain usable with the true
+      # 0.36 m-wide footprint. Never shrink the footprint to create clearance.
+      CostCritic:
+        enabled: true
+        cost_power: 1  # TUNE: keep 1 initially.
+        cost_weight: 3.0  # TUNE: raise if bucket clearance is low; lower if it freezes.
+        critical_cost: 300.0  # TUNE: cost where proximity becomes strongly penalized.
+        consider_footprint: true  # Keep true for rectangular vehicle collision checks.
+        collision_cost: 1000000.0  # TUNE: keep very high to reject collisions.
+        near_goal_distance: 0.5  # TUNE: relax obstacle preference this close to goal.
+        inflation_layer_name: "inflation_layer"
+
+      # FIELD-TUNE-MPPI-04 PATH VERSUS AVOIDANCE
+      # PathAlignCritic automatically disengages when enough of the path is
+      # occupied, allowing CostCritic to move around a detected obstacle.
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1  # TUNE: keep 1 initially.
+        cost_weight: 8.0  # TUNE: reduced so MPPI may leave the path around buckets.
+        max_path_occupancy_ratio: 0.03  # TUNE: disable alignment early on blocked paths.
+        trajectory_point_step: 3  # TUNE: larger reduces CPU but checks fewer points.
+        threshold_to_consider: 0.5  # TUNE: stop path alignment near the goal.
+        offset_from_furthest: 20  # TUNE: path point offset used for alignment scoring.
+        use_path_orientations: true  # Keep true for Hybrid-A* directional paths.
+
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1  # TUNE: keep 1 initially.
+        cost_weight: 4.0  # TUNE: maintain progress without overpowering avoidance.
+        offset_from_furthest: 5  # TUNE: look-ahead path offset for progress scoring.
+        threshold_to_consider: 1.4  # TUNE: stop path-progress scoring near the goal.
+
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1  # TUNE: keep 1 initially.
+        cost_weight: 4.0  # TUNE: Ackermann heading alignment through narrow sections.
+        offset_from_furthest: 4  # TUNE: path point offset used for heading scoring.
+        threshold_to_consider: 0.5  # TUNE: stop path-angle scoring near the goal.
+        max_angle_to_furthest: 1.0  # TUNE: heading error that activates angle scoring.
+        forward_preference: true  # TUNE: false only if forward/reverse are equally valid.
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      global_frame: odom
+      robot_base_frame: base_link
+      rolling_window: true
+      width: 6.0
+      height: 6.0
+      resolution: 0.05
+      footprint: "[[-0.12, -0.18], [-0.12, 0.18], [0.44, 0.18], [0.44, -0.18]]"
+      plugins: ["voxel_layer", "inflation_layer"]
+
+      # Faster local updates improve reaction to moving or newly seen objects.
+      update_frequency: 10.0  # TUNE: raise for faster detection if CPU permits.
+      publish_frequency: 5.0  # TUNE: visualization/output rate; not control reaction rate.
+
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: true
+        publish_voxel_map: true
+        origin_z: 0.0
+        z_resolution: 0.125
+        z_voxels: 16
+        max_obstacle_height: 2.0
+        mark_threshold: 0
+        observation_sources: lidar_points
+        lidar_points:
+          topic: /lidar_points
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 3.5
+          obstacle_min_range: 0.0
+
+      inflation_layer:
+        # Fits the approximately 0.23 m side clearance available when the
+        # vehicle is centered in a 0.81 m passage. Footprint collision checking
+        # remains the hard safety boundary.
+        inflation_radius: 0.30  # TUNE: lower slightly only if valid gaps appear blocked.
+        cost_scaling_factor: 10.0  # TUNE: high value makes wall cost decay quickly.
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      global_frame: map
+      robot_base_frame: base_link
+      resolution: 0.05
+      track_unknown_space: true
+      footprint: "[[-0.12, -0.18], [-0.12, 0.18], [0.44, 0.18], [0.44, -0.18]]"
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        enabled: true
+        map_subscribe_transient_local: true
+        subscribe_to_updates: true
+
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: lidar_points
+        lidar_points:
+          topic: /lidar_points
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 3.5
+          obstacle_min_range: 0.0
+
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
+        inflation_radius: 0.30  # TUNE: keep equal to local inflation radius.
+        cost_scaling_factor: 10.0  # TUNE: keep equal to local cost scaling.
+
+planner_server:
+  ros__parameters:
+    planner_plugins: ["GridBased"]
+    GridBased:
+      # Course arrows are forward-only; Dubins prevents normal reverse paths.
+      plugin: "nav2_smac_planner/SmacPlannerHybrid"
+      downsample_costmap: false
+      downsampling_factor: 1
+      motion_model_for_search: "DUBIN"
+      minimum_turning_radius: 0.371  # TUNE: measured full-lock path radius.
+      tolerance: 0.15  # TUNE: tighter endpoint tolerance for narrow course lanes.
+      allow_unknown: false
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 5.0
+      angle_quantization_bins: 72
+      analytic_expansion_ratio: 3.5
+      analytic_expansion_max_length: 2.0
+      analytic_expansion_max_cost: 200.0
+      analytic_expansion_max_cost_override: false
+      reverse_penalty: 2.0
+      change_penalty: 0.0
+      non_straight_penalty: 1.2
+      cost_penalty: 2.5  # TUNE: favor clearance without rejecting narrow passages.
+      retrospective_penalty: 0.015
+      lookup_table_size: 20.0
+      cache_obstacle_heuristic: true
+      debug_visualizations: false
+      use_quadratic_cost_penalty: false
+      downsample_obstacle_heuristic: true
+      allow_primitive_interpolation: false
+      smooth_path: true
+
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10
+        do_refinement: true
+
+velocity_smoother:
+  ros__parameters:
+    # FIELD-TUNE-MPPI-01: match the MPPI command limits above.
+    max_velocity: [0.50, 0.0, 1.35]  # TUNE: match vx_max and wz_max above.
+    min_velocity: [0.0, 0.0, -1.35]  # Forward-only normal tracking.
+
+    # FIELD-TUNE-MPPI-05 ACCELERATION AND BRAKING
+    # Keep conservative values until measured stopping-distance tests pass.
+    max_accel: [0.40, 0.0, 1.5]  # TUNE: gentle acceleration for gravel/ramps/potholes.
+    max_decel: [-0.80, 0.0, -1.5]  # TUNE: measured safe braking/yaw deceleration.
