@@ -9,14 +9,14 @@
   <xacro:property name="W" value="0.055" /> <!-- 55 mm Wheel Width -->
   <xacro:property name="R" value="0.0675" /> <!-- 67.5 mm Wheel Radius -->
   
-  <xacro:property name="X_OFFSET" value="0.2" /> <!-- 67.5 mm Wheel Radius -->
-  <xacro:property name="H" value="0.1" /> <!-- 67.5 mm Wheel Radius -->
+  <xacro:property name="X_OFFSET" value="0.2" />
+  <xacro:property name="H" value="0.1905" /> <!-- 7.5 inches Wheel Radius -->
   <xacro:property name="chassis_mass" value="10.0" />
   <xacro:property name="wheel_mass" value="1.0" />
   <xacro:property name="total_mass" value="1.0" />
-  <xacro:property name="Lower_angle_limit" value="-0.6" />
-  <xacro:property name="Upper_angle_limit" value="0.6" />
-  <xacro:property name="velocity" value="1.0" />
+  <xacro:property name="Lower_angle_limit" value="-0.5" />
+  <xacro:property name="Upper_angle_limit" value="0.5" />
+  <xacro:property name="velocity" value="3.0" />
   <xacro:property name="Effort" value="10.0" />
   
   
@@ -227,7 +227,7 @@
   <joint name="laser_joint" type="fixed">
     <parent link="base_link"/>
     <child link="hesai_lidar"/>
-    <origin xyz="${B/2} 0 ${H + 0.05}" rpy="0 0 0"/>
+    <origin xyz="${B} 0 ${H + 0.05}" rpy="0 0 0"/>
   </joint>
 
   <link name="hesai_lidar">
@@ -245,11 +245,11 @@
   <joint name="imu_joint" type="fixed">
     <parent link="base_link"/>
     <child link="imu_link"/>
-    <origin xyz="${B/2} 0 ${H/2}" rpy="0 0 0"/>
+    <origin xyz="${B} 0 0.1016" rpy="0 0 0"/> <!--${B} 0 ${H/2} --> <!-- 0.1016 is the height of imu from the center of the wheel
   </joint>
 
   <link name="imu_link"/>
-  
+<!--
   <ros2_control name="AckermannRobotHardware" type="system">
     <hardware>
       <plugin>ackermann_hardware/AckermannSystem</plugin>
@@ -269,7 +269,6 @@
       <param name="supply_current_limit">20.0</param>
     </hardware>
 
-  <!-- Traction Wheels (Rear) -->
   <joint name="rear_left_wheel_joint">
     <command_interface name="velocity"/>
     <state_interface name="velocity"/>
@@ -281,7 +280,6 @@
     <state_interface name="position"/>
   </joint>
 
-  <!-- Steering Knuckles (Front) -->
   <joint name="front_left_steer_joint">
     <command_interface name="position"/>
     <state_interface name="position"/>
@@ -291,6 +289,7 @@
     <state_interface name="position"/>
   </joint>
 </ros2_control>
+-->
 </robot>
 
 
