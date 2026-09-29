@@ -114,6 +114,29 @@ def generate_launch_description():
         ]
     )
 
+    delayed_ekf_launch = TimerAction(
+        period=1.0,
+        actions=[
+            # EKF: /wheel_odom (vx, vyaw) + /imu/data (vyaw, down-weighted)
+            # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_footprint TF.
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(
+                        get_package_share_directory('diy_state_estimate'),
+                        'launch',
+                        'ekf_fusion.launch.py',
+                    )
+                ),
+                launch_arguments={
+                    # 'wheel_odom_topic': '/wheel_odom',
+                    'imu_topic': '/imu/data',
+                    'lidar_odom_topic': '/Odometry',
+                    'output_topic': '/odom',
+                }.items(),
+            ),
+        ]
+    )
+
     delayed_mcl_3dl_launch = TimerAction(
         period=1.0,
         actions=[
@@ -196,6 +219,7 @@ def generate_launch_description():
         robot_description_launch,        # always
         hesai_launch,                    # always
         delayed_fast_lio2_launch,        # always
+        delayed_ekf_launch,              # always
         delayed_mcl_3dl_launch,          # autonomous
         delayed_loop_pgo_launch,         # manual
         delayed_map_hba_launch,          # manual
