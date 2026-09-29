@@ -81,7 +81,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, GroupAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -109,6 +109,7 @@ def generate_launch_description():
     fastlio_config   = LaunchConfiguration('fastlio_config')
     # waypoints_file   = LaunchConfiguration('waypoints_file')
     startup_delay = LaunchConfiguration('startup_delay')
+    nav2_launch_file = LaunchConfiguration('nav2_launch_file')
 
     # ── Argument declarations ──────────────────────────────────────────────
     # Defaults match the jetson.env full-hardware profile.
@@ -126,6 +127,11 @@ def generate_launch_description():
     # declare_mux_mode = DeclareLaunchArgument('mux_mode', default_value='AUTONOMOUS')
     declare_fastlio_config = DeclareLaunchArgument('fastlio_config', default_value='fast_lio_hesai_qt64.yaml')
     declare_autonomous = DeclareLaunchArgument('autonomous', default_value='true')
+    declare_nav2_launch_file = DeclareLaunchArgument(
+        'nav2_launch_file',
+        default_value='nav2_navigation_launch.py',
+        description='Nav2 launch file from challenge_bringup/launch',
+    )
 
     declare_startup_delay = DeclareLaunchArgument(
         'startup_delay',
@@ -243,11 +249,11 @@ def generate_launch_description():
     # no params need to be read/forwarded here.
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(
+            PathJoinSubstitution([
                 get_package_share_directory('challenge_bringup'),
                 'launch',
-                'nav2_navigation_launch.py',
-            )
+                nav2_launch_file,
+            ])
         ),
         condition=IfCondition(autonomous),
     )
@@ -319,6 +325,7 @@ def generate_launch_description():
         declare_fastlio_config,
         declare_startup_delay,
         declare_autonomous,
+        declare_nav2_launch_file,
         declare_use_rviz,
 
         # Launch sequence starts here
