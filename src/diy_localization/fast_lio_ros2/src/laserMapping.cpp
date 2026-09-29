@@ -105,22 +105,6 @@ double shock_gyro_threshold = 2.5;
 double max_imu_gap = 0.05;
 double shock_cooldown = 0.3;
 int    rejected_scan_count = 0;
-// Frontend scan ACCUMULATION (2026-09-27, speed-course periodic-dropout
-// investigation): the QT64 driver periodically (~every 2.7s, confirmed via
-// direct bag inspection -- see scripts/testing-scripts/) loses a large
-// contiguous azimuth sector of a single scan (e.g. -90 to +30 degrees
-// completely empty), collapsing that scan's usable point count from a
-// normal ~11700-12100 down to as low as a few hundred. This is a genuine
-// raw-data loss burst, not measurement noise or feature-poor geometry, so
-// no amount of ESKF process/measurement covariance tuning can compensate
-// for it -- there is nothing to reweight when the data never arrived.
-// Disabled by default (opt-in): only takes effect once
-// accumulate_on_low_points is explicitly set true, so normal operation
-// (accumulate_on_low_points=false) is byte-for-byte unchanged from before
-// this feature existed.
-bool   accumulate_on_low_points = false;
-int    accumulate_trigger_raw_points = 3000;
-int    accumulate_max_history_scans = 3;
 
 float res_last[100000] = {0.0};
 float DET_RANGE = 300.0f;
@@ -163,20 +147,6 @@ PointCloudXYZI::Ptr normvec(new PointCloudXYZI(100000, 1));
 PointCloudXYZI::Ptr laserCloudOri(new PointCloudXYZI(100000, 1));
 PointCloudXYZI::Ptr corr_normvect(new PointCloudXYZI(100000, 1));
 PointCloudXYZI::Ptr _featsArray;
-
-// Frontend scan-accumulation history (see accumulate_on_low_points above).
-// Each entry holds one PAST scan's own undistorted points (in that scan's
-// own LiDAR frame) plus the filter's predicted (pre-measurement-update)
-// state at that scan's capture time, which together are exactly what is
-// needed to re-project those points into any LATER scan's own LiDAR frame
-// (same math as RGBpointBodyToWorld/RGBpointBodyLidarToIMU below, just
-// composed body->world->body instead of body->world).
-struct HistoricScan
-{
-    state_ikfom pose;
-    PointCloudXYZI::Ptr cloud;
-};
-deque<HistoricScan> scan_history_;
 
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
 pcl::VoxelGrid<PointType> downSizeFilterMap;
@@ -980,9 +950,6 @@ public:
         this->declare_parameter<double>("frontend.shock_gyro_threshold", 2.5);
         this->declare_parameter<double>("frontend.max_imu_gap", 0.05);
         this->declare_parameter<double>("frontend.shock_cooldown", 0.3);
-        this->declare_parameter<bool>("frontend.accumulate_on_low_points", false);
-        this->declare_parameter<int>("frontend.accumulate_trigger_raw_points", 3000);
-        this->declare_parameter<int>("frontend.accumulate_max_history_scans", 3);
         this->get_parameter_or<bool>("publish.path_en", path_en, true);
         this->get_parameter_or<bool>("publish.effect_map_en", effect_pub_en, false);
         this->get_parameter_or<bool>("publish.map_en", map_pub_en, false);
@@ -1100,28 +1067,16 @@ public:
             cout << "~~~~"<<ROOT_DIR<<" doesn't exist" << endl;
 
         /*** ROS subscribe initialization ***/
-        // Sensor callbacks run outside the timer's default group + a deeper IMU queue so
-        // the ~100-450ms scan-processing timer_callback (ICP/map_incremental, same
-        // executor) can never starve imu_cbk long enough to lose samples.
-        //
-        // Each sensor gets its OWN MutuallyExclusive group rather than one shared
-        // Reentrant group. With Reentrant, two IMU callbacks could run on different
-        // executor threads at once and take mtx_buffer out of arrival order; imu_cbk
-        // then saw "timestamp < last_timestamp_imu", logged "IMU timestamp moved
-        // backward" and cleared the entire IMU buffer, leaving a multi-second gap that
-        // the next scan integrated across (confirmed 2026-09-27 on speed-course run-2
-        // replays: an 8.8s / 11.4s max_imu_gap in exactly the two runs that diverged,
-        // none in the healthy ones, while the bag's own IMU header stamps are strictly
-        // monotonic). Mutually exclusive per-sensor groups keep each sensor's messages
-        // strictly in order while still letting IMU, LiDAR and the timer run in parallel.
-        imu_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-        lidar_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-        rclcpp::SubscriptionOptions imu_sub_opts;
-        imu_sub_opts.callback_group = imu_cb_group_;
-        rclcpp::SubscriptionOptions lidar_sub_opts;
-        lidar_sub_opts.callback_group = lidar_cb_group_;
-        sub_pcl_pc_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(lid_topic, rclcpp::SensorDataQoS(), standard_pcl_cbk, lidar_sub_opts);
-        sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, rclcpp::QoS(200), imu_cbk, imu_sub_opts);
+		// Sensor callbacks get their own (reentrant) group + a deeper IMU queue so the
+        // ~100-450ms scan-processing timer_callback (ICP/map_incremental, same executor)
+        // can never starve imu_cbk long enough to lose samples -- that starvation, not
+        // real IMU dropouts, was the actual cause of the max_imu_gap scan rejections
+        // (shared buffers are already mtx_buffer-protected, so concurrent callbacks are safe).
+        sensor_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+        rclcpp::SubscriptionOptions sensor_sub_opts;
+        sensor_sub_opts.callback_group = sensor_cb_group_;
+        sub_pcl_pc_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(lid_topic, rclcpp::SensorDataQoS(), standard_pcl_cbk, sensor_sub_opts);
+        sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, rclcpp::QoS(200), imu_cbk, sensor_sub_opts);
         pubLaserCloudFull_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
         pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
         pubLaserCloudEffect_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
@@ -1192,56 +1147,6 @@ private:
             {
                 RCLCPP_WARN(this->get_logger(), "No point, skip this scan!\n");
                 return;
-            }
-
-            // Frontend scan-accumulation (see accumulate_on_low_points declaration
-            // above for the periodic-dropout background). Clone this scan's OWN
-            // points before any merge, so a later scan is only ever buffered/rescued
-            // with genuinely-fresh data, never with data that was itself stitched
-            // together from older scans (which would let a stale point set silently
-            // propagate forward indefinitely instead of aging out).
-            PointCloudXYZI::Ptr this_scan_original_cloud;
-            bool used_accumulation_this_scan = false;
-            if (accumulate_on_low_points)
-            {
-                this_scan_original_cloud.reset(new PointCloudXYZI(*feats_undistort));
-
-                if (!scan_history_.empty() &&
-                    (int)feats_undistort->points.size() < accumulate_trigger_raw_points)
-                {
-                    const size_t before = feats_undistort->points.size();
-                    for (const auto &hist : scan_history_)
-                    {
-                        for (const auto &p : hist.cloud->points)
-                        {
-                            // hist scan's own LiDAR frame -> world (same composition as
-                            // RGBpointBodyToWorld below, using THAT scan's own pose)...
-                            V3D p_lidar_hist(p.x, p.y, p.z);
-                            V3D p_world = hist.pose.rot * (hist.pose.offset_R_L_I * p_lidar_hist + hist.pose.offset_T_L_I) + hist.pose.pos;
-                            // ...then world -> the CURRENT scan's own LiDAR frame (the
-                            // exact inverse composition, using the CURRENT predicted state).
-                            V3D p_imu_cur = state_point.rot.conjugate() * (p_world - state_point.pos);
-                            V3D p_lidar_cur = state_point.offset_R_L_I.conjugate() * (p_imu_cur - state_point.offset_T_L_I);
-                            PointType np;
-                            np.x = static_cast<float>(p_lidar_cur(0));
-                            np.y = static_cast<float>(p_lidar_cur(1));
-                            np.z = static_cast<float>(p_lidar_cur(2));
-                            np.intensity = p.intensity;
-                            np.curvature = p.curvature;
-                            feats_undistort->points.push_back(np);
-                        }
-                    }
-                    feats_undistort->width = feats_undistort->points.size();
-                    feats_undistort->height = 1;
-                    used_accumulation_this_scan = true;
-                    RCLCPP_WARN(this->get_logger(),
-                                "Frontend scan-accumulation: raw points %zu below "
-                                "accumulate_trigger_raw_points=%d -- merged in %zu point(s) "
-                                "from %zu historic scan(s) -> %zu total points",
-                                before, accumulate_trigger_raw_points,
-                                feats_undistort->points.size() - before,
-                                scan_history_.size(), feats_undistort->points.size());
-                }
             }
 
             flg_EKF_inited = (Measures.lidar_beg_time - first_lidar_time) < INIT_TIME ? \
@@ -1325,13 +1230,10 @@ private:
             if (extrinsic_est_en)
             {
                 const V3D ext_euler_deg = SO3ToEuler(state_point.offset_R_L_I);
-                const auto ext_q = state_point.offset_R_L_I.coeffs(); // (x,y,z,w)
                 RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                                      "Extrinsic (LiDAR->IMU) R(rpy,deg)=[%.3f, %.3f, %.3f]  T(m)=[%.4f, %.4f, %.4f]  "
-                                      "quat(x,y,z,w)=[%.6f, %.6f, %.6f, %.6f]",
+                                      "Extrinsic (LiDAR->IMU) R(rpy,deg)=[%.3f, %.3f, %.3f]  T(m)=[%.4f, %.4f, %.4f]",
                                       ext_euler_deg(0), ext_euler_deg(1), ext_euler_deg(2),
-                                      state_point.offset_T_L_I(0), state_point.offset_T_L_I(1), state_point.offset_T_L_I(2),
-                                      ext_q(0), ext_q(1), ext_q(2), ext_q(3));
+                                      state_point.offset_T_L_I(0), state_point.offset_T_L_I(1), state_point.offset_T_L_I(2));
             }
 
             // Frontend scan-quality gate: a scan captured during an IMU shock or with too
@@ -1350,17 +1252,6 @@ private:
             // and without this, that scan's geometry gets trusted into the map immediately,
             // producing a duplicated/misaligned floor-and-wall seam right at the bump.
             const bool in_shock_cooldown = (lidar_end_time - p_imu->getLastShockTime()) < shock_cooldown;
-            // TEMP DIAGNOSIS INSTRUMENTATION (2026-09-24 bag replay investigation) -- always-on,
-            // unlike the WARN below which only fires when scan_is_low_quality trips. Logs the
-            // filter's own per-scan quality metrics regardless of the gate, so a scan that
-            // silently degrades yaw without ever tripping the gate is still visible.
-            // Remove once the diagnosis is complete.
-            RCLCPP_INFO(this->get_logger(),
-                        "[DIAG] t=%.3f yaw_deg=%.2f features=%d residual=%.4f gyro_norm=%.4f gyro_z=%.4f accel_dev=%.4f shock=%d(a=%d g=%d) cooldown=%d raw_pts=%zu",
-                        lidar_end_time - first_lidar_time, euler_cur(2),
-                        effct_feat_num, res_mean_last, p_imu->getLastGyroNorm(), p_imu->getLastGyroZ(), p_imu->getLastAccelDeviation(),
-                        p_imu->hadShock(), p_imu->hadAccelShock(), p_imu->hadGyroShock(), in_shock_cooldown,
-                        feats_undistort->points.size());
             const bool scan_is_low_quality = reject_low_quality_scans &&
                 (effct_feat_num < min_effective_features ||
                  res_mean_last > max_mean_residual ||
@@ -1392,26 +1283,6 @@ private:
                 geoQuat.y = state_point.rot.coeffs()[1];
                 geoQuat.z = state_point.rot.coeffs()[2];
                 geoQuat.w = state_point.rot.coeffs()[3];
-            }
-
-            // Buffer this scan for future frontend scan-accumulation (see
-            // accumulate_on_low_points above), but ONLY if it is itself
-            // trustworthy: never buffer a scan that used accumulation (to avoid
-            // stale points silently propagating forward scan after scan) or one
-            // flagged low-quality (to avoid buffering shock-damaged data). This
-            // keeps scan_history_ always holding genuinely-fresh, individually
-            // sound scans, at the cost of not having a full history available
-            // immediately after two bad scans in a row.
-            if (accumulate_on_low_points && !used_accumulation_this_scan && !scan_is_low_quality)
-            {
-                HistoricScan hist;
-                hist.pose = predicted_state_for_rollback;
-                hist.cloud = this_scan_original_cloud;
-                scan_history_.push_back(hist);
-                while ((int)scan_history_.size() > accumulate_max_history_scans)
-                {
-                    scan_history_.pop_front();
-                }
             }
 
             /******* Publish odometry *******/
@@ -1513,8 +1384,7 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pubPath_;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_pcl_pc_;
-    rclcpp::CallbackGroup::SharedPtr imu_cb_group_;
-    rclcpp::CallbackGroup::SharedPtr lidar_cb_group_;
+    rclcpp::CallbackGroup::SharedPtr sensor_cb_group_;
 
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::TimerBase::SharedPtr timer_;
@@ -1536,11 +1406,11 @@ int main(int argc, char** argv)
 {
     rclcpp::init(argc, argv);
 
-    // Multi-threaded so the per-sensor callback groups (imu_cbk / standard_pcl_cbk) keep
-    // draining IMU/LiDAR messages while the default group's timer_callback is busy
+    
+    // Multi-threaded so the sensor callback group (imu_cbk/standard_pcl_cbk) can keep
+	// draining IMU/LiDAR messages while the default group's timer_callback is busy
     // doing ICP/map_incremental for the current scan (see callback group setup above).
-    // One thread per group: timer, IMU, LiDAR.
-    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 3);
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
     auto node = std::make_shared<LaserMappingNode>();
     executor.add_node(node);
     executor.spin();
