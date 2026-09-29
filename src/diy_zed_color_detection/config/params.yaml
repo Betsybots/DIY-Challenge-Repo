@@ -1,0 +1,55 @@
+# Parameters for the color_detector node.
+# HSV units follow OpenCV: hue 0..179, saturation 0..255, value 0..255.
+# Every *_range is [min, max]. Everything except `colors` can be changed live, e.g.
+#   ros2 param set /color_detector RED.sat_range "[120, 255]"
+color_detector:
+  ros__parameters:
+    # image_topic and qos_reliable are set by the launch file arguments (image_topic:=..., qos_reliable:=...).
+    image_transport: raw          # or "compressed" if the camera publishes compressed images
+    qos_queue_size: 10            # subscriber queue, also the colour/depth sync queue
+
+    # Distance limit, using the ZED depth image. Only objects between min and max count.
+    # Write these as decimals (2.0, not 2). Can be changed live:
+    #   ros2 param set /color_detector max_distance_m 1.5
+    use_depth: true
+    depth_topic: /zed/zed_node/depth/depth_registered
+    min_distance_m: 0.0
+    max_distance_m: 2.0
+
+    publish_debug_image: true     # annotated image on ~/debug_image
+    publish_masks: false          # per-colour binary masks on ~/mask/<NAME> (useful when tuning)
+
+    blur_kernel: 5                # Gaussian blur size (odd; 0 or 1 disables)
+    morph_kernel: 5               # open/close kernel for cleaning masks
+    min_area: 400.0               # ignore blobs smaller than this (pixels)
+    max_area: 0.0                 # 0 = no upper limit
+
+    # Blue background: these pixels are removed from every colour mask, and objects
+    # are only reported when they are surrounded by blue.
+    background:
+      enabled: true
+      hue_range: [95, 130]
+      sat_range: [60, 255]
+      val_range: [40, 255]
+      # Only accept an object that sits on blue: in a ring around it (starting surround_gap_px
+      # outside the object, surround_width_px wide), at least surround_min_ratio must be blue.
+      require_surround: true
+      surround_gap_px: 3
+      surround_width_px: 15
+      surround_min_ratio: 0.5       # 0.0..1.0; raise to be stricter
+      min_frame_ratio: 0.0          # also require this share of the whole frame to be blue (0 = off)
+
+    # Colours to detect. Each name listed here needs its own block below.
+    colors: ["RED", "GREEN"]
+
+    RED:
+      hue_ranges: [0, 10, 170, 179]   # red wraps around hue 0, so two ranges
+      sat_range: [100, 255]
+      val_range: [70, 255]
+      draw_bgr: [0, 0, 255]
+
+    GREEN:
+      hue_ranges: [40, 85]
+      sat_range: [80, 255]
+      val_range: [50, 255]
+      draw_bgr: [0, 255, 0]

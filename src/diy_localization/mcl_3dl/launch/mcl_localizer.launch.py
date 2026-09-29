@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -15,22 +15,7 @@ def generate_launch_description():
                 FindPackageShare("mcl_3dl"), "config", "test_localization.yaml"
             ]),
         ),
-            DeclareLaunchArgument("use_rviz", default_value="false"),
-        Node(
-            package="mcl_3dl",
-            executable="mcl_3dl",
-            name="mcl_3dl",
-            output="screen",
-            parameters=[config_file],
-            remappings=[
-                ("/cloud", "/cloud_registered_body")
-            ],
-        ),
-            #ros2 run pcl_ros pcd_to_pointcloud   
-            # --ros-args   -p file_name:=/home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/refined_map.pcd  
-            # -p publish_rate:=1.0 
-            # -r cloud_pcd:=/mapcloud 
-            # -p tf_frame:=map
+        DeclareLaunchArgument("use_rviz", default_value="false"),
         Node( 
             package="pcl_ros",
             executable="pcd_to_pointcloud",
@@ -41,6 +26,26 @@ def generate_launch_description():
                 ("/cloud_pcd", "/mapcloud")
             ]
         ),
+        TimerAction(
+            period=1.0,
+            actions=[
+                Node(
+                    package="mcl_3dl",
+                    executable="mcl_3dl",
+                    name="mcl_3dl",
+                    output="screen",
+                    parameters=[config_file],
+                    remappings=[
+                        ("/cloud", "/cloud_registered_body")
+                    ],
+                ),
+            ],
+        ),
+            #ros2 run pcl_ros pcd_to_pointcloud   
+            # --ros-args   -p file_name:=/home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/refined_map.pcd  
+            # -p publish_rate:=1.0 
+            # -r cloud_pcd:=/mapcloud 
+            # -p tf_frame:=map
         Node(
             package="rviz2",
             executable="rviz2",

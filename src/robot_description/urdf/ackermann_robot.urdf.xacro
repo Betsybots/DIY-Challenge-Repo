@@ -1,0 +1,296 @@
+<?xml version="1.0"?>
+<robot name="ackermann_robot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ========================================== -->
+  <!--               PARAMETERS                   -->
+  <!-- ========================================== -->
+  <xacro:property name="B" value="0.3175" /> <!-- 12.5 inches, Wheelbase (front-to-back distance) -->
+  <xacro:property name="L" value="0.27" /> <!-- 10.625 inches Track Width (left-to-right distance) -->
+  <xacro:property name="W" value="0.055" /> <!-- 55 mm Wheel Width -->
+  <xacro:property name="R" value="0.0675" /> <!-- 67.5 mm Wheel Radius -->
+  
+  <xacro:property name="X_OFFSET" value="0.2" /> <!-- 67.5 mm Wheel Radius -->
+  <xacro:property name="H" value="0.1" /> <!-- 67.5 mm Wheel Radius -->
+  <xacro:property name="chassis_mass" value="10.0" />
+  <xacro:property name="wheel_mass" value="1.0" />
+  <xacro:property name="total_mass" value="1.0" />
+  <xacro:property name="Lower_angle_limit" value="-0.6" />
+  <xacro:property name="Upper_angle_limit" value="0.6" />
+  <xacro:property name="velocity" value="1.0" />
+  <xacro:property name="Effort" value="10.0" />
+  
+  
+  <xacro:property name="Wheel_y_inertia" value="${wheel_mass * R * R/2.0}" />
+  <xacro:property name="Wheel_inertia" value="${wheel_mass * W * W/12.0 + wheel_mass * R * R/4.0}" />
+  
+
+  <!-- Base footprint / origin link -->
+  <link name="base_footprint"/>
+
+  <!-- Base Link / Chassis -->
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${R}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="${B/2} 0 ${H/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${B + X_OFFSET} ${L - W} ${H}"/>
+      </geometry>
+      <material name="chassis_color">
+        <color rgba="0.2 0.2 0.8 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="${B/2} 0 ${H/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${B + X_OFFSET} ${L - W} ${H}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="${B/2} 0 ${H/2}" rpy="0 0 0"/>
+      <mass value="${chassis_mass}"/>
+      <inertia ixx="${total_mass * ((L+W)*(L+W) + H * H)/12.0}" ixy="0" ixz="0" 
+               iyy="${total_mass * ((B + X_OFFSET)*(B + X_OFFSET) + H * H)/12.0}" iyz="0" 
+               izz="${total_mass * ((B + X_OFFSET)*(B + X_OFFSET) + (L+W)*(L+W))/12.0}"/>
+    </inertial>
+  </link>
+
+
+  <!-- ========================================== -->
+  <!--             REAR WHEELS (DRIVE)            -->
+  <!-- ========================================== -->
+  
+  <!-- Rear Left Wheel -->
+  <joint name="rear_left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="rear_left_wheel"/>
+    <origin xyz="0 ${L/2} 0" rpy="-${pi/2} 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="rear_left_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${R}" length="${W}"/>
+      </geometry>
+      <material name="wheel_color">
+        <color rgba="0.1 0.1 0.1 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${R}" length="${W}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${wheel_mass}"/>
+      <inertia ixx="${Wheel_inertia}" ixy="0" ixz="0" 
+               iyy="${Wheel_y_inertia}" iyz="0" 
+               izz="${Wheel_inertia}"/>
+    </inertial>
+  </link>
+
+  <!-- Rear Right Wheel -->
+  <joint name="rear_right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="rear_right_wheel"/>
+    <origin xyz="0 -${L/2} 0" rpy="-${pi/2} 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="rear_right_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${R}" length="${W}"/>
+      </geometry>
+      <material name="wheel_color"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${R}" length="${W}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${wheel_mass}"/>
+      <inertia ixx="${Wheel_inertia}" ixy="0" ixz="0" 
+               iyy="${Wheel_y_inertia}" iyz="0" 
+               izz="${Wheel_inertia}"/>
+    </inertial>
+  </link>
+
+
+  <!-- ========================================== -->
+  <!--           FRONT STEERING & WHEELS          -->
+  <!-- ========================================== -->
+
+  <!-- Front Left Steering Hinge (Revolute joint for steering) -->
+  <joint name="front_left_steer_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="front_left_steer_link"/>
+    <origin xyz="${B} ${L/2} 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="${Lower_angle_limit}" upper="${Upper_angle_limit}" effort="${Effort}" velocity="${velocity}"/>
+  </joint>
+
+  <link name="front_left_steer_link">
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" 
+               iyy="0.0001" iyz="0" 
+               izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <!-- Front Left Wheel attached to steering link -->
+  <joint name="front_left_wheel_joint" type="continuous">
+    <parent link="front_left_steer_link"/>
+    <child link="front_left_wheel"/>
+    <origin xyz="0 0 0" rpy="-${pi/2} 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="front_left_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${R}" length="${W}"/>
+      </geometry>
+      <material name="wheel_color"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${R}" length="${W}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${wheel_mass}"/>
+      <inertia ixx="${Wheel_inertia}" ixy="0" ixz="0" 
+               iyy="${Wheel_y_inertia}" iyz="0" 
+               izz="${Wheel_inertia}"/>
+    </inertial>
+  </link>
+
+  <!-- Front Right Steering Hinge -->
+  <joint name="front_right_steer_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="front_right_steer_link"/>
+    <origin xyz="${B} -${L/2} 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="${Lower_angle_limit}" upper="${Upper_angle_limit}" effort="${Effort}" velocity="${velocity}"/>
+  </joint>
+
+  <link name="front_right_steer_link">
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" 
+               iyy="0.0001" iyz="0" 
+               izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <!-- Front Right Wheel attached to steering link -->
+  <joint name="front_right_wheel_joint" type="continuous">
+    <parent link="front_right_steer_link"/>
+    <child link="front_right_wheel"/>
+    <origin xyz="0 0 0" rpy="-${pi/2} 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="front_right_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${R}" length="${W}"/>
+      </geometry>
+      <material name="wheel_color"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${R}" length="${W}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${wheel_mass}"/>
+      <inertia ixx="${Wheel_inertia}" ixy="0" ixz="0" 
+               iyy="${Wheel_y_inertia}" iyz="0" 
+               izz="${Wheel_inertia}"/>
+    </inertial>
+  </link>
+  
+<!-- ========================================== -->
+  <!--             SENSORS (HARDWARE)             -->
+  <!-- ========================================== -->
+
+  <!-- LiDAR Frame (Adjust origin xyz/rpy to match your physical mount) -->
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="hesai_lidar"/>
+    <origin xyz="${B/2} 0 ${H + 0.05}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="hesai_lidar">
+    <visual>
+      <geometry>
+        <cylinder radius="0.035" length="0.04"/>
+      </geometry>
+      <material name="lidar_black">
+        <color rgba="0.0 0.0 0.0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- IMU Link (Adjust location relative to base_link center) -->
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="${B/2} 0 ${H/2}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="imu_link"/>
+  
+  <ros2_control name="AckermannRobotHardware" type="system">
+    <hardware>
+      <plugin>ackermann_hardware/AckermannSystem</plugin>
+      <param name="canbus_name">can0</param>
+      <param name="motor_id">2</param>
+      <param name="motor_inverted">true</param>
+      <param name="gear_ratio">2.0</param>
+      <param name="max_motor_speed_rps">1.0</param>
+      <param name="max_steering_angle">0.6</param>
+      <param name="pwmchip_path">/sys/class/pwm/pwmchip0</param>
+      <param name="pwm_channel">0</param>
+      <param name="pwm_period_ns">20000000</param>
+      <param name="servo_min_pulse_ns">1000000</param>
+      <param name="servo_center_pulse_ns">1500000</param>
+      <param name="servo_max_pulse_ns">2000000</param>
+      <param name="stator_current_limit">40.0</param>
+      <param name="supply_current_limit">20.0</param>
+    </hardware>
+
+  <!-- Traction Wheels (Rear) -->
+  <joint name="rear_left_wheel_joint">
+    <command_interface name="velocity"/>
+    <state_interface name="velocity"/>
+    <state_interface name="position"/>
+  </joint>
+  <joint name="rear_right_wheel_joint">
+    <command_interface name="velocity"/>
+    <state_interface name="velocity"/>
+    <state_interface name="position"/>
+  </joint>
+
+  <!-- Steering Knuckles (Front) -->
+  <joint name="front_left_steer_joint">
+    <command_interface name="position"/>
+    <state_interface name="position"/>
+  </joint>
+  <joint name="front_right_steer_joint">
+    <command_interface name="position"/>
+    <state_interface name="position"/>
+  </joint>
+</ros2_control>
+</robot>
+
+

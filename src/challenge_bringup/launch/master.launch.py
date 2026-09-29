@@ -98,60 +98,41 @@ def generate_launch_description():
         ),
     )
 
-
-    # ── BLOCK 3: Fast-LIO2 + EKF  ──────────────────────────
-    # Starts after the lidar/IMU producers have come online.
-    slam_group = GroupAction(
+    delayed_fast_lio2_launch = TimerAction(
+        period=2.0,
         actions=[
-            # FAST-LIO2 in its own scoped group so the /tf remap applies to it
-            # alone: it broadcasts odom→base_link unconditionally, and the EKF
-            # below must be the sole owner of that transform. /Odometry is
-            # NOT remapped — the EKF and map_localizer consume it directly.
-            GroupAction(
-                actions=[
-                    SetRemap(src='/tf', dst='/tf_fastlio_unused'),
-                    IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                            os.path.join(
-                                get_package_share_directory('fast_lio_ros2'),
-                                'launch',
-                                'lio_localizer.launch.py',
-                            )
-                        ),
-                    ),
-                ]
-            ),
-            # EKF: gated FAST-LIO2 body twist + /wheel_odom vx + bias-corrected
-            # /imu/data yaw rate → /odom + odom→base_footprint TF; see
-            # diy_state_estimate/config/ekf_fusion.yaml.
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
-                        get_package_share_directory('diy_state_estimate'),
+                        get_package_share_directory('fast_lio_ros2'),
                         'launch',
-                        'ekf_fusion.launch.py',
+                        'lio_localizer.launch.py',
                     )
                 ),
-                launch_arguments={
-                    # 'wheel_odom_topic': '/wheel_odom',
-                    'imu_topic': '/imu/data',
-                    'lidar_odom_topic': '/Odometry',
-                    'output_topic': '/odom',
-                }.items(),
+                launch_arguments={'output_topic': '/odom'}.items(),
             ),
+        ]
+    )
+
+    delayed_mcl_3dl_launch = TimerAction(
+        period=1.0,
+        actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
-                        get_package_share_directory('map_localizer'),
+                        get_package_share_directory('mcl_3dl'),
                         'launch',
-                        'map_localizer_launch.py',
+                        'mcl_localizer.launch.py',
                     )
                 ),
                 condition=IfCondition(autonomous),
-                launch_arguments={
-                    'use_rviz': 'false',
-                }.items(),
             ),
+        ]
+    )
+
+    delayed_loop_pgo_launch = TimerAction(
+        period=1.0,
+        actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
@@ -165,16 +146,20 @@ def generate_launch_description():
         ]
     )
 
-    # ── Block 5: map_hba: hierarchical bundle adjustment map refinement ────────────
-    map_hba_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('map_hba'),
-                'launch',
-                'map_hba_launch.py',
-            )
-        ),
-        condition=UnlessCondition(autonomous),
+    delayed_map_hba_launch = TimerAction(
+        period=1.0,
+        actions=[
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(
+                        get_package_share_directory('map_hba'),
+                        'launch',
+                        'map_hba_launch.py',
+                    )
+                ),
+                condition=UnlessCondition(autonomous),
+            ),
+        ]
     )
 
     # ── BLOCK 6: Nav2 autonomous navigation stack ─────────────────────────────
@@ -195,24 +180,11 @@ def generate_launch_description():
         name='rviz2',
         output='screen',
         condition=IfCondition(use_rviz),
-        arguments=['-d', os.path.join(pkg_dir, 'rviz', 'master.rviz')],
-    )
-
-    # Everything except the Hesai driver itself waits hesai_startup_delay
-    # seconds so the sensor is online before FAST-LIO2 and the rest of the
-    # stack start consuming /hesai/points.
-    delayed_fast_lio = TimerAction(
-        period=startup_delay,
-        actions=[slam_group],
-    )
-
-    delayed_hba_map = TimerAction(
-        period=startup_delay,
-        actions=[map_hba_launch],
+        arguments=['-d', "/home/juggernauts/.rviz2/justLocalizer.rviz"],
     )
 
     delayed_nav2 = TimerAction(
-        period=startup_delay,
+        period=5.0,
         actions=[nav2_launch],
     )
 
@@ -221,10 +193,12 @@ def generate_launch_description():
         declare_startup_delay,
         declare_autonomous,
         declare_use_rviz,
-        robot_description_launch,
-        hesai_launch,
-        delayed_fast_lio,
-        delayed_hba_map,
-        # delayed_nav2,
-        rviz_node,
+        robot_description_launch,        # always
+        hesai_launch,                    # always
+        delayed_fast_lio2_launch,        # always
+        delayed_mcl_3dl_launch,          # autonomous
+        delayed_loop_pgo_launch,         # manual
+        delayed_map_hba_launch,          # manual
+        delayed_nav2,                    # autonomous
+        rviz_node,                       # optional
     ])
