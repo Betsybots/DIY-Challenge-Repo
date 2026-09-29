@@ -1,0 +1,84 @@
+# distance, turn_radius, and stop.distance are in inches;
+# stop_angle is in degrees; velocity is in meters per second.
+
+# Pure Pursuit and point-cloud wall-detection configuration.
+# Distances below are in meters, angles in degrees, and angular velocity in rad/s.
+pure_pursuit:
+  pointcloud_topic: /zed/zed_node/point_cloud/cloud_registered
+  base_frame: base_footprint
+  cloud_timeout_sec: 0.5
+  horizontal_fov_deg: 150.0
+  point_stride: 5
+
+  wall_min_x_m: 0.15
+  wall_max_x_m: 3.0
+  wall_min_abs_y_m: 0.15
+  wall_max_abs_y_m: 2.0
+  wall_min_z_m: 0.10
+  wall_max_z_m: 1.50
+  minimum_wall_points: 20
+  wall_fit_residual_m: 0.10
+  minimum_corridor_width_m: 0.40
+  maximum_corridor_width_m: 3.0
+
+  lookahead_distance_m: 1.0
+  obstacle_half_width_m: 0.25
+  maximum_angular_velocity_rad_s: 1.0
+
+# minimum allowable turn radius is 18 inches
+motions:
+  - type: STRAIGHT
+    distance: 376.0
+    velocity: 1.0
+    stop:
+      - type: COMPLETE
+
+  - type: TURN
+    turn_radius: 48.0
+    stop_angle: 90.0
+    velocity: 0.6
+    stop:
+      - type: COMPLETE
+
+  - type: WALL_FOLLOW
+    velocity: 1.0
+    stop:
+      - type: OBSTACLE
+        distance: 39.37  # stop 1 meter before an obstacle
+
+  - type: TURN
+    turn_radius: 39.37  # still needs tuning
+    stop_angle: -180.0
+    velocity: 0.6
+    stop:
+      - type: COMPLETE
+
+  - type: STRAIGHT
+    distance: 157.48  # still needs tuning
+    velocity: 2.0
+    stop:
+      - type: OBSTACLE
+        distance: 39.37  # stop 1 meter before an obstacle
+
+  - type: TURN
+    turn_radius: 20  # still needs tuning
+    stop_angle: 100.0
+    velocity: 0.6
+    stop:
+      - type: COMPLETE
+
+  - type: TURN
+    turn_radius: 20  # still needs tuning
+    stop_angle: -100.0
+    velocity: 0.6
+    stop:
+      - type: COMPLETE
+
+  - type: STRAIGHT
+    distance: 157.48
+    velocity: 1.0
+    
+  - type: TURN
+    turn_radius: 39.37
+    stop_angle: 90.0
+    velocity: 0.6
