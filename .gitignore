@@ -55,3 +55,5 @@ imu_calib_data/
 !src/challenge_bringup/maps/static_map.yaml
 frames_*.gv
 frames_*.pdf
+
+**/patches/*

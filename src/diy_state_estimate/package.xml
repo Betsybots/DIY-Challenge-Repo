@@ -7,13 +7,16 @@
     odom-frame state estimation for the DIY Challenge robot.
 
     Runs a single robot_localization EKF that fuses wheel odometry
-    (/wheel_odom, velocities), the ACEINNA IMU (/imu/data, yaw rate) and
-    FAST-LIO2 lidar-inertial odometry (/Odometry, planar pose) into /odom and
-    the odom -> base_link TF consumed by Nav2. Because FAST-LIO2 already fuses
-    the same IMU internally, a small relay node (sensor_covariance_relay)
-    inflates the IMU and lidar covariances before they reach the EKF so the
-    wheel encoders carry real weight and a moving obstacle can no longer drag
-    the robot pose around while the wheels report zero motion.
+    (/wheel_odom, velocities), the ZED IMU (/zed/zed_node/imu/data, yaw
+    rate), FAST-LIO2 lidar-inertial odometry (/Odometry) and ZED visual-
+    inertial odometry (/zed/zed_node/odom) into /odom and the odom ->
+    base_link TF consumed by Nav2. FAST-LIO2 and the ZED VIO node each
+    differentiate their own body twist and are gated independently against
+    the wheels/gyro (never against each other) by a small relay node
+    (sensor_covariance_relay), which also inflates the shared ZED-IMU and
+    lidar/VIO covariances before they reach the EKF so the wheel encoders
+    carry real weight and a moving obstacle can no longer drag the robot
+    pose around while the wheels report zero motion.
   </description>
   <maintainer email="team@example.com">DIY Challenge Team</maintainer>
   <license>Apache-2.0</license>

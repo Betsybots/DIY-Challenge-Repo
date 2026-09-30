@@ -1,6 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# ekf_fusion.yaml — single odom-frame EKF: gated FAST-LIO2 body twist,
-#                   wheel forward speed, bias-corrected gyro yaw rate
+# ekf_fusion.yaml — single odom-frame EKF: gated FAST-LIO2 + ZED VIO body
+#                   twists, wheel forward speed, bias-corrected ZED gyro
+#                   yaw rate
 # ─────────────────────────────────────────────────────────────────────────────
 # OUTPUT
 #   /odom                       (remapped from odometry/filtered in the launch file)
@@ -13,16 +14,37 @@
 #                          base_link -> (sensors, wheels, etc.)
 #
 # INPUTS (topics are overridden from the launch file; values here are the
-# defaults that match it). All three come through sensor_covariance_relay.
+# defaults that match it). All four come through sensor_covariance_relay.
 #   odom0  /lidar_twist_ekf  FAST-LIO2 body twist (vx, vy, vyaw) derived from
-#                           consecutive /Odometry poses. PRIMARY motion input.
-#                           The relay checks each step against the wheels and
-#                           gyro and gives any disagreeing component a huge
-#                           variance, so the EKF ignores it for that step.
+#                           consecutive /Odometry poses. The relay checks
+#                           each step against the wheels and gyro and gives
+#                           any disagreeing component a huge variance, so the
+#                           EKF ignores it for that step.
 #   odom1  /wheel_odom_ekf   encoders, vx variance floored to 0.04. Fused: vx
-#                           and vy (= 0, diff-drive no-sideslip).
-#   imu0   /imu/data_ekf     gyro with z bias removed, variance floored.
-#                           Fused: vyaw. MAIN heading source.
+#                           only (no vy -- see the odom1 block below).
+#   odom2  /vio_twist_ekf     ZED VIO body twist (vx, vy, vyaw), derived and
+#                           gated the SAME way as odom0 from consecutive
+#                           /zed/zed_node/odom poses -- independently of
+#                           FAST-LIO2 (the two are never compared against
+#                           each other, only each against wheels/gyro).
+#   imu0   /imu/data_ekf     ZED gyro with z bias removed, variance floored.
+#                           Fused: vyaw. MAIN heading source. NOTE: FAST-LIO2
+#                           and the ZED VIO node both already consume this
+#                           same physical gyro internally, so it is not
+#                           independent evidence relative to odom0/odom2 --
+#                           it is still fused directly (raw, high-rate, no
+#                           pose-differentiation noise) because it remains
+#                           the best available yaw-rate measurement.
+#   imu1   /imu/data_aceinna_ekf   OPTIONAL, disabled by default (see
+#                           sensor_covariance_relay.aceinna_enable below).
+#                           ACEINNA gyro vyaw only -- mount position (near
+#                           lidar/camera, off base_link's rotation center)
+#                           makes gyro rate safe to fuse directly (rigid-body
+#                           angular velocity is position-independent) but
+#                           makes raw linear acceleration unsafe without
+#                           lever-arm compensation, so only vyaw is fused.
+#                           Unlike imu0, this is a genuinely independent
+#                           physical IMU from the one FAST-LIO2/VIO consume.
 #
 # WHY (2026-09-27, scripts/bags/speed-course run-1/run-2; offline tests in
 # scripts/testing-scripts/map_sharpness_compare.py). Stacking the raw LiDAR
@@ -35,12 +57,15 @@
 #   * FAST-LIO2 motion, falling back to wheel vx / gyro yaw rate only when
 #     FAST-LIO2 disagrees with them (this config): walls as sharp as
 #     FAST-LIO2, corridor ghost removed, run-2 end error 3.0 m.
-# Weighting (after update rates, 10 Hz vs 100 / 200 Hz): FAST-LIO2 ~10x the
-# wheels on vx; the gyro ~250x FAST-LIO2 on vyaw. The gyro leads heading
-# because FAST-LIO2's yaw drifted ~45 deg through a hairpin on a re-timed
-# run-2 replay -- gradually enough to pass the relay's per-step gate -- while
-# the bias-corrected gyro closed both laps at -360 deg. Remaining
-# drift (a few m per ~112 m lap) is for map_localizer (map -> odom).
+# ZED VIO (odom2) was added the same way, on the trust that vision can
+# disambiguate the along-corridor case where LiDAR alone cannot (texture vs
+# flat parallel walls); it is not cross-checked against FAST-LIO2, only
+# against wheels/gyro like FAST-LIO2 is. Re-run map_sharpness_compare.py
+# once VIO bags exist to confirm/tune vio_twist_cov and the vio_*_gate
+# defaults below (currently copied from the FAST-LIO2 starting point).
+# Weighting (after update rates): the ZED gyro dominates vyaw over both
+# twist sources (see imu0 note above) -- remaining drift (a few m per
+# ~112 m lap on the FAST-LIO2-only bags) is for map_localizer (map -> odom).
 # No absolute pose is fused, so /odom stays smooth and continuous (REP-105).
 #
 # Filter choice: plain EKF (robot_localization ekf_node). Planar diff-drive at
@@ -83,7 +108,7 @@ ekf_filter_node:
     odom0: /lidar_twist_ekf
     odom0_config: [false, false, false,
                    false, false, false,
-                   true,  true,  false,
+                   true,  false,  false,
                    false, false, true,
                    false, false, false]
     odom0_queue_size: 10
@@ -91,11 +116,14 @@ ekf_filter_node:
     odom0_differential: false
     odom0_relative: false
 
-    # ── odom1: wheel encoders — forward speed (+ no-sideslip vy = 0) ───────
+    # ── odom1: wheel encoders — forward speed only (vx) ────────────────────
+    # vy is NOT fused from wheels: no-sideslip is a diff-drive assumption,
+    # not a measurement, and it fights any real lateral motion the other
+    # sources (FAST-LIO2 / VIO) do observe. Wheels are vx-only here.
     odom1: /wheel_odom_ekf
     odom1_config: [false, false, false,
                    false, false, false,
-                   true,  true,  false,
+                   true,  false, false,
                    false, false, false,
                    false, false, false]
     odom1_queue_size: 20
@@ -103,8 +131,31 @@ ekf_filter_node:
     odom1_differential: false
     odom1_relative: false
 
-    # ── imu0: gyro yaw rate only (bias removed, variance floored by relay) ──
-    # No accelerations: raw ax/ay include gravity on the ramps.
+    # ── odom2: ZED VIO body twist (gated by the relay, same as odom0) ─────
+    # Independent of FAST-LIO2 -- not cross-checked against odom0, only
+    # against wheels/gyro (see the relay's module docstring).
+    # vy enabled (unlike odom0/odom1): wheels never fuse vy (see odom1 note
+    # above, no false zero-sideslip constraint to fight), and per operator
+    # observation (2026-09-30) VIO tracked the loop well while FAST-LIO2
+    # drifted -- so VIO is the trusted source for real lateral velocity.
+    # FAST-LIO2's own vy stays false in odom0 since it was the one that
+    # drifted; letting an already-unreliable source also drive vy would
+    # work against the odom0 re-weighting above, not with it.
+    odom2: /vio_twist_ekf
+    odom2_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, true,
+                   false, false, false]
+    odom2_queue_size: 10
+    odom2_nodelay: false
+    odom2_differential: false
+    odom2_relative: false
+
+    # ── imu0: ZED gyro yaw rate only (bias removed, variance floored) ──────
+    # No accelerations: raw ax/ay include gravity on the ramps. Shared
+    # physical IMU with FAST-LIO2/VIO internally (see the INPUTS note above)
+    # -- fused directly anyway, as the best available yaw-rate measurement.
     imu0: /imu/data_ekf
     imu0_config: [false, false, false,
                   false, false, false,
@@ -116,6 +167,22 @@ ekf_filter_node:
     imu0_differential: false
     imu0_relative: false
     imu0_remove_gravitational_acceleration: false   # accel not fused
+
+    # ── imu1: ACEINNA gyro yaw rate only (OPTIONAL, disabled by default) ──
+    # See the INPUTS note above and sensor_covariance_relay.aceinna_enable
+    # below. Harmless when disabled: the relay never publishes here, so
+    # this input simply never updates (no error).
+    imu1: /imu/data_aceinna_ekf
+    imu1_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu1_queue_size: 20
+    imu1_nodelay: true
+    imu1_differential: false
+    imu1_relative: false
+    imu1_remove_gravitational_acceleration: false   # accel not fused
 
     use_control: false
 
@@ -162,18 +229,42 @@ ekf_filter_node:
                     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0]
 
 # ── sensor_covariance_relay (diy_state_estimate) ─────────────────────────────
-# The relay prepares the EKF inputs above (gated FAST-LIO2 twist, wheel vx,
-# bias-corrected gyro). ekf_fusion.launch.py loads this file into the relay as
-# well; topic names and the covariance knobs exposed as launch arguments are
-# set there. See the relay's module docstring for every parameter.
+# The relay prepares the EKF inputs above (gated FAST-LIO2 + VIO twists,
+# wheel vx, bias-corrected ZED gyro). ekf_fusion.launch.py loads this file
+# into the relay as well; topic names and the covariance knobs exposed as
+# launch arguments are set there. See the relay's module docstring for every
+# parameter.
 sensor_covariance_relay:
   ros__parameters:
-    # Wheel stall / spin handling. When FAST-LIO2 says the robot is still but
-    # the wheels say it is moving, trust FAST-LIO2 and (after 0.3 s) ignore
-    # wheel vx. Replay results (2026-09-28):
+    # Wheel stall / spin handling. When FAST-LIO2 OR the ZED VIO node says
+    # the robot is still but the wheels say it is moving, trust that source
+    # and (after 0.3 s) ignore wheel vx. Replay results (2026-09-28, FAST-LIO2
+    # only -- re-check once VIO bags exist):
     #   true : obstacle run-2 lap error 2.4 -> 1.1 m (fixes the stuck-while-
     #          manoeuvring case), run-3 1.6 -> 0.6 m; speed course 0.6 ->
     #          1.4-2.0 m (fires on long straight corridors, where FAST-LIO2
     #          can also read "still" while the robot moves).
     #   false: the previous behaviour -- wheels win whenever they disagree.
     stall_detection: false
+
+    # Re-weighting per operator observation (rviz2, 2026-09-30): FAST-LIO2
+    # drifted off the tracked path over a loop, while ZED VIO (odom2) stayed
+    # on path over the same run. Raise LIO's variance (trust it less), lower
+    # VIO's (trust it more), and tighten LIO's own vx gate so a slide gets
+    # rejected earlier. Re-run map_sharpness_compare.py (see the header WHY
+    # section) once a bag of this exists to confirm/re-tune these numbers.
+    lidar_twist_cov: [0.0016, 0.0016, 0.05]   # was [0.0004, 0.0004, 0.05]
+    twist_vx_gate: 0.15                        # was 0.2
+    vio_twist_cov: [0.0002, 0.0002, 0.05]     # was [0.0004, 0.0004, 0.05]
+    vio_vx_gate: 0.25                          # was 0.2
+
+    # Optional second, independent physical IMU (ACEINNA) -- see the INPUTS
+    # note above and the relay's module docstring. Off by default: no
+    # ACEINNA driver is currently launched (ekf_fusion.launch.py header).
+    # Flip aceinna_enable: true (and pass the real driver topic as
+    # aceinna_imu_in if it differs from '/imu/data') once the driver runs.
+    aceinna_enable: false
+    aceinna_imu_in: /imu/data
+    aceinna_imu_out: /imu/data_aceinna_ekf
+    aceinna_gyro_cov_scale: 1.0
+    aceinna_gyro_cov_floor: 0.004

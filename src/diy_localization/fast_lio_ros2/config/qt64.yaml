@@ -22,32 +22,32 @@
             lid_topic:  "/lidar_points"
             # QT64 is a mechanical spinning LiDAR with no built-in IMU.
             # Point this at your external IMU driver's topic.
-            imu_topic:  "/imu/data"
+            imu_topic:  "/zed/zed_node/imu/data"
             time_sync_en: false                 # Enable if your LiDAR and IMU are time-synchronized (requires accurate timestamps)
             publish_tf: true
             time_offset_lidar_to_imu: 0.0       # Time offset from LiDAR to IMU in seconds
             # Verify your IMU driver's angular_velocity units before running:
             # treating deg/s data as rad/s (or vice versa) causes large
             # stationary drift (a ~57x scale error).
-            imu_gyr_unit: "rad"          # "rad" or "deg" -- CONFIRMED 2026-09-24: this bag's
-            # /imu/data angular_velocity + its own published covariance
-            # (stationary noise ~2e-4 rad/s; peak turn ~0.9 rad/s, matching
-            # the same turns' wheel-odom |wz| order of magnitude) are
-            # unambiguously rad/s. The committed "deg" here made imu_cbk()
-            # multiply every gyro sample by pi/180 (~57x too small) before it
-            # ever reached the filter.
+            imu_gyr_unit: "rad"          # "rad" or "deg"
 
         preprocess:
             lidar_type: 3                # 3: Hesai QT64
             scan_line: 32                # number of active lines the Hesai driver is configured to output
             # The driver keeps these lines' *original* ring IDs (not renumbered
-            # to 0-31) -- ring_max - ring_min + 1 must equal scan_line above.
-            ring_min: 5
-            ring_max: 36
+            # to 0-63) -- ring_max - ring_min + 1 must equal scan_line above.
+            ring_min: 00
+            ring_max: 31
             timestamp_unit: 0            # 0-second, 1-millisecond, 2-microsecond, 3-nanosecond
             scan_rate: 10                # Hz
             blind: 0.5                   # Blind zone of the LiDAR in meters (QT64 has a blind zone of ~1 m)
-
+            # filtered_cloud_scan_line: 32
+            # filtered_cloud_ring_min: 5
+            # filtered_cloud_ring_max: 36
+            # filtered_cloud_detection_range: 3.0
+            # filtered_cloud_fov_min_angle: 30.0
+            # filtered_cloud_fov_max_angle: 150.0
+            
         mapping:
             acc_cov: 0.1
             # gyr_cov is the gyro measurement/process-noise variance in
@@ -63,7 +63,6 @@
             b_gyr_cov: 0.0001
             fov_degree: 360.0   # Field of view of the LiDAR in degrees
             det_range: 10.0      #30.0   # Detection range of the LiDAR in meters (QT64 is a short-range LiDAR, ~30 m max)
-
             # Online LiDAR-IMU extrinsic estimation needs rich 6-DOF excitation
             # (rotation about all axes). Motion that is mostly translational
             # (e.g. back-and-forth driving) cannot observe the rotational
@@ -71,23 +70,30 @@
             # transform and can cascade into "No Effective Points" / pure-IMU
             # drift. Keep this false and provide a good initial extrinsic
             # below unless your platform will undergo rich 6-DOF motion.
-            extrinsic_est_en: false          # 2026-09-25: back off after the identity-start
-            # experiment below identified which components are actually observable. See the
-            # extrinsic_R/T notes for what was concluded and baked in.
+            extrinsic_est_en: true
             #extrinsic_T: [0.0, 0.0298, -0.13795]
-            extrinsic_T: [0.055, 0.012, 0.152]
+            #extrinsic_T: [0.0, 0.0298, -0.13795]
+            # extrinsic_T: [-0.0209, 0.0469, -0.1067]
+            # extrinsic_T: [0.083680, 0.58493, -0.107740]
+            # extrinsic_T: [0.055, 0.012, 0.152]
+            #extrinsic_T: [0.055, 0.0, 0.225]    # With ACEINNA IMU
+            extrinsic_T: [0.315, 0.0, 0.31]    # With ZED IMU
             # Rotation from the LiDAR frame to the (raw) IMU frame (row-major).
             # FAST-LIO applies this as: p_imu = extrinsic_R * p_lidar + extrinsic_T
             # (see offset_R_L_I / offset_T_L_I in laserMapping.cpp), so both
             # extrinsic_R and extrinsic_T must be expressed in the raw IMU frame.
             #
-            # Old values (hardcoded, pre-2026-09-24 diagnosis)
+
+            # Old values
             extrinsic_R: [1.0, 0.0, 0.0,
                           0.0, 1.0, 0.0,
                           0.0, 0.0, 1.0]
             # extrinsic_R: [0.998992, -0.044454, -0.006237,
             #             0.044420,  0.998998, -0.005500,
             #             0.006475,  0.005218,  0.999965]
+            # extrinsic_R: [0.995151, 0.082165, 0.054061,
+            #             0.089198,  -0.985539, -0.144069,
+            #             0.041442,  0.148192,  -0.988090]
 
 
         publish: 
@@ -96,7 +102,8 @@
             effect_map_en: false # Effective map is the subset of the map that is currently being used
             scan_publish_en: true
             dense_publish_en: false
-            scan_bodyframe_pub_en: true
+            scan_bodyframe_pub_en: true # Publish the scan in the body frame of the vehicle
+            filtered_cloud_pub_en: false
 
         pcd_save:
             pcd_save_en: false
@@ -106,6 +113,9 @@
         # out of the persistent ikd-tree map and off the published clouds (so loop_pgo/
         # map_localizer never see it), while odometry/TF keep publishing for continuity.
         frontend:
+            recovery_enable: true
+            recovery_lidar_gap: 1.0          # seconds; enter recovery after this much time without a valid LiDAR scan
+            recovery_good_scans: 5            # consecutive good scans required before map updates resume
             # `false`, which disables this entire gate (and the
             # shock-rollback fix + gyro-rate criterion below, both built
             # specifically for this) -- directly contradicts the very next
@@ -120,8 +130,8 @@
             # A 4.0 m/s^2 threshold is too strict for normal acceleration during
             # turns / starts / stops, which causes false shock detections and scan
             # rejection even when the cloud itself is valid.
-            min_effective_features: 60
-            max_mean_residual: 0.1
+            min_effective_features: 10                # 10
+            max_mean_residual:  0.1                  # 1.0
             shock_accel_deviation_threshold: 8.0    # 8.0 m/s^2 deviation from gravity; raise to avoid false positives
             shock_process_noise_scale: 25.0           # 25.0 temporary IMU process-noise multiplier during a shock
             # Catches fast rotations (e.g. an in-place spin) that
@@ -154,7 +164,7 @@
             # clean gets trusted immediately even though the pose (esp. Z/pitch) may
             # not have fully reconverged yet -- that's what was causing the duplicated
             # floor/wall layer right at bumps.
-            shock_cooldown: 0.3
+            shock_cooldown: 0.3 # seconds to keep rejecting scans after a shock
 
         # Absolute path for the final full-map PCD save (on shutdown or /map_save
         # service call). Used as-is since it starts with "/". Leave empty ("") to

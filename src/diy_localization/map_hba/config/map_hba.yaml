@@ -5,15 +5,6 @@ stride: 10
 voxel_size: 0.5
 min_point_num: 10
 max_layer: 3
-# 2026-09-25: tested tightening 0.01 -> 0.002 (std threshold sqrt(0.01)=10cm ->
-# sqrt(0.002)=4.5cm) + voxel_size 0.5->0.3 + more iterations, as a fix for
-# scan-to-scan wall-thickness jitter. Measured result (quantified perpendicular
-# wall-thickness before/after, same regions): NO improvement -- map_hba's output
-# was consistently WORSE than the raw loop_pgo map both before and after this
-# tuning attempt (suspected real bug in how it merges overlapping sliding-window
-# between-factors, not a hyperparameter issue). Reverted to original defaults.
-# Do not use map_hba's refined_map.pcd for real map-quality decisions until this
-# is properly debugged -- see scripts/testing-scripts/README.md.
 plane_thresh: 0.01
 ba_max_iter: 10
 hba_iter: 5

@@ -49,7 +49,11 @@ def generate_launch_description():
                     'start_delay_s': LaunchConfiguration('start_delay_s'),
                     'loop': LaunchConfiguration('loop'),
                     'loop_count': LaunchConfiguration('loop_count'),
-                }],
+                'use_nav2_action': LaunchConfiguration('use_nav2_action'),
+                'nav2_action_name': LaunchConfiguration('nav2_action_name'),
+                'nav2_action_server_timeout': LaunchConfiguration(
+                    'nav2_action_server_timeout'),
+            }],
             )
         ]
 
@@ -93,6 +97,35 @@ def generate_launch_description():
                 '(only meaningful together with loop:=true; ignored '
                 'otherwise). Leave at -1 to fall back to the waypoints '
                 'YAML\'s own loop_count: key instead.'
+            ),
+        ),
+        DeclareLaunchArgument(
+            'use_nav2_action',
+            default_value='false',
+            description=(
+                'false (default): TOPIC MODE — publish /goal_pose, advance '
+                'on /pd/goal_reached (the custom A*/PD stack). '
+                'true: NAV2 ACTION MODE — send nav2_msgs/action/'
+                'NavigateToPose goals directly to bt_navigator and advance '
+                'on that action\'s terminal GoalStatus.'
+            ),
+        ),
+        DeclareLaunchArgument(
+            'nav2_action_name',
+            default_value='navigate_to_pose',
+            description=(
+                'Nav2 action server name to call in NAV2 ACTION MODE '
+                '(use_nav2_action:=true). Matches bt_navigator\'s default '
+                'unnamespaced action.'
+            ),
+        ),
+        DeclareLaunchArgument(
+            'nav2_action_server_timeout',
+            default_value='10.0',
+            description=(
+                'Seconds to wait for the Nav2 action server to come up '
+                'before giving up on sending the next waypoint (NAV2 ACTION '
+                'MODE only).'
             ),
         ),
         OpaqueFunction(function=launch_setup),

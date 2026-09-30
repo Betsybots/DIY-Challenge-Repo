@@ -4,13 +4,17 @@
   <name>diy_waypoint_sequencer</name>
   <version>0.1.0</version>
   <description>
-    Standalone, optional automated goal-pose sequencer for the custom
-    A* + PD/pure-pursuit navigation stack (planning / motion_planner).
-    Publishes /goal_pose in sequence from a simple waypoints YAML, advancing
-    on /pd/goal_reached. Deliberately has ZERO dependency on zone_nav —
-    if this node isn't run, /goal_pose can still be published manually
-    (RViz "2D Goal Pose", or ros2 topic pub) with no code changes anywhere
-    else in the stack. See docs/reuse_plan_step1.md for the design rationale.
+    Standalone, optional automated goal sequencer for the custom A* + PD/
+    pure-pursuit navigation stack (planning / motion_planner) and, via the
+    use_nav2_action parameter, for Nav2's bt_navigator too. Default mode
+    publishes /goal_pose in sequence from a simple waypoints YAML, advancing
+    on /pd/goal_reached — deliberately has ZERO dependency on zone_nav in
+    that mode; if this node isn't run, /goal_pose can still be published
+    manually (RViz "2D Goal Pose", or ros2 topic pub) with no code changes
+    anywhere else in the stack. See docs/reuse_plan_step1.md for the design
+    rationale. use_nav2_action:=true instead drives
+    nav2_msgs/action/NavigateToPose directly and advances on that action's
+    terminal GoalStatus.
 
     Also hosts waypoint_recorder_node, a companion tool for the reverse
     direction: recording a waypoints YAML live during an offline mapping
@@ -28,6 +32,8 @@
   <depend>sensor_msgs</depend>
   <depend>tf2_ros</depend>
   <depend>tf_transformations</depend>
+  <depend>action_msgs</depend>
+  <depend>nav2_msgs</depend>
 
   <export>
     <build_type>ament_python</build_type>

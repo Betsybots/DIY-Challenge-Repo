@@ -1,0 +1,16 @@
+
+# minimum allowable turn radius is 18 inches
+motions:
+  # - type: STRAIGHT
+  #   distance: 2.0
+  #   velocity: 1.0
+  #   stop:
+  #     - type: COMPLETE
+
+  - type: TURN
+    turn_radius: 34.6
+    stop_angle: -360.0
+    velocity: 0.6
+    stop:
+      - type: COMPLETE
+

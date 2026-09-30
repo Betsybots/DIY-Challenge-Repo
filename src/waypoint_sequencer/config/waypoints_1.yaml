@@ -1,0 +1,7 @@
+frame_id: map
+loop: true
+waypoints:
+- {label: wp1, x: -5.2327, y: -0.2168, yaw: -3.0981}
+- {label: wp2, x: -9.1175, y: -0.3857, yaw: 3.1079}
+- {label: wp3, x: -2.0, y: -1.0, yaw: 0.0}
+

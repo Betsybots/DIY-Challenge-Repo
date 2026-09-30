@@ -123,8 +123,9 @@ def generate_launch_description():
                     ),
                 ]
             ),
-            # EKF: /wheel_odom (vx, vyaw) + /imu/data (vyaw, down-weighted)
-            # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_footprint TF.
+            # EKF: /wheel_odom (vx, vyaw) + /zed/zed_node/imu/data (vyaw) +
+            # FAST-LIO2 /Odometry + ZED VIO /zed/zed_node/odom (x, y, yaw,
+            # each independently gated) → /odom + odom→base_footprint TF.
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
@@ -135,8 +136,9 @@ def generate_launch_description():
                 ),
                 launch_arguments={
                     # 'wheel_odom_topic': '/wheel_odom',
-                    'imu_topic': '/imu/data',
+                    'imu_topic': '/zed/zed_node/imu/data',
                     'lidar_odom_topic': '/Odometry',
+                    'vio_odom_topic': '/zed/zed_node/odom',
                     'output_topic': '/odom',
                 }.items(),
             ),

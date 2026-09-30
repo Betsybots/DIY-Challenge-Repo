@@ -17,8 +17,9 @@ STARTUP ORDER
     1. robot_description — publishes the URDF / TF tree first
     2. Hesai lidar (hesai_ros_driver) — feeds FAST-LIO2
     3. Fast LIO2 — starts after a short delay for localization
-    4. EKF (diy_state_estimate) — fuses /wheel_odom + /imu/data + FAST-LIO2
-       /Odometry into /odom and owns the odom→base_footprint TF
+    4. EKF (diy_state_estimate) — fuses /wheel_odom + /zed/zed_node/imu/data +
+       FAST-LIO2 /Odometry + ZED VIO /zed/zed_node/odom into /odom and owns
+       the odom→base_footprint TF
     5. Autonomous mode: map_localizer + Nav2 navigation stack
     6. Manual mode: loop closure / map-refinement stack only
     7. rviz2 — optional debug visualization (use_rviz:=true)
@@ -42,11 +43,15 @@ WHEEL ODOMETRY / MOTORS
     separately (driveStack bringup). It is NOT started here; the EKF just
     waits for the topic.
 
-NOTE ON THE ACEINNA IMU:
-────────────────────────
-The IMU driver (imu_can_interface) is launched INDEPENDENTLY on the RPi,
-outside this repo entirely — it is not vendored here and not part of this
-launch file. 
+NOTE ON THE ZED IMU / VIO:
+──────────────────────────
+The ZED wrapper (zed_node, publishing /zed/zed_node/imu/data and
+/zed/zed_node/odom) is launched INDEPENDENTLY — same as the old ACEINNA IMU
+driver used to be — it is not vendored here and not part of this launch
+file. FAST-LIO2 itself also consumes /zed/zed_node/imu/data internally
+(see diy_localization/fast_lio_ros2/config/qt64.yaml), so it is not an
+independent sensor relative to either twist source; see
+diy_state_estimate/sensor_covariance_relay.py for how it is still used.
 """
 
 import os
@@ -117,8 +122,9 @@ def generate_launch_description():
     delayed_ekf_launch = TimerAction(
         period=1.0,
         actions=[
-            # EKF: /wheel_odom (vx, vyaw) + /imu/data (vyaw, down-weighted)
-            # + FAST-LIO2 /Odometry (x, y, yaw) → /odom + odom→base_footprint TF.
+            # EKF: /wheel_odom (vx, vyaw) + /zed/zed_node/imu/data (vyaw) +
+            # FAST-LIO2 /Odometry + ZED VIO /zed/zed_node/odom (x, y, yaw,
+            # each independently gated) → /odom + odom→base_footprint TF.
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
@@ -129,8 +135,9 @@ def generate_launch_description():
                 ),
                 launch_arguments={
                     # 'wheel_odom_topic': '/wheel_odom',
-                    'imu_topic': '/imu/data',
+                    'imu_topic': '/zed/zed_node/imu/data',
                     'lidar_odom_topic': '/Odometry',
+                    'vio_odom_topic': '/zed/zed_node/odom',
                     'output_topic': '/odom',
                 }.items(),
             ),

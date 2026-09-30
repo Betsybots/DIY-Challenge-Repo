@@ -69,7 +69,7 @@ class ImuProcess
   // scan immediately even though the pose may not have fully reconverged.
   double getLastShockTime() const { return last_shock_time_; }
   Eigen::Matrix<double, 12, 12> Q;
-  void Process(const MeasureGroup &meas,  esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI::Ptr pcl_un_);
+  void Process(const MeasureGroup &meas,  esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI::Ptr pcl_un_, PointCloudXYZI::Ptr pcl_un_filtered_ = nullptr);
 
   ofstream fout_imu;
   V3D cov_acc;
@@ -82,7 +82,7 @@ class ImuProcess
 
  private:
   void IMU_init(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, int &N);
-  void UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI &pcl_in_out);
+  void UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI &pcl_in_out, PointCloudXYZI *pcl_in_out_filtered = nullptr);
 
   PointCloudXYZI::Ptr cur_pcl_un_;
   // sensor_msgs::ImuConstPtr last_imu_;
@@ -250,7 +250,7 @@ void ImuProcess::IMU_init(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 
 
 }
 
-void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI &pcl_out)
+void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI &pcl_out, PointCloudXYZI *pcl_out_filtered)
 {
   /*** add the imu of the last frame-tail to the of current frame-head ***/
   auto v_imu = meas.imu;
@@ -263,6 +263,11 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
   /*** sort point clouds by offset time ***/
   pcl_out = *(meas.lidar);
   sort(pcl_out.points.begin(), pcl_out.points.end(), time_list);
+  if (pcl_out_filtered != nullptr && meas.lidar_filtered != nullptr)
+  {
+    *pcl_out_filtered = *(meas.lidar_filtered);
+    sort(pcl_out_filtered->points.begin(), pcl_out_filtered->points.end(), time_list);
+  }
   // cout<<"[ IMU Process ]: Process lidar from "<<pcl_beg_time<<" to "<<pcl_end_time<<", " \
   //          <<meas.imu.size()<<" imu msgs from "<<imu_beg_time<<" to "<<imu_end_time<<endl;
 
@@ -391,45 +396,53 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
   last_imu_ = meas.imu.back();
   last_lidar_end_time_ = pcl_end_time;
 
-  /*** undistort each lidar point (backward propagation) ***/
-  if (pcl_out.points.begin() == pcl_out.points.end()) return;
-  auto it_pcl = pcl_out.points.end() - 1;
-  for (auto it_kp = IMUpose.end() - 1; it_kp != IMUpose.begin(); it_kp--)
+  auto undistort_cloud = [&](PointCloudXYZI &cloud)
   {
-    auto head = it_kp - 1;
-    auto tail = it_kp;
-    R_imu<<MAT_FROM_ARRAY(head->rot);
-    // cout<<"head imu acc: "<<acc_imu.transpose()<<endl;
-    vel_imu<<VEC_FROM_ARRAY(head->vel);
-    pos_imu<<VEC_FROM_ARRAY(head->pos);
-    acc_imu<<VEC_FROM_ARRAY(tail->acc);
-    angvel_avr<<VEC_FROM_ARRAY(tail->gyr);
-
-    for(; it_pcl->curvature / double(1000) > head->offset_time; it_pcl --)
+    if (cloud.points.empty()) return;
+    auto it_pcl = cloud.points.end() - 1;
+    for (auto it_kp = IMUpose.end() - 1; it_kp != IMUpose.begin(); it_kp--)
     {
-      dt = it_pcl->curvature / double(1000) - head->offset_time;
+      auto head = it_kp - 1;
+      auto tail = it_kp;
+      R_imu<<MAT_FROM_ARRAY(head->rot);
+      vel_imu<<VEC_FROM_ARRAY(head->vel);
+      pos_imu<<VEC_FROM_ARRAY(head->pos);
+      acc_imu<<VEC_FROM_ARRAY(tail->acc);
+      angvel_avr<<VEC_FROM_ARRAY(tail->gyr);
 
-      /* Transform to the 'end' frame, using only the rotation
-       * Note: Compensation direction is INVERSE of Frame's moving direction
-       * So if we want to compensate a point at timestamp-i to the frame-e
-       * P_compensate = R_imu_e ^ T * (R_i * P_i + T_ei) where T_ei is represented in global frame */
-      M3D R_i(R_imu * Exp(angvel_avr, dt));
-      
-      V3D P_i(it_pcl->x, it_pcl->y, it_pcl->z);
-      V3D T_ei(pos_imu + vel_imu * dt + 0.5 * acc_imu * dt * dt - imu_state.pos);
-      V3D P_compensate = imu_state.offset_R_L_I.conjugate() * (imu_state.rot.conjugate() * (R_i * (imu_state.offset_R_L_I * P_i + imu_state.offset_T_L_I) + T_ei) - imu_state.offset_T_L_I);// not accurate!
-      
-      // save Undistorted points and their rotation
-      it_pcl->x = P_compensate(0);
-      it_pcl->y = P_compensate(1);
-      it_pcl->z = P_compensate(2);
+      for(; it_pcl->curvature / double(1000) > head->offset_time; it_pcl --)
+      {
+        dt = it_pcl->curvature / double(1000) - head->offset_time;
 
-      if (it_pcl == pcl_out.points.begin()) break;
+        /* Transform to the 'end' frame, using only the rotation
+         * Note: Compensation direction is INVERSE of Frame's moving direction
+         * So if we want to compensate a point at timestamp-i to the frame-e
+         * P_compensate = R_imu_e ^ T * (R_i * P_i + T_ei) where T_ei is represented in global frame */
+        M3D R_i(R_imu * Exp(angvel_avr, dt));
+
+        V3D P_i(it_pcl->x, it_pcl->y, it_pcl->z);
+        V3D T_ei(pos_imu + vel_imu * dt + 0.5 * acc_imu * dt * dt - imu_state.pos);
+        V3D P_compensate = imu_state.offset_R_L_I.conjugate() * (imu_state.rot.conjugate() * (R_i * (imu_state.offset_R_L_I * P_i + imu_state.offset_T_L_I) + T_ei) - imu_state.offset_T_L_I);// not accurate!
+
+        // save Undistorted points and their rotation
+        it_pcl->x = P_compensate(0);
+        it_pcl->y = P_compensate(1);
+        it_pcl->z = P_compensate(2);
+
+        if (it_pcl == cloud.points.begin()) break;
+      }
     }
+  };
+
+  /*** undistort each lidar point (backward propagation) ***/
+  undistort_cloud(pcl_out);
+  if (pcl_out_filtered != nullptr)
+  {
+    undistort_cloud(*pcl_out_filtered);
   }
 }
 
-void ImuProcess::Process(const MeasureGroup &meas,  esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI::Ptr cur_pcl_un_)
+void ImuProcess::Process(const MeasureGroup &meas,  esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, PointCloudXYZI::Ptr cur_pcl_un_, PointCloudXYZI::Ptr cur_pcl_un_filtered_)
 {
   double t1,t2,t3;
   t1 = omp_get_wtime();
@@ -482,7 +495,7 @@ void ImuProcess::Process(const MeasureGroup &meas,  esekfom::esekf<state_ikfom, 
     return;
   }
 
-  UndistortPcl(meas, kf_state, *cur_pcl_un_);
+  UndistortPcl(meas, kf_state, *cur_pcl_un_, cur_pcl_un_filtered_.get());
 
   t2 = omp_get_wtime();
   t3 = omp_get_wtime();
