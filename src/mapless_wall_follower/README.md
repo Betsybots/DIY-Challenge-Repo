@@ -35,6 +35,55 @@ Disable it with:
 ros2 topic pub --once /mapless_wall_follower/enable std_msgs/msg/Bool "{data: false}"
 ```
 
+## Automatic MPPI fallback
+
+The obstacle-course MPPI launches start this controller automatically with:
+
+```text
+start_enabled = true
+cmd_vel_topic = /cmd_vel_wall_follower
+```
+
+`/cmd_vel_wall_follower` is a private recovery input and does not command the
+vehicle while MPPI is operating normally. If planning or MPPI path following
+fails after its contextual recovery, the Nav2 behavior tree:
+
+1. Runs `AssistedTeleop` for 5 seconds.
+2. Collision-checks and forwards the wall-follower command through the MPPI
+   velocity smoother to `/cmd_vel_nav`.
+3. Stops the recovery command and retries the same Nav2 goal.
+4. Repeats this sequence up to three times.
+5. Returns final navigation failure after the third unsuccessful retry.
+
+The MPPI progress checker requires 0.20 m of movement within 8 seconds. The
+behavior tree clears the local costmap and retries MPPI once before invoking
+the outer wall fallback, so a completely stationary controller can take
+approximately 16 seconds before wall following starts.
+
+During fallback, `AssistedTeleop` checks only the local costmap and full robot
+footprint. It permits soft inflation costs so the robot can leave an inflation
+area, but scales or stops commands projected into a lethal obstacle. If the
+current footprint already overlaps lethal cells, the fallback may be unable to
+move and will retry MPPI after its 5-second allowance.
+
+The automatic fallback is enabled by:
+
+```bash
+ros2 launch challenge_bringup \
+  master_mppi_wall_fallback_obstacle_course_ackermann.launch.py
+```
+
+The explicitly named speed-filter variant is:
+
+```bash
+ros2 launch challenge_bringup \
+  master_mppi_speed_filter_wall_fallback_obstacle_course_ackermann.launch.py
+```
+
+The original MPPI launch names remain available without wall fallback. Manual
+enable and direct `/cmd_vel_smoothed` output are only for standalone
+wall-follower tests.
+
 ## Build
 
 ```bash

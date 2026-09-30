@@ -16,10 +16,12 @@ def generate_launch_description():
     autostart = LaunchConfiguration('autostart')
     params_file = LaunchConfiguration('params_file')
     override_params_file = LaunchConfiguration('override_params_file')
+    recovery_params_file = LaunchConfiguration('recovery_params_file')
     use_composition = LaunchConfiguration('use_composition')
     container_name = LaunchConfiguration('container_name')
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
+    behavior_cmd_vel_topic = LaunchConfiguration('behavior_cmd_vel_topic')
 
     velocity_smoother = Node(
         package='nav2_velocity_smoother',
@@ -73,6 +75,15 @@ def generate_launch_description():
             ),
             description='Ackermann MPPI obstacle-course parameter overrides',
         ),
+        DeclareLaunchArgument(
+            'recovery_params_file',
+            default_value=os.path.join(
+                bringup_dir,
+                'config',
+                'nav2_params_no_overrides.yaml',
+            ),
+            description='Optional recovery policy loaded after MPPI parameters',
+        ),
         DeclareLaunchArgument('use_composition', default_value='False'),
         DeclareLaunchArgument(
             'container_name',
@@ -80,6 +91,11 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument('use_respawn', default_value='False'),
         DeclareLaunchArgument('log_level', default_value='info'),
+        DeclareLaunchArgument(
+            'behavior_cmd_vel_topic',
+            default_value='cmd_vel_nav',
+            description='Recovery behavior output topic',
+        ),
         velocity_smoother,
         smoother_lifecycle_manager,
         IncludeLaunchDescription(
@@ -96,12 +112,13 @@ def generate_launch_description():
                 'autostart': autostart,
                 'params_file': params_file,
                 'override_params_file': override_params_file,
+                'recovery_params_file': recovery_params_file,
                 'use_composition': use_composition,
                 'container_name': container_name,
                 'use_respawn': use_respawn,
                 'log_level': log_level,
                 'controller_cmd_vel_topic': 'cmd_vel_mppi_raw',
-                'behavior_cmd_vel_topic': 'cmd_vel_nav',
+                'behavior_cmd_vel_topic': behavior_cmd_vel_topic,
             }.items(),
         ),
     ])

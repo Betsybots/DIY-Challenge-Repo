@@ -22,7 +22,7 @@
   <exec_depend>robot_localization</exec_depend>
   <exec_depend>planning</exec_depend>
   <exec_depend>motion_controller</exec_depend>
-  <exec_depend>wall_follower_controller</exec_depend>
+  <exec_depend>mapless_wall_follower</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

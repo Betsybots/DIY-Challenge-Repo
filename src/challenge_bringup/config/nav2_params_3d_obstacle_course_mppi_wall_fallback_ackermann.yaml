@@ -1,0 +1,19 @@
+# Additive recovery layer for Ackermann MPPI wall-follow fallback.
+# Load after nav2_params_3d_obstacle_course_mppi_ackermann.yaml.
+#
+# Policy:
+#   MPPI/planner failure -> wall follow for 5 seconds -> retry the same goal.
+#   After three unsuccessful retries, navigation returns final failure.
+# AssistedTeleop checks only the local costmap. Soft inflation costs are
+# traversable; lethal footprint collisions are rejected.
+
+bt_navigator:
+  ros__parameters:
+    default_nav_to_pose_bt_xml: "$(find-pkg-share challenge_bringup)/behavior_trees/navigate_to_pose_obstacle_course_mppi_wall_fallback_ackermann.xml"
+    default_nav_through_poses_bt_xml: "$(find-pkg-share challenge_bringup)/behavior_trees/navigate_through_poses_obstacle_course_mppi_wall_fallback_ackermann.xml"
+
+behavior_server:
+  ros__parameters:
+    cmd_vel_teleop: /cmd_vel_wall_follower
+    projection_time: 1.0  # At 0.15 m/s, collision-check approximately 0.15 m ahead.
+    simulation_time_step: 0.1
