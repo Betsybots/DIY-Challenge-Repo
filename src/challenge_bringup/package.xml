@@ -21,6 +21,7 @@
   <exec_depend>robot_localization</exec_depend>
   <exec_depend>planning</exec_depend>
   <exec_depend>diy_motion_planner</exec_depend>
+  <exec_depend>mapless_wall_follower</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

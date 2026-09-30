@@ -1,0 +1,25 @@
+<!-- Ackermann MPPI with three 5-second wall-follow recoveries before final failure. -->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="3" name="NavigateWithWallFallback">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="2.0">
+          <RecoveryNode number_of_retries="1" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="WallFollowerRecovery">
+        <GoalUpdated/>
+        <ForceSuccess>
+          <AssistedTeleop time_allowance="5.0" is_recovery="true"/>
+        </ForceSuccess>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

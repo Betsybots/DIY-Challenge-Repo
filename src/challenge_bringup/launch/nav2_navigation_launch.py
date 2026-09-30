@@ -36,6 +36,7 @@ def generate_launch_description():
     params_file = LaunchConfiguration('params_file')
     override_params_file = LaunchConfiguration('override_params_file')
     additional_params_file = LaunchConfiguration('additional_params_file')
+    recovery_params_file = LaunchConfiguration('recovery_params_file')
     use_composition = LaunchConfiguration('use_composition')
     container_name = LaunchConfiguration('container_name')
     container_name_full = (namespace, '/', container_name)
@@ -85,10 +86,19 @@ def generate_launch_description():
             convert_types=True),
         allow_substs=True)
 
+    configured_recovery_params = ParameterFile(
+        RewrittenYaml(
+            source_file=recovery_params_file,
+            root_key=namespace,
+            param_rewrites=param_substitutions,
+            convert_types=True),
+        allow_substs=True)
+
     node_params = [
         configured_params,
         configured_override_params,
         configured_additional_params,
+        configured_recovery_params,
     ]
 
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -142,6 +152,12 @@ def generate_launch_description():
         default_value=os.path.join(
             bringup_dir, 'config', 'nav2_params_no_overrides.yaml'),
         description='Optional parameter file loaded after override_params_file')
+
+    declare_recovery_params_file_cmd = DeclareLaunchArgument(
+        'recovery_params_file',
+        default_value=os.path.join(
+            bringup_dir, 'config', 'nav2_params_no_overrides.yaml'),
+        description='Optional recovery parameter file loaded last')
 
     declare_autostart_cmd = DeclareLaunchArgument(
         'autostart', default_value='true',
@@ -338,6 +354,7 @@ def generate_launch_description():
     ld.add_action(declare_params_file_cmd)
     ld.add_action(declare_override_params_file_cmd)
     ld.add_action(declare_additional_params_file_cmd)
+    ld.add_action(declare_recovery_params_file_cmd)
     ld.add_action(declare_autostart_cmd)
     ld.add_action(declare_use_composition_cmd)
     ld.add_action(declare_container_name_cmd)
