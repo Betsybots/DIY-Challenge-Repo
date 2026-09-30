@@ -1,6 +1,16 @@
 # distance, turn_radius, and stop.distance are in inches;
 # stop_angle is in degrees; velocity is in meters per second.
 
+# Yaw-hold PID applied during STRAIGHT segments to keep the heading
+# captured at the start of each segment. Overrides the node defaults.
+straight_yaw_pid:
+  enabled: true                  # false disables yaw correction on STRAIGHT
+  kp: 1.5
+  ki: 0.0
+  kd: 0.05
+  integral_limit: 0.5            # rad*s, anti-windup bound
+  max_angular_velocity: 0.5      # rad/s, correction clamp
+
 # Pure Pursuit and point-cloud wall-detection configuration.
 # Distances below are in meters, angles in degrees, and angular velocity in rad/s.
 pure_pursuit:
