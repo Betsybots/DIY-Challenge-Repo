@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <chrono>
 #include <cstddef>
@@ -11,6 +12,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "yaml-cpp/yaml.h"
 
 namespace
@@ -42,6 +44,15 @@ public:
     plan_file_ = this->declare_parameter<std::string>("plan_file", "");
     pose_topic_ = this->declare_parameter<std::string>("pose_topic", "/wheel_odom");
     cmd_topic_ = this->declare_parameter<std::string>("cmd_topic", "/cmd_vel_smoothed");
+    straight_yaw_enabled_ = this->declare_parameter<bool>("straight_yaw_enabled", true);
+    straight_yaw_kp_ = this->declare_parameter<double>("straight_yaw_kp", 1.5);
+    straight_yaw_ki_ = this->declare_parameter<double>("straight_yaw_ki", 0.0);
+    straight_yaw_kd_ = this->declare_parameter<double>("straight_yaw_kd", 0.05);
+    straight_yaw_integral_limit_ = this->declare_parameter<double>(
+      "straight_yaw_integral_limit", 0.5);
+    straight_yaw_max_angular_velocity_ = this->declare_parameter<double>(
+      "straight_yaw_max_angular_velocity", 0.5);
+
     if (plan_file_.empty()) {
       RCLCPP_FATAL(this->get_logger(), "Parameter 'plan_file' is required.");
       throw std::runtime_error("Missing required parameter: plan_file");
@@ -49,10 +60,26 @@ public:
 
     load_plan(plan_file_);
 
+    if (
+      !std::isfinite(straight_yaw_kp_) || straight_yaw_kp_ < 0.0 ||
+      !std::isfinite(straight_yaw_ki_) || straight_yaw_ki_ < 0.0 ||
+      !std::isfinite(straight_yaw_kd_) || straight_yaw_kd_ < 0.0 ||
+      !std::isfinite(straight_yaw_integral_limit_) || straight_yaw_integral_limit_ < 0.0 ||
+      !std::isfinite(straight_yaw_max_angular_velocity_) ||
+      straight_yaw_max_angular_velocity_ <= 0.0)
+    {
+      throw std::runtime_error("Straight yaw PID parameters are invalid.");
+    }
+
     pose_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
       pose_topic_,
       rclcpp::QoS(10),
       std::bind(&MotionPlanExecutor::pose_callback, this, std::placeholders::_1));
+
+    green_light_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+      "/green_light",
+      rclcpp::QoS(10),
+      std::bind(&MotionPlanExecutor::green_light_callback, this, std::placeholders::_1));
 
     cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cmd_topic_, rclcpp::QoS(10));
 
@@ -89,6 +116,21 @@ private:
     }
 
     YAML::Node root = YAML::LoadFile(yaml_path);
+
+    // Optional yaw-hold PID overrides from the plan file.
+    if (const YAML::Node pid = root["straight_yaw_pid"]) {
+      if (pid["enabled"]) {straight_yaw_enabled_ = pid["enabled"].as<bool>();}
+      if (pid["kp"]) {straight_yaw_kp_ = pid["kp"].as<double>();}
+      if (pid["ki"]) {straight_yaw_ki_ = pid["ki"].as<double>();}
+      if (pid["kd"]) {straight_yaw_kd_ = pid["kd"].as<double>();}
+      if (pid["integral_limit"]) {
+        straight_yaw_integral_limit_ = pid["integral_limit"].as<double>();
+      }
+      if (pid["max_angular_velocity"]) {
+        straight_yaw_max_angular_velocity_ = pid["max_angular_velocity"].as<double>();
+      }
+    }
+
     YAML::Node motions = root;
 
     if (root["motions"]) {
@@ -173,10 +215,33 @@ private:
   {
     last_pose_ = *msg;
     has_pose_ = true;
+
+    if (track_turn_yaw_) {
+      const double current_yaw = yaw_from_quaternion(msg->pose.pose.orientation);
+      accumulated_turn_angle_ += normalize_angle(current_yaw - last_turn_yaw_);
+      last_turn_yaw_ = current_yaw;
+    }
+  }
+
+  void green_light_callback(const std_msgs::msg::Bool::SharedPtr msg)
+  {
+    // Latched: the first true starts the plan; later false is ignored.
+    if (msg->data && !started_) {
+      started_ = true;
+      RCLCPP_INFO(this->get_logger(), "Green light received — starting motion plan.");
+    }
   }
 
   void control_loop()
   {
+    if (!started_) {
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 5000,
+        "Waiting for true on /green_light before starting the motion plan");
+      publish_stop();
+      return;
+    }
+
     if (!has_pose_) {
       publish_stop();
       return;
@@ -200,6 +265,10 @@ private:
       start_yaw_ = yaw_from_quaternion(last_pose_.pose.pose.orientation);
       last_turn_yaw_ = start_yaw_;
       accumulated_turn_angle_ = 0.0;
+      track_turn_yaw_ = (cmd.type == CommandType::TURN);
+      straight_yaw_integral_ = 0.0;
+      previous_straight_yaw_error_ = 0.0;
+      last_control_time_ = std::chrono::steady_clock::now();
 
       RCLCPP_INFO(
         this->get_logger(),
@@ -229,10 +298,38 @@ private:
       twist.linear.x = speed;
       twist.angular.z = 0.0;
     } else {
+      if (straight_yaw_enabled_) {
+        const auto now = std::chrono::steady_clock::now();
+        const double dt = std::clamp(
+          std::chrono::duration<double>(now - last_control_time_).count(), 1e-3, 0.2);
+        last_control_time_ = now;
+
       const double current_yaw = yaw_from_quaternion(last_pose_.pose.pose.orientation);
       accumulated_turn_angle_ += normalize_angle(current_yaw - last_turn_yaw_);
+        straight_yaw_integral_ = std::clamp(
       last_turn_yaw_ = current_yaw;
+          -straight_yaw_integral_limit_, straight_yaw_integral_limit_);
+        const double yaw_error_rate = (yaw_error - previous_straight_yaw_error_) / dt;
+        previous_straight_yaw_error_ = yaw_error;
 
+        twist.angular.z = std::clamp(
+          straight_yaw_kp_ * yaw_error +
+          straight_yaw_ki_ * straight_yaw_integral_ +
+          straight_yaw_kd_ * yaw_error_rate,
+          -straight_yaw_max_angular_velocity_, straight_yaw_max_angular_velocity_);
+
+        RCLCPP_DEBUG_THROTTLE(
+          get_logger(), *get_clock(), 1000,
+          "STRAIGHT yaw error=%.2f deg, correction=%.3f rad/s",
+          yaw_error * 180.0 / 3.14159265358979323846,
+          twist.angular.z);
+      }
+    } else {
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "TURN progress: %.1f / %.1f deg",
+        accumulated_turn_angle_ * 180.0 / 3.14159265358979323846,
+        cmd.target * 180.0 / 3.14159265358979323846);
       const bool turn_complete = cmd.target > 0.0 ?
         accumulated_turn_angle_ >= cmd.target : accumulated_turn_angle_ <= cmd.target;
       if (turn_complete) {
@@ -253,6 +350,7 @@ private:
   {
     ++current_index_;
     segment_started_ = false;
+    track_turn_yaw_ = false;
   }
 
   void publish_stop()
@@ -270,11 +368,13 @@ private:
   std::vector<Command> commands_;
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr green_light_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   nav_msgs::msg::Odometry last_pose_;
   bool has_pose_{false};
+  bool started_{false};
 
   std::size_t current_index_{0};
   bool segment_started_{false};
@@ -285,6 +385,16 @@ private:
   double start_yaw_{0.0};
   double last_turn_yaw_{0.0};
   double accumulated_turn_angle_{0.0};
+  bool track_turn_yaw_{false};
+  bool straight_yaw_enabled_{true};
+  double straight_yaw_kp_{1.5};
+  double straight_yaw_ki_{0.0};
+  double straight_yaw_kd_{0.05};
+  double straight_yaw_integral_limit_{0.5};
+  double straight_yaw_max_angular_velocity_{0.5};
+  double straight_yaw_integral_{0.0};
+  double previous_straight_yaw_error_{0.0};
+  std::chrono::steady_clock::time_point last_control_time_{};
 };
 
 int main(int argc, char ** argv)

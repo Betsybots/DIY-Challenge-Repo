@@ -1,5 +1,5 @@
 // ROS 2 node: subscribes to a colour image, detects RED/GREEN objects on a blue
-// background (the blob must be surrounded by blue). Publishes one std_msgs/Bool topic per colour (~/red, ~/green): true when that
+// background (the blob must be surrounded by blue). Publishes one std_msgs/Bool topic per colour (~/red_light, ~/green_light): true when that
 // colour is seen in the frame. Also publishes an annotated debug image.
 // With use_depth, only pixels between min_distance_m and max_distance_m (ZED depth) count.
 // All thresholds are ROS parameters (see config/params.yaml) and can be changed live
@@ -73,11 +73,11 @@ class ColorDetectorNode : public rclcpp::Node {
     publish_debug_ = get_parameter("publish_debug_image").as_bool();
     publish_masks_ = get_parameter("publish_masks").as_bool();
 
-    // One Bool topic per colour, named after it in lower case: RED -> ~/red, GREEN -> ~/green.
+    // One Bool topic per colour, named after it in lower case: RED -> ~/red_light, GREEN -> ~/green_light.
     for (const auto& c : detector_.config().colors) {
       std::string topic = c.name;
       std::transform(topic.begin(), topic.end(), topic.begin(), [](unsigned char ch) { return std::tolower(ch); });
-      color_pubs_.push_back(create_publisher<std_msgs::msg::Bool>("~/" + topic, 10));
+      color_pubs_.push_back(create_publisher<std_msgs::msg::Bool>("~/" + topic + "_light", 10));
     }
     if (publish_debug_) debug_pub_ = image_transport::create_publisher(this, "~/debug_image");
     if (publish_masks_) {
