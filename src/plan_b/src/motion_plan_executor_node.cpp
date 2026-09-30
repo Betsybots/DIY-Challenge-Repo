@@ -173,6 +173,12 @@ private:
   {
     last_pose_ = *msg;
     has_pose_ = true;
+
+    if (track_turn_yaw_) {
+      const double current_yaw = yaw_from_quaternion(msg->pose.pose.orientation);
+      accumulated_turn_angle_ += normalize_angle(current_yaw - last_turn_yaw_);
+      last_turn_yaw_ = current_yaw;
+    }
   }
 
   void control_loop()
@@ -200,6 +206,7 @@ private:
       start_yaw_ = yaw_from_quaternion(last_pose_.pose.pose.orientation);
       last_turn_yaw_ = start_yaw_;
       accumulated_turn_angle_ = 0.0;
+      track_turn_yaw_ = (cmd.type == CommandType::TURN);
 
       RCLCPP_INFO(
         this->get_logger(),
@@ -229,10 +236,11 @@ private:
       twist.linear.x = speed;
       twist.angular.z = 0.0;
     } else {
-      const double current_yaw = yaw_from_quaternion(last_pose_.pose.pose.orientation);
-      accumulated_turn_angle_ += normalize_angle(current_yaw - last_turn_yaw_);
-      last_turn_yaw_ = current_yaw;
-
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "TURN progress: %.1f / %.1f deg",
+        accumulated_turn_angle_ * 180.0 / 3.14159265358979323846,
+        cmd.target * 180.0 / 3.14159265358979323846);
       const bool turn_complete = cmd.target > 0.0 ?
         accumulated_turn_angle_ >= cmd.target : accumulated_turn_angle_ <= cmd.target;
       if (turn_complete) {
@@ -253,6 +261,7 @@ private:
   {
     ++current_index_;
     segment_started_ = false;
+    track_turn_yaw_ = false;
   }
 
   void publish_stop()
@@ -285,6 +294,7 @@ private:
   double start_yaw_{0.0};
   double last_turn_yaw_{0.0};
   double accumulated_turn_angle_{0.0};
+  bool track_turn_yaw_{false};
 };
 
 int main(int argc, char ** argv)
