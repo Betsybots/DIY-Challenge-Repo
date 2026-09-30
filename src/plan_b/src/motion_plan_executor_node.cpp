@@ -12,6 +12,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "yaml-cpp/yaml.h"
 
 namespace
@@ -74,6 +75,11 @@ public:
       pose_topic_,
       rclcpp::QoS(10),
       std::bind(&MotionPlanExecutor::pose_callback, this, std::placeholders::_1));
+
+    green_light_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+      "/green_light",
+      rclcpp::QoS(10),
+      std::bind(&MotionPlanExecutor::green_light_callback, this, std::placeholders::_1));
 
     cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cmd_topic_, rclcpp::QoS(10));
 
@@ -217,8 +223,25 @@ private:
     }
   }
 
+  void green_light_callback(const std_msgs::msg::Bool::SharedPtr msg)
+  {
+    // Latched: the first true starts the plan; later false is ignored.
+    if (msg->data && !started_) {
+      started_ = true;
+      RCLCPP_INFO(this->get_logger(), "Green light received — starting motion plan.");
+    }
+  }
+
   void control_loop()
   {
+    if (!started_) {
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 5000,
+        "Waiting for true on /green_light before starting the motion plan");
+      publish_stop();
+      return;
+    }
+
     if (!has_pose_) {
       publish_stop();
       return;
@@ -345,11 +368,13 @@ private:
   std::vector<Command> commands_;
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr green_light_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   nav_msgs::msg::Odometry last_pose_;
   bool has_pose_{false};
+  bool started_{false};
 
   std::size_t current_index_{0};
   bool segment_started_{false};

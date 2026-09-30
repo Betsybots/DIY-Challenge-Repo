@@ -25,8 +25,8 @@ Targets **ROS 2 Humble** (Ubuntu 22.04, C++17).
 |---|---|---|
 | `image_topic` parameter (default `/zed/zed_node/rgb/color/rect/image`) | sensor_msgs/Image (sub) | bgr8, rgb8, bgra8 (ZED) and so on |
 | `depth_topic` parameter (default `/zed/zed_node/depth/depth_registered`) | sensor_msgs/Image (sub) | 32FC1 metres or 16UC1 mm, used when `use_depth: true` |
-| `~/red` | std_msgs/Bool | `true` when a RED object is in the frame, `false` otherwise (one message per image) |
-| `~/green` | std_msgs/Bool | same for GREEN |
+| `~/red_light` | std_msgs/Bool | `true` when a RED object is in the frame, `false` otherwise (one message per image) |
+| `~/green_light` | std_msgs/Bool | same for GREEN |
 | `~/debug_image` | sensor_msgs/Image | annotated image (published only when someone subscribes) |
 | `~/mask/<NAME>` | sensor_msgs/Image mono8 | per-colour mask, only when `publish_masks: true` |
 
