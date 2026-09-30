@@ -1,0 +1,70 @@
+# FIELD-TEST SPEED STRATEGY
+# COURSE GEOMETRY: the speed-course drawing specifies a 36 in (0.9144 m)
+# path. The 16 in (0.4064 m) vehicle has 10 in (0.254 m) clearance per side
+# when centered, and its centerline is 18 in (0.4572 m) from either wall.
+# Stage 1 - Stationary: keep the drive disabled; verify cloud axes (+x forward,
+#   +y left, +z up), wall detections, state transitions, steering direction,
+#   and that this is the only controller publishing to /cmd_vel_nav.
+# Stage 2 - First motion (active defaults below): use 0.30 m/s straight and
+#   0.15 m/s in turns. Verify emergency stopping and steering direction.
+# Stage 3 - Course validation: after Stage 2 succeeds, use 0.50 m/s straight
+#   and 0.25 m/s in turns. Require at least three clean runs without wall-loss,
+#   oscillation, false turn entry, or emergency-stop overshoot.
+# Stage 4 - 1.00 m/s straights: only after Stage 3 succeeds, use max_x=3.00,
+#   wall_lookahead=1.00, turn_enter_front_distance=2.00,
+#   emergency_stop_distance=1.20, straight_speed=1.00, and turn_speed=0.30.
+#   Keep acceleration, braking, and lateral-acceleration limits unchanged.
+#   Curvature limiting will reduce speed automatically below 1.00 m/s in bends.
+#   Do not increase beyond 1.00 m/s until single-wall transitions are validated.
+
+mapless_wall_follower:
+  ros__parameters:
+    # Topics: body-frame FAST-LIO cloud directly to the autonomous mux input.
+    cloud_topic: /cloud_registered_body
+    cmd_vel_topic: /cmd_vel_nav
+    enable_topic: /mapless_wall_follower/enable
+    state_topic: /mapless_wall_follower/state
+    debug_log_frequency: 2.0  # TUNE: controller diagnostic lines printed per second.
+    start_enabled: false  # Safety: require an explicit enable message after launch.
+    control_frequency: 20.0  # TUNE: raise only if point processing stays below the period.
+    cloud_timeout: 0.30  # TUNE: stale-cloud age that forces a stop.
+    point_stride: 3  # TUNE: larger reduces CPU but keeps fewer wall points.
+
+    # Point-cloud region of interest in base_link: x forward, y left, z up.
+    min_x: -0.20  # TUNE: small rear margin keeps walls visible during turns.
+    max_x: 3.00  # TUNE: forward wall-fitting range.
+    min_z: 0.10  # TUNE: reject ground returns below this height.
+    max_z: 1.20  # TUNE: reject overhead returns above this height.
+    side_min_abs_y: 0.22  # 0.203 m vehicle half-width plus a small body-return margin.
+    side_max_abs_y: 1.50  # TUNE: maximum wall distance considered.
+    front_half_width: 0.30  # Vehicle half-width plus 0.097 m detection margin.
+    min_wall_points: 20  # TUNE: minimum RANSAC inliers for a valid wall.
+    fit_residual_threshold: 0.08  # TUNE: wall inlier distance in meters.
+    max_fit_rms: 0.06  # TUNE: maximum accepted fitted-wall RMS error.
+    max_fit_points: 2000  # TUNE: CPU bound for points retained on each side.
+
+    # Normal mode centers between both fitted walls.
+    wall_lookahead: 0.80  # TUNE: wall position/heading evaluation distance.
+    min_corridor_width: 0.70  # Reject wall pairs far narrower than the 0.9144 m path.
+    max_corridor_width: 1.40  # Allows projected width growth while following curved walls.
+    center_gain: 1.8  # TUNE: centering correction; lower if oscillating.
+    heading_gain: 1.6  # TUNE: wall-heading correction; lower if steering is nervous.
+
+    # Wall priority: both walls center; otherwise follow left, then right; neither stops.
+    right_wall_target_distance: 0.46  # 18 in/0.4572 m course centerline, rounded to 0.46 m.
+    left_wall_target_distance: 0.46  # Same centerline target measured from the left wall.
+    right_wall_gain: 2.2  # TUNE: right-wall distance correction.
+    left_wall_gain: 2.2  # TUNE: left-wall distance correction.
+    right_turn_curvature_bias: 0.80  # TUNE: initial right steering when a front wall appears.
+    turn_enter_front_distance: 1.20  # TUNE: enter right-turn mode before the front wall.
+    emergency_stop_distance: 0.45  # TUNE: hard front stop; keep beyond stopping distance.
+
+    # Ackermann command limits.
+    straight_speed: 0.30  # STAGE 2: use 0.50 after validation; Stage 4 uses 1.00 m/s.
+    turn_speed: 0.15  # STAGE 2: use 0.25 at 0.50 straight; Stage 4 uses 0.30 m/s.
+    max_lateral_acceleration: 0.50  # TUNE: curvature speed limit in m/s^2.
+    max_curvature: 2.70  # 1/m: tan(40 deg) / 0.31115 m wheelbase.
+    max_yaw_rate: 1.35  # rad/s: 0.50 m/s / 0.371 m radius.
+    max_linear_acceleration: 0.40  # TUNE: forward acceleration limit.
+    max_linear_deceleration: 0.80  # TUNE: braking magnitude.
+    max_yaw_acceleration: 1.50  # TUNE: yaw-command slew limit.
