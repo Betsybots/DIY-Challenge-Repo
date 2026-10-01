@@ -10,7 +10,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -22,6 +22,7 @@ def generate_launch_description():
         get_package_share_directory('diy_zed_color_detection'), 'config', 'params.yaml')
     zed_wrapper_launch = os.path.join(
         get_package_share_directory('zed_wrapper'), 'launch', 'zed_camera.launch.py')
+    startup_delay = LaunchConfiguration('startup_delay')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -36,19 +37,27 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'camera_model', default_value='zed2i',
             description='ZED camera model passed to zed_wrapper'),
+        DeclareLaunchArgument(
+            'startup_delay', default_value='5.0',
+            description='Seconds to wait before starting the color detector node'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(zed_wrapper_launch),
             launch_arguments={'camera_model': LaunchConfiguration('camera_model')}.items(),
         ),
-        Node(
-            package='diy_zed_color_detection',
-            executable='color_detector_node',
-            name='color_detector',
-            output='screen',
-            # The launch arguments override the same keys in params_file.
-            parameters=[LaunchConfiguration('params_file'), {
-                'image_topic': LaunchConfiguration('image_topic'),
-                'qos_reliable': ParameterValue(LaunchConfiguration('qos_reliable'), value_type=bool),
-            }],
+        TimerAction(
+            period=startup_delay,
+            actions=[
+                Node(
+                    package='diy_zed_color_detection',
+                    executable='color_detector_node',
+                    name='color_detector',
+                    output='screen',
+                    # The launch arguments override the same keys in params_file.
+                    parameters=[LaunchConfiguration('params_file'), {
+                        'image_topic': LaunchConfiguration('image_topic'),
+                        'qos_reliable': ParameterValue(LaunchConfiguration('qos_reliable'), value_type=bool),
+                    }],
+                )
+            ],
         ),
     ])

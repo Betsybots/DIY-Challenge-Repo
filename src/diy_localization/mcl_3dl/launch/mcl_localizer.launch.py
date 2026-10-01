@@ -17,6 +17,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("use_rviz", default_value="false"),
         DeclareLaunchArgument("cloud_topic", default_value="/cloud_registered_body"),
+        DeclareLaunchArgument("imu_topic", default_value="/zed/zed_node/imu/data"),
+        DeclareLaunchArgument("odom_topic", default_value="/zed/zed_node/odom"),
         Node( 
             package="pcl_ros",
             executable="pcd_to_pointcloud",
@@ -38,7 +40,9 @@ def generate_launch_description():
                     parameters=[config_file],
                     remappings=[
                         # ("/cloud", "/cloud_registered_body")
-                        ("/cloud", LaunchConfiguration("cloud_topic"))
+                        ("/cloud", LaunchConfiguration("cloud_topic")),
+                        ("/imu/data", LaunchConfiguration("imu_topic")),
+                        ("/odom", LaunchConfiguration("odom_topic"))
                     ],
                 ),
             ],

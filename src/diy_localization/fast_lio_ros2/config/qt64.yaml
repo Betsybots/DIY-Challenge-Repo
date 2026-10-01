@@ -12,7 +12,7 @@
         # convergence during fast rotation, at a small CPU cost.
         max_iteration: 7                     #5 and 10 working good/best
         filter_size_surf: 0.1                #0.3                # Voxel filter size for surf points
-        filter_size_map:  0.15                #0.3                # Voxel filter size for the map points
+        filter_size_map:  0.1                #0.3                # Voxel filter size for the map points
         cube_side_length: 500.0              # Side length of the cube used for voxel grid filtering, units in meters. This is used to limit the size of the map and reduce memory usage.
         
         # Enable or disable runtime position logging. If enabled, the position will be logged to a file in the PCD directory. This is useful for debugging and analysis, but may slow down the system. If disabled, the position will not be logged to a file.
@@ -24,7 +24,7 @@
             # Point this at your external IMU driver's topic.
             imu_topic:  "/zed/zed_node/imu/data"
             time_sync_en: false                 # Enable if your LiDAR and IMU are time-synchronized (requires accurate timestamps)
-            publish_tf: true
+            publish_tf: false
             time_offset_lidar_to_imu: 0.0       # Time offset from LiDAR to IMU in seconds
             # Verify your IMU driver's angular_velocity units before running:
             # treating deg/s data as rad/s (or vice versa) causes large
@@ -36,7 +36,7 @@
             scan_line: 32                # number of active lines the Hesai driver is configured to output
             # The driver keeps these lines' *original* ring IDs (not renumbered
             # to 0-63) -- ring_max - ring_min + 1 must equal scan_line above.
-            ring_min: 00
+            ring_min: 0
             ring_max: 31
             timestamp_unit: 0            # 0-second, 1-millisecond, 2-microsecond, 3-nanosecond
             scan_rate: 10                # Hz
@@ -49,7 +49,7 @@
             # filtered_cloud_fov_max_angle: 150.0
             
         mapping:
-            acc_cov: 0.1
+            acc_cov: 0.001
             # gyr_cov is the gyro measurement/process-noise variance in
             # (rad/s)^2: how much the EKF trusts gyro-driven propagation
             # between LiDAR corrections. 0.1 is the standard FAST-LIO default.
@@ -58,7 +58,7 @@
             # noise/wiggle (or any residual imu_gyr_unit mismatch) gets
             # corrected more slowly by the LiDAR and shows up as the map/path
             # swinging even while the platform is stationary.
-            gyr_cov: 0.1
+            gyr_cov: 0.001
             b_acc_cov: 0.0001
             b_gyr_cov: 0.0001
             fov_degree: 360.0   # Field of view of the LiDAR in degrees
@@ -70,7 +70,7 @@
             # transform and can cascade into "No Effective Points" / pure-IMU
             # drift. Keep this false and provide a good initial extrinsic
             # below unless your platform will undergo rich 6-DOF motion.
-            extrinsic_est_en: true
+            extrinsic_est_en: false
             #extrinsic_T: [0.0, 0.0298, -0.13795]
             #extrinsic_T: [0.0, 0.0298, -0.13795]
             # extrinsic_T: [-0.0209, 0.0469, -0.1067]
@@ -125,7 +125,7 @@
             # explanation for why fast linear/angular motion produces badly
             # distorted scans (map_localizer rough fitness scores up to ~1.2,
             # vs. a 0.2 threshold) with nothing catching/rolling them back.
-            reject_low_quality_scans: true
+            reject_low_quality_scans: false
             # Leave the gate enabled, but keep it realistic for a moving vehicle.
             # A 4.0 m/s^2 threshold is too strict for normal acceleration during
             # turns / starts / stops, which causes false shock detections and scan

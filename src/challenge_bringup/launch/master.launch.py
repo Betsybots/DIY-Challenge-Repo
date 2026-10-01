@@ -177,7 +177,7 @@ def generate_launch_description():
                 ),
                 # FAST-LIO is off, so /cloud_registered_body is not published; use the raw Hesai cloud.
                 # launch_arguments={'cloud_topic': '/cloud_registered_body'}.items(),
-                launch_arguments={'cloud_topic': '/lidar_points'}.items(),
+                launch_arguments={'cloud_topic': '/cloud_registered_body'}.items(),
                 condition=IfCondition(autonomous),
             ),
         ]

@@ -14,8 +14,9 @@ color_detector:
     use_depth: true
     depth_topic: /zed/zed_node/depth/depth_registered
     min_distance_m: 0.0
-    max_distance_m: 2.0
+    max_distance_m: 3.0
 
+    output_enabled: true          # master switch for the debug overlay output
     publish_debug_image: true     # annotated image on ~/debug_image
     publish_masks: false          # per-colour binary masks on ~/mask/<NAME> (useful when tuning)
 
@@ -27,7 +28,7 @@ color_detector:
     # Blue background: these pixels are removed from every colour mask, and objects
     # are only reported when they are surrounded by blue.
     background:
-      enabled: true
+      enabled: false
       hue_range: [95, 130]
       sat_range: [60, 255]
       val_range: [40, 255]
@@ -49,7 +50,8 @@ color_detector:
       draw_bgr: [0, 0, 255]
 
     GREEN:
-      hue_ranges: [40, 85]
-      sat_range: [80, 255]
-      val_range: [50, 255]
+      # #0e5f3a = RGB(14, 95, 58) => HSV ~ (76, 217, 95) in OpenCV scale
+      hue_ranges: [60, 95]
+      sat_range: [110, 255]
+      val_range: [30, 140]
       draw_bgr: [0, 255, 0]

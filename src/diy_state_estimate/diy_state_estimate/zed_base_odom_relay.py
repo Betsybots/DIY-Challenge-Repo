@@ -124,7 +124,7 @@ class ZedBaseOdomRelay(Node):
         # Fallback base_frame -> camera_frame if TF has no such transform:
         # base_link -> zed_camera_link (8.25, 0, 6.25) in = (0.2096, 0, 0.1588) m;
         # base_footprint -> base_link adds the wheel radius (0.0667 m) in z.
-        self._fallback_xyz = list(p('camera_offset_xyz', [0.2096, 0.0, 0.2255]).value)
+        self._fallback_xyz = list(p('camera_offset_xyz', [0.2096, 0.02, 0.2255]).value)
         self._fallback_rpy = list(p('camera_offset_rpy', [0.0, 0.0, 0.0]).value)
         self._tf_wait_s = float(p('tf_wait_s', 3.0).value)
         self._two_d = bool(p('two_d_mode', True).value)

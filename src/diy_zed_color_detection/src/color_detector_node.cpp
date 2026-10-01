@@ -63,6 +63,11 @@ class ColorDetectorNode : public rclcpp::Node {
         std::lock_guard<std::mutex> lock(mutex_);
         detector_.setConfig(std::move(cfg));
         std::tie(min_distance_m_, max_distance_m_) = range;
+        for (const auto& p : params) {
+          if (p.get_name() == "output_enabled" || p.get_name() == "publish_debug_image") {
+            publish_debug_ = get_parameter("output_enabled").as_bool() && get_parameter("publish_debug_image").as_bool();
+          }
+        }
       } catch (const std::exception& e) {
         result.successful = false;
         result.reason = e.what();
@@ -70,7 +75,7 @@ class ColorDetectorNode : public rclcpp::Node {
       return result;
     });
 
-    publish_debug_ = get_parameter("publish_debug_image").as_bool();
+    publish_debug_ = get_parameter("output_enabled").as_bool() && get_parameter("publish_debug_image").as_bool();
     publish_masks_ = get_parameter("publish_masks").as_bool();
 
     // One Bool topic per colour, named after it in lower case: RED -> ~/red_light, GREEN -> ~/green_light.
@@ -177,6 +182,7 @@ class ColorDetectorNode : public rclcpp::Node {
     declare_parameter("depth_topic", "/zed/zed_node/depth/depth_registered");
     declare_parameter("min_distance_m", 0.0);
     declare_parameter("max_distance_m", 2.0);
+    declare_parameter("output_enabled", true);
     declare_parameter("publish_debug_image", true);
     declare_parameter("publish_masks", false);
     declare_parameter("blur_kernel", 5);
