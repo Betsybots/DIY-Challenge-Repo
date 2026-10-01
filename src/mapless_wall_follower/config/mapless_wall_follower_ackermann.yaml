@@ -10,12 +10,23 @@
 # Stage 3 - Course validation: after Stage 2 succeeds, use 0.50 m/s straight
 #   and 0.25 m/s in turns. Require at least three clean runs without wall-loss,
 #   oscillation, false turn entry, or emergency-stop overshoot.
-# Stage 4 - 1.00 m/s straights: only after Stage 3 succeeds, use max_x=3.00,
-#   wall_lookahead=1.00, turn_enter_front_distance=2.00,
-#   emergency_stop_distance=1.20, straight_speed=1.00, and turn_speed=0.30.
-#   Keep acceleration, braking, and lateral-acceleration limits unchanged.
-#   Curvature limiting will reduce speed automatically below 1.00 m/s in bends.
-#   Do not increase beyond 1.00 m/s until single-wall transitions are validated.
+# Stage 4 - 1.00 m/s straights: validated in the arena with straight_speed=1.00,
+#   max_linear_acceleration=0.80, and turn_speed=0.25.
+# Stage 5 - Adaptive speed profile (active defaults below): straight_speed is
+#   only the straight-zone ceiling. Each cycle the speed is the minimum of:
+#   - curve limit: sqrt(max_lateral_acceleration / k), where k is the larger of
+#     the commanded curvature and the bend curvature previewed from where the
+#     outer wall enters the front band (k = 2h / (d^2 - h^2), h=preview_wall_offset);
+#   - clearance limit: speed that can still brake to emergency_stop_distance
+#     along the commanded arc, allowing control_latency;
+#   - turn_speed while only one wall is valid;
+#   then floored at min_speed so the Ackermann steering keeps authority.
+#   Approximate centerline speeds at max_lateral_acceleration=0.50:
+#   6 ft hairpin ~1.1 m/s, 21.5 ft ~1.9 m/s, 35.5 ft+ and straights at ceiling.
+#   Raise max_lateral_acceleration in 0.1 steps to go faster in all bends;
+#   lower it if the car runs wide. Raise straight_speed for the 44 ft straights.
+#   Watch preview_curvature, curve_speed_limit, clearance_speed_limit,
+#   and path_clearance in CONTROL DEBUG.
 
 mapless_wall_follower:
   ros__parameters:
@@ -57,14 +68,37 @@ mapless_wall_follower:
     left_wall_gain: 2.2  # TUNE: left-wall distance correction.
     right_turn_curvature_bias: 0.80  # TUNE: initial right steering when a front wall appears.
     turn_enter_front_distance: 1.20  # TUNE: enter right-turn mode before the front wall.
-    emergency_stop_distance: 0.45  # TUNE: hard front stop; keep beyond stopping distance.
+    emergency_stop_distance: 0.45  # Hard stop, measured along the commanded arc.
 
-    # Ackermann command limits.
-    straight_speed: 0.30  # STAGE 2: use 0.50 after validation; Stage 4 uses 1.00 m/s.
-    turn_speed: 0.15  # STAGE 2: use 0.25 at 0.50 straight; Stage 4 uses 0.30 m/s.
-    max_lateral_acceleration: 0.50  # TUNE: curvature speed limit in m/s^2.
+    # Ackermann command limits and adaptive speed profile.
+    straight_speed: 1.50  # Straight-zone ceiling; set 1.00 for the first validation run.
+    turn_speed: 0.25  # Ceiling while only one wall is valid.
+    min_speed: 0.20  # Floor while driving so the steering keeps authority.
+    max_lateral_acceleration: 0.50  # TUNE: main bend-speed knob in m/s^2.
     max_curvature: 2.70  # 1/m: tan(40 deg) / 0.31115 m wheelbase.
-    max_yaw_rate: 1.35  # rad/s: 0.50 m/s / 0.371 m radius.
-    max_linear_acceleration: 0.40  # TUNE: forward acceleration limit.
-    max_linear_deceleration: 0.80  # TUNE: braking magnitude.
-    max_yaw_acceleration: 1.50  # TUNE: yaw-command slew limit.
+    max_yaw_rate: 1.35  # rad/s: also caps speed in tight curvature.
+    max_linear_acceleration: 0.80  # TUNE: forward acceleration out of bends.
+    max_linear_deceleration: 0.80  # TUNE: braking used by the clearance limit; keep achievable.
+    max_curvature_rate: 3.00  # TUNE: 1/(m*s) steering slew; raise if turn entry lags.
+    preview_wall_offset: 0.16  # 0.457 m centerline-to-wall minus 0.30 m front_half_width.
+    control_latency: 0.20  # s: cloud + control + driver delay added to braking distance.
+
+    # Wall-too-close recovery: on emergency_stop_distance, stop, reverse a few inches
+    # while yawing away from the wall, stop, pre-steer away, then resume.
+    recovery_max_attempts: 3  # Back-to-back attempts before latching EMERGENCY_FRONT_STOP; 0 disables.
+    recovery_reverse_distance: 0.08  # m (~3 in), integrated from the reverse command.
+    recovery_reverse_speed: 0.20  # TUNE: m/s; raise if the motor does not move in reverse.
+    recovery_curvature: 1.50  # TUNE: 1/m steering while reversing; ~7 deg heading change at 0.08 m.
+    recovery_pause: 0.30  # s at zero speed before and after reversing.
+    recovery_reset_distance: 0.50  # m of forward driving that resets the attempt count.
+    recovery_flip_after_attempts: 2  # Later attempts steer the opposite way as a fallback; 0 disables.
+
+# Started only with wait_for_green_light:=true.
+green_light_trigger:
+  ros__parameters:
+    green_light_topic: /color_detector/green_light
+    red_light_topic: /color_detector/red_light  # RED after GREEN disables (latched).
+    enable_topic: /mapless_wall_follower/enable
+    required_consecutive: 3  # TUNE: consecutive green/red frames needed (debounce false positives).
+    enable_publish_count: 5  # Enable/disable repeats once the wall follower is subscribed.
+    enable_publish_rate: 10.0  # Hz for those repeats.

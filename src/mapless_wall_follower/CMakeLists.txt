@@ -25,7 +25,15 @@ ament_target_dependencies(mapless_wall_follower_node
   std_msgs
 )
 
-install(TARGETS mapless_wall_follower_node
+add_executable(green_light_trigger_node
+  src/green_light_trigger_node.cpp
+)
+ament_target_dependencies(green_light_trigger_node
+  rclcpp
+  std_msgs
+)
+
+install(TARGETS mapless_wall_follower_node green_light_trigger_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

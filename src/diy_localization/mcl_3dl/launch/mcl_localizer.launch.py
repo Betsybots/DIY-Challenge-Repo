@@ -16,6 +16,7 @@ def generate_launch_description():
             ]),
         ),
         DeclareLaunchArgument("use_rviz", default_value="false"),
+        DeclareLaunchArgument("cloud_topic", default_value="/cloud_registered_body"),
         Node( 
             package="pcl_ros",
             executable="pcd_to_pointcloud",
@@ -36,7 +37,8 @@ def generate_launch_description():
                     output="screen",
                     parameters=[config_file],
                     remappings=[
-                        ("/cloud", "/cloud_registered_body")
+                        # ("/cloud", "/cloud_registered_body")
+                        ("/cloud", LaunchConfiguration("cloud_topic"))
                     ],
                 ),
             ],
