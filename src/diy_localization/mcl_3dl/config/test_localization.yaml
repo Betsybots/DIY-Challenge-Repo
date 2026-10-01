@@ -1,6 +1,9 @@
 mcl_3dl:
   ros__parameters:
     map_frame: "map"
+    map_downsample_x: 0.05
+    map_downsample_y: 0.05
+    map_downsample_z: 0.05
     # /odom comes from zed_base_odom_relay: the pose of base_footprint, with TF
     # odom -> base_footprint. The particles must track that same frame, otherwise
     # map -> odom absorbs the base_footprint -> base_link (or camera) offset.
