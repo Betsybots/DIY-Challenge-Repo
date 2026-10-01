@@ -15,24 +15,22 @@ Source a profile, then launch:
 STARTUP ORDER
 ─────────────
     1. robot_description — publishes the URDF / TF tree first
-    2. Hesai lidar (hesai_ros_driver) — feeds FAST-LIO2
-    3. Fast LIO2 — starts after a short delay for localization
-    4. EKF (diy_state_estimate) — fuses /wheel_odom + /zed/zed_node/imu/data +
-       FAST-LIO2 /Odometry + ZED VIO /zed/zed_node/odom into /odom and owns
-       the odom→base_footprint TF
-    5. Autonomous mode: map_localizer + Nav2 navigation stack
+    2. Hesai lidar (hesai_ros_driver) — /lidar_points feeds mcl_3dl
+    3. Fast LIO2 — CURRENTLY DISABLED (commented out)
+    4. EKF (diy_state_estimate) — CURRENTLY DISABLED (commented out).
+       zed_base_odom_relay instead republishes ZED VIO /zed/zed_node/odom
+       at base_footprint as /odom and owns the odom→base_footprint TF
+    5. Autonomous mode: mcl_3dl + Nav2 navigation stack
     6. Manual mode: loop closure / map-refinement stack only
     7. rviz2 — optional debug visualization (use_rviz:=true)
 
 TF OWNERSHIP
 ────────────
-    map  → odom            map_localizer (VGICP against the saved map)
-    odom → base_footprint  diy_state_estimate ekf_filter_node — ONLY this
-                           node. FAST-LIO2 also broadcasts odom→base_link
-                           and has no switch to stop it, so its /tf is
-                           remapped to a dead topic below. Its /Odometry
-                           message still flows to the EKF and to
-                           map_localizer unchanged.
+    map  → odom            mcl_3dl
+    odom → base_footprint  diy_state_estimate zed_base_odom_relay (publish_tf)
+                           — ONLY this node. The ZED wrapper must run with
+                           pos_tracking.publish_tf:=false and
+                           pos_tracking.publish_map_tf:=false.
     base_footprint → *     robot_state_publisher (URDF): fixed joint
                            base_footprint→base_link, then base_link→sensors/
                            wheels.
@@ -110,45 +108,60 @@ def generate_launch_description():
         ),
     )
 
-    delayed_fast_lio2_launch = TimerAction(
-        period=2.0,
-        actions=[
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(
-                        get_package_share_directory('fast_lio_ros2'),
-                        'launch',
-                        'lio_localizer.launch.py',
-                    )
-                ),
-                launch_arguments={'output_topic': '/odom'}.items(),
-            ),
-        ]
-    )
+    # delayed_fast_lio2_launch = TimerAction(
+    #     period=2.0,
+    #     actions=[
+    #         IncludeLaunchDescription(
+    #             PythonLaunchDescriptionSource(
+    #                 os.path.join(
+    #                     get_package_share_directory('fast_lio_ros2'),
+    #                     'launch',
+    #                     'lio_localizer.launch.py',
+    #                 )
+    #             ),
+    #             launch_arguments={'output_topic': '/odom'}.items(),
+    #         ),
+    #     ]
+    # )
 
-    delayed_ekf_launch = TimerAction(
-        period=1.0,
-        actions=[
-            # EKF: /wheel_odom (vx, vyaw) + /zed/zed_node/imu/data (vyaw) +
-            # FAST-LIO2 /Odometry + ZED VIO /zed/zed_node/odom (x, y, yaw,
-            # each independently gated) → /odom + odom→base_footprint TF.
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(
-                        get_package_share_directory('diy_state_estimate'),
-                        'launch',
-                        'ekf_fusion.launch.py',
-                    )
-                ),
-                launch_arguments={
-                    # 'wheel_odom_topic': '/wheel_odom',
-                    'imu_topic': '/zed/zed_node/imu/data',
-                    'lidar_odom_topic': '/Odometry',
-                    'vio_odom_topic': '/zed/zed_node/odom',
-                    'output_topic': '/odom',
-                }.items(),
-            ),
-        ]
+    # delayed_ekf_launch = TimerAction(
+    #     period=1.0,
+    #     actions=[
+    #         # EKF: /wheel_odom (vx, vyaw) + /zed/zed_node/imu/data (vyaw) +
+    #         # FAST-LIO2 /Odometry + ZED VIO /zed/zed_node/odom (x, y, yaw,
+    #         # each independently gated) → /odom + odom→base_footprint TF.
+    #         IncludeLaunchDescription(
+    #             PythonLaunchDescriptionSource(
+    #                 os.path.join(
+    #                     get_package_share_directory('diy_state_estimate'),
+    #                     'launch',
+    #                     'ekf_fusion.launch.py',
+    #                 )
+    #             ),
+    #             launch_arguments={
+    #                 # 'wheel_odom_topic': '/wheel_odom',
+    #                 'imu_topic': '/zed/zed_node/imu/data',
+    #                 'lidar_odom_topic': '/Odometry',
+    #                 'vio_odom_topic': '/zed/zed_node/odom',
+    #                 'output_topic': '/odom',
+    #             }.items(),
+    #         ),
+    #     ]
+    # )
+
+    # ZED2i VIO re-expressed at base_footprint → /odom + odom→base_footprint TF (replaces the EKF).
+    zed_base_odom_relay_node = Node(
+        package='diy_state_estimate',
+        executable='zed_base_odom_relay',
+        name='zed_base_odom_relay',
+        output='screen',
+        parameters=[{
+            'zed_odom_topic': '/zed/zed_node/odom',
+            'output_topic': '/odom',
+            'odom_frame': 'odom',
+            'base_frame': 'base_footprint',
+            'publish_tf': True,
+        }],
     )
 
     delayed_mcl_3dl_launch = TimerAction(
@@ -162,6 +175,9 @@ def generate_launch_description():
                         'mcl_localizer.launch.py',
                     )
                 ),
+                # FAST-LIO is off, so /cloud_registered_body is not published; use the raw Hesai cloud.
+                # launch_arguments={'cloud_topic': '/cloud_registered_body'}.items(),
+                launch_arguments={'cloud_topic': '/lidar_points'}.items(),
                 condition=IfCondition(autonomous),
             ),
         ]
@@ -233,8 +249,9 @@ def generate_launch_description():
         declare_use_rviz,
         robot_description_launch,        # always
         hesai_launch,                    # always
-        delayed_fast_lio2_launch,        # always
-        delayed_ekf_launch,              # always
+        # delayed_fast_lio2_launch,      # always
+        # delayed_ekf_launch,            # always
+        zed_base_odom_relay_node,        # always
         delayed_mcl_3dl_launch,          # autonomous
         delayed_loop_pgo_launch,         # manual
         delayed_map_hba_launch,          # manual

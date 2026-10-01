@@ -29,6 +29,7 @@ setup(
         'console_scripts': [
             'sensor_covariance_relay = diy_state_estimate.sensor_covariance_relay:main',
             'localization_watchdog = diy_state_estimate.localization_watchdog:main',
+            'zed_base_odom_relay = diy_state_estimate.zed_base_odom_relay:main',
         ],
     },
 )

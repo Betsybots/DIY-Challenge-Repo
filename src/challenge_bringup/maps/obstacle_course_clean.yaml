@@ -1,6 +1,6 @@
-image: speed_run1_ekf_map.pgm
+image: obstacle_course_clean.pgm
 resolution: 0.05
-origin: [-30.2001, -8.9289, 0.0]
+origin: [-9.4293, -10.9072, 0.0]
 negate: 0
 occupied_thresh: 0.65
 free_thresh: 0.196
