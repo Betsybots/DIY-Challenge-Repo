@@ -17,7 +17,14 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("use_rviz", default_value="false"),
         DeclareLaunchArgument("cloud_topic", default_value="/cloud_registered_body"),
-        DeclareLaunchArgument("imu_topic", default_value="/zed/zed_node/imu/data"),
+        # Default is the real IMU (Aceinna, on the Raspberry Pi) - frame_id "imu_link",
+        # which has a static TF from base_link/base_footprint. The ZED's own IMU
+        # (/zed/zed_node/imu/data, frame_id "zed_imu_link") has NO such static TF
+        # (zed_wrapper's publish_imu_tf defaults false), so pointing mcl_3dl at it
+        # makes every cbImu() TF lookup fail silently -> no IMU correction ever
+        # applied, plus a spurious periodic "Detected time jump in imu" warning
+        # every ~5s (imu_last_ never advances while the lookup keeps failing).
+        DeclareLaunchArgument("imu_topic", default_value="/imu/data"),
         DeclareLaunchArgument("odom_topic", default_value="/zed/zed_node/odom"),
         Node( 
             package="pcl_ros",

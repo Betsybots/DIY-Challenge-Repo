@@ -208,6 +208,11 @@ bool Parameters::load(rclcpp::Node& pnh)
       Vec3(v_x, v_y, v_z),
       Vec3(v_roll, v_pitch, v_yaw));
 
+  // Defaults fix_z_value_ to init_z so enabling fix_z doesn't also require
+  // separately repeating the same floor height in a second parameter.
+  declareParam(pnh, "fix_z", fix_z_, false);
+  declareParam(pnh, "fix_z_value", fix_z_value_, z);
+
   declareParam(pnh, "use_random_sampler_with_normal", use_random_sampler_with_normal_, false);
 
   if (use_random_sampler_with_normal_)

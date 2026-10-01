@@ -238,6 +238,8 @@ protected:
       const auto prediction_func = [this](State6DOF& s)
       {
         motion_prediction_model_->predict(s);
+        if (params_.fix_z_)
+          s.pos_.z_ = params_.fix_z_value_;
       };
       pf_->predict(prediction_func);
       odom_last_ = rclcpp::Time(msg->header.stamp);
@@ -832,6 +834,8 @@ protected:
       s.noise_la_ = noise(engine_) * params_.odom_err_lin_ang_;
       s.noise_aa_ = noise(engine_) * params_.odom_err_ang_ang_;
       s.noise_al_ = noise(engine_) * params_.odom_err_ang_lin_;
+      if (params_.fix_z_)
+        s.pos_.z_ = params_.fix_z_value_;
     };
     pf_->predict(update_noise_func);
 
@@ -946,6 +950,15 @@ protected:
         Vec3(params_.resample_var_roll_,
              params_.resample_var_pitch_,
              params_.resample_var_yaw_)));
+
+    if (params_.fix_z_)
+    {
+      const auto clamp_z_func = [this](State6DOF& s)
+      {
+        s.pos_.z_ = params_.fix_z_value_;
+      };
+      pf_->predict(clamp_z_func);
+    }
 
     publishParticles();
   }

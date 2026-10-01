@@ -134,6 +134,13 @@ class ZedBaseOdomRelay(Node):
         self._pose_cov_scale = float(p('pose_covariance_scale', 1.0).value)
         self._twist_cov = list(p('twist_covariance', [0.04, 0.04, 0.04, 0.01, 0.01, 0.01]).value)
         self._publish_tf = bool(p('publish_tf', False).value)
+        # AMCL-style transform_tolerance: the broadcast TF is stamped this far ahead of
+        # the raw ZED odom timestamp (camera clock) so consumers looking up this TF at a
+        # DIFFERENT sensor's clock (e.g. mcl_3dl querying at FAST-LIO2's lidar-clock cloud
+        # stamp) don't hit tf2 "Lookup would require extrapolation into the future" from
+        # ordinary cross-sensor clock jitter/offset. Only the broadcast TF is shifted -
+        # the published /odom message itself keeps the real capture stamp.
+        self._tf_tolerance = Duration(seconds=float(p('tf_tolerance', 0.1).value))
         if len(self._fallback_xyz) != 3 or len(self._fallback_rpy) != 3 or len(self._twist_cov) != 6:
             raise ValueError('camera_offset_xyz/rpy need 3 values, twist_covariance needs 6')
 
@@ -236,6 +243,7 @@ class ZedBaseOdomRelay(Node):
         if self._tf_br is not None:
             t = TransformStamped()
             t.header = o.header
+            t.header.stamp = (stamp + self._tf_tolerance).to_msg()
             t.child_frame_id = self._base_frame
             t.transform.translation.x, t.transform.translation.y, t.transform.translation.z = out[:3, 3]
             t.transform.rotation = o.pose.pose.orientation

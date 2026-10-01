@@ -18,7 +18,7 @@ open_terminal() {
 open_terminal robot_description "ros2 launch robot_description description.launch.py"
 sleep 3
 
-open_terminal hesai_lidar "cd ~ && ./hesai.sh"
+open_terminal hesai_lidar "cd ~ && ./hesai_launch.sh"
 sleep 5
 
 open_terminal fast_lio "ros2 launch fast_lio_ros2 lio_localizer.launch.py"
