@@ -72,15 +72,16 @@ mapless_wall_follower:
     emergency_stop_distance: 0.30  # Hard stop, measured along the commanded arc (was 0.45).
 
     # Ackermann command limits and adaptive speed profile.
-    # Race preset B (sim lap ~60 s). Rollback (arena-validated, ~82 s): straight 1.50,
+    # First-run tune (new code): straight 1.50, lat 0.50. If clean, go to race preset B
+    # (sim lap ~60 s): straight 2.00, lat 1.00. Rollback (arena-validated, ~82 s): straight 1.50,
     # lat 0.50, accel 0.80, decel 0.80. Stretch C (~50 s, only if B is clean and the drive
     # reaches 2.5 m/s): straight 2.50, lat 1.50, accel 1.20, decel 1.20, max_yaw_rate 2.00.
     # Fit-tuning rollback: max_x 3.00, wall_lookahead 0.80, fit_residual_threshold 0.08,
     # max_fit_rms 0.06, emergency_stop_distance 0.45, turn_speed 0.25.
-    straight_speed: 2.00  # Straight-zone ceiling.
+    straight_speed: 1.50  # Straight-zone ceiling.
     turn_speed: 0.35  # Ceiling while only one wall is valid.
     min_speed: 0.20  # Floor while driving so the steering keeps authority.
-    max_lateral_acceleration: 1.00  # TUNE: main bend-speed knob in m/s^2 (tip-over ~6.6 m/s^2).
+    max_lateral_acceleration: 0.50  # TUNE: main bend-speed knob in m/s^2 (tip-over ~6.6 m/s^2).
     max_curvature: 2.70  # 1/m: tan(40 deg) / 0.31115 m wheelbase.
     max_yaw_rate: 1.35  # rad/s: also caps speed in tight curvature.
     max_linear_acceleration: 1.00  # TUNE: forward acceleration out of bends.
