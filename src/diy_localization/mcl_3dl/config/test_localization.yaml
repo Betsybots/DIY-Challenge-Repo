@@ -1,6 +1,27 @@
 mcl_3dl:
   ros__parameters:
     map_frame: "map"
+    # /odom comes from zed_base_odom_relay: the pose of base_footprint, with TF
+    # odom -> base_footprint. The particles must track that same frame, otherwise
+    # map -> odom absorbs the base_footprint -> base_link (or camera) offset.
+    odom_frame: "odom"
+    robot_frame: "base_footprint"
+    # Starting pose of robot_frame (base_footprint) in the map.
+    # The map origin is where the FAST-LIO body frame was at the start of run3,
+    # facing the direction the robot drove off; the floor is at z ≈ -0.12 in this
+    # map (its floor is cropped out, the wall band starts at about -0.08).
+    # base_footprint sits on the floor, so init_z = 0.0 (height above floor) - 0.12.
+    # Start on the same spot and heading as run3 for x/y/yaw = 0. The body frame is
+    # ahead of base_footprint by the sensor's x offset (not exactly known); the
+    # init_var_* below are standard deviations (m / rad) and cover that.
+    init_x: 0.0
+    init_y: 0.0
+    init_z: -0.12
+    init_yaw: 0.0
+    init_var_x: 2.0
+    init_var_y: 2.0
+    init_var_z: 0.5
+    init_var_yaw: 0.5
     accum_cloud: 2
     lpf_step: 1.0
     dist_weight_z: 2.0

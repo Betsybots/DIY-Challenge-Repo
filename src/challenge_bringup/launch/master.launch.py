@@ -177,7 +177,12 @@ def generate_launch_description():
                 ),
                 # FAST-LIO is off, so /cloud_registered_body is not published; use the raw Hesai cloud.
                 # launch_arguments={'cloud_topic': '/cloud_registered_body'}.items(),
-                launch_arguments={'cloud_topic': '/cloud_registered_body'}.items(),
+                launch_arguments={
+                    'cloud_topic': '/cloud_registered_body',
+                    # base_footprint odometry from zed_base_odom_relay (not the raw
+                    # camera pose on /zed/zed_node/odom) — matches robot_frame.
+                    'odom_topic': '/odom',
+                }.items(),
                 condition=IfCondition(autonomous),
             ),
         ]
