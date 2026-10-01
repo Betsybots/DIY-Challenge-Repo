@@ -71,7 +71,7 @@ public:
     emergency_stop_distance_ = declare_parameter("emergency_stop_distance", 0.45);
 
     straight_speed_ = declare_parameter("straight_speed", 0.30);
-      _ = declare_parameter("turn_speed", 0.15);
+    turn_speed_ = declare_parameter("turn_speed", 0.15);
     min_speed_ = declare_parameter("min_speed", 0.15);
     max_lateral_acceleration_ = declare_parameter("max_lateral_acceleration", 0.50);
     max_curvature_ = declare_parameter("max_curvature", 2.70);
