@@ -3,6 +3,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -47,6 +48,20 @@ def generate_launch_description():
             # listens on /cmd_vel_smoothed, so launch with:
             #   cmd_vel_topic:=/cmd_vel_smoothed
             description='Autonomous Twist output; override for direct driver testing',
+        ),
+        DeclareLaunchArgument(
+            'wait_for_green_light',
+            default_value='false',
+            description='Start green_light_trigger to enable the follower on GREEN '
+                        '(needs diy_zed_color_detection running)',
+        ),
+        Node(
+            package='mapless_wall_follower',
+            executable='green_light_trigger_node',
+            name='green_light_trigger',
+            output='screen',
+            parameters=[params_file],
+            condition=IfCondition(LaunchConfiguration('wait_for_green_light')),
         ),
         Node(
             package='mapless_wall_follower',

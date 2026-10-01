@@ -11,7 +11,21 @@ does not use a map, localization, Nav2, a global path, or odometry.
 3. `RIGHT_WALL`: when only the right wall is valid, follow it at the configured
    distance. A right-turn bias is added while the front is blocked.
 4. `NO_WALL_DETECTED`: stop when neither wall is valid.
-5. Also stop if the cloud is stale or the front emergency distance is crossed.
+   A recently valid wall is held for `wall_detection_hold_time` to reject brief
+   curved-wall fit dropouts. If two individually valid fits imply an invalid
+   corridor width, the controller keeps the fit with more inliers (then lower
+   RMS on a tie) and continues in single-wall mode instead of rejecting both.
+5. `RECOVERY_BRAKING` -> `RECOVERY_REVERSING` -> `RECOVERY_SETTLING`: when an
+   obstacle is within `emergency_stop_distance` along the commanded arc, stop,
+   reverse `recovery_reverse_distance` while the heading turns away from the
+   blocking wall (toward the path center), stop, pre-steer away, and resume.
+   If the blocking point is nearly head-on, it keeps turning the way the
+   controller was already steering. If `recovery_flip_after_attempts`
+   back-to-back attempts fail, later attempts steer the opposite way as a
+   fallback. After `recovery_max_attempts` back-to-back
+   attempts without `recovery_reset_distance` of forward driving, it latches
+   `EMERGENCY_FRONT_STOP`.
+6. Also stop if the cloud is stale.
 
 The controller publishes its current state on
 `/mapless_wall_follower/state`.
@@ -33,6 +47,37 @@ Disable it with:
 
 ```bash
 ros2 topic pub --once /mapless_wall_follower/enable std_msgs/msg/Bool "{data: false}"
+```
+
+### Green-light start
+
+`green_light_trigger_node` subscribes to `/color_detector/green_light`
+(published by `diy_zed_color_detection`). After `required_consecutive`
+consecutive `true` frames it latches and publishes `true` on
+`/mapless_wall_follower/enable` `enable_publish_count` times at
+`enable_publish_rate`, only once the wall follower is subscribed. It never
+publishes `false`; stop with the disable command above or the physical
+emergency stop. Restart the trigger node to arm it again.
+
+The trigger is started only with `wait_for_green_light:=true` and reads the
+`green_light_trigger` section of the same YAML:
+
+- `green_light_topic`: detector output topic.
+- `enable_topic`: wall-follower enable topic.
+- `required_consecutive`: debounce against false green detections.
+- `enable_publish_count`, `enable_publish_rate`: enable repeats.
+
+```bash
+ros2 launch diy_zed_color_detection color_detector.launch.py
+ros2 launch mapless_wall_follower mapless_wall_follower_ackermann.launch.py \
+  wait_for_green_light:=true
+```
+
+Verify without the camera by publishing a fake green light:
+
+```bash
+ros2 topic pub -r 10 /color_detector/green_light std_msgs/msg/Bool "{data: true}"
+ros2 topic echo /mapless_wall_follower/enable
 ```
 
 ## Automatic MPPI fallback
@@ -96,6 +141,56 @@ source install/setup.bash
 
 Do not use the shared `challenge_bringup/master.launch.py` for this test because
 it also starts Nav2 or mapping components. Start only the dependencies below.
+
+### Jetson one-command bringup
+
+`challenge_bringup/launch/mapless_wall_follower_jetson.sh` runs steps 2-4 and 6
+below in order, waiting for each required topic before the next step:
+
+1. Waits for `/imu/data` (the IMU still runs on the Raspberry Pi).
+2. Starts `robot_description`.
+3. Starts the Hesai LiDAR and waits for `/lidar_points`.
+4. Starts FAST-LIO and waits for `/cloud_registered_body`.
+5. Starts the wall follower in the foreground so `CONTROL DEBUG` is visible.
+
+Start the IMU (step 1) and the Ackermann driver (step 5) separately first.
+Script options come first; all remaining arguments are forwarded to the
+wall-follower launch:
+
+- `--terminals`: open each launch in its own terminal window instead of
+  logging to files.
+- `--green-light`: also start `diy_zed_color_detection` (with the ZED wrapper),
+  wait for `/color_detector/green_light`, and launch the wall follower with
+  `wait_for_green_light:=true`. Passing `wait_for_green_light:=true` directly
+  does the same.
+
+```bash
+cd ~/DIY-Challenge-Repo
+# Stationary test (output /cmd_vel_nav)
+src/challenge_bringup/launch/mapless_wall_follower_jetson.sh
+# Direct moving test to the Ackermann driver
+src/challenge_bringup/launch/mapless_wall_follower_jetson.sh \
+  cmd_vel_topic:=/cmd_vel_smoothed
+# Race start on the green light, one window per launch
+src/challenge_bringup/launch/mapless_wall_follower_jetson.sh --terminals \
+  --green-light cmd_vel_topic:=/cmd_vel_smoothed
+```
+
+Environment overrides:
+
+- `DIY_WS`: workspace root containing `install/setup.bash` (default: derived
+  from the script location).
+- `TOPIC_TIMEOUT`: seconds to wait for each topic (default `30`). The script
+  exits if a topic does not appear.
+- `CAMERA_TIMEOUT`: seconds to wait for `/color_detector/green_light`
+  (default `90`). On timeout the script only warns and still starts the wall
+  follower (disabled); the trigger stays armed, so enable manually or publish a
+  fake green light as shown above.
+- `LOG_DIR`: background launch logs (default
+  `/tmp/mapless_wall_follower_<timestamp>`).
+
+Ctrl+C stops all started launches in reverse order. Build the workspace first;
+the script sources `install/setup.bash`.
 
 ### 1. Start the IMU
 
@@ -225,7 +320,10 @@ path is 36 in (0.9144 m) wide and the vehicle is approximately 16 in
 - `fit_residual_threshold`: maximum point-to-line distance for an inlier. Raise
   it for rough walls; lower it when obstacles contaminate the fit.
 - `max_fit_rms`: maximum accepted overall fit error. Lower it to reject noisy
-  fits.
+  fits; raise it cautiously if real curved walls are rejected.
+- `wall_detection_hold_time`: time to retain the most recent valid fit through
+  a brief dropout. Keep it short because a held wall does not move with the
+  vehicle.
 - `min_z`, `max_z`: vertical wall slice. Adjust these only after confirming
   that `/cloud_registered_body` uses +Z upward.
 - `min_x`, `max_x`: longitudinal fitting region. More forward range provides
@@ -234,7 +332,8 @@ path is 36 in (0.9144 m) wide and the vehicle is approximately 16 in
   `side_min_abs_y` outside the vehicle body and wheels.
 
 Watch `left_points`, `right_points`, `left_inliers`, `right_inliers`,
-`left_rms`, `right_rms`, `left_valid`, and `right_valid` in the terminal.
+`left_rms`, `right_rms`, `left_valid`, `right_valid`, `left_held`,
+`right_held`, and `pair_inconsistent` in the terminal.
 
 ### 2. Position in the course
 
@@ -264,23 +363,39 @@ Change gains in small steps of approximately 0.1 to 0.2.
 
 ### 4. Speed and turn slowdown
 
-- `straight_speed`: speed used while both walls are valid.
-- `turn_speed`: lower speed used while following only one wall.
-- `max_lateral_acceleration`: automatically limits speed as curvature rises.
+- `straight_speed`: ceiling while both walls are valid (straight zones).
+- `turn_speed`: ceiling while following only one wall.
+- `min_speed`: floor while driving so the steering keeps authority.
+- `max_lateral_acceleration`: main bend-speed knob. Speed is limited by
+  `sqrt(a_lat / k)`, where `k` is the larger of the commanded curvature and the
+  bend curvature previewed from `front_distance` and `preview_wall_offset`.
 - `max_linear_acceleration`: forward speed ramp rate.
-- `max_linear_deceleration`: controlled braking rate.
-- `max_yaw_acceleration`: steering/yaw-command slew rate.
+- `max_linear_deceleration`: controlled braking rate, also used to cap speed so
+  the vehicle can stop before `emergency_stop_distance` along its arc.
+- `max_curvature_rate`: steering (curvature) slew rate. Speed and curvature are
+  rate-limited separately, and the yaw rate is published as `speed * curvature`
+  so braking does not tighten the turn.
+- `control_latency`: delay added to the braking distance.
 
-Use the staged progression documented in the YAML: 0.30/0.15 m/s first,
-0.50/0.25 m/s after three clean runs, and 1.00/0.30 m/s only after the lower
-speeds are reliable.
+See the YAML header for the staged speed progression and expected bend speeds.
 
 ### 5. Turn and stop distances
 
 - `turn_enter_front_distance`: distance at which right-wall mode adds its
   right-turn steering bias.
-- `emergency_stop_distance`: front obstacle distance that commands a stop.
-- `front_half_width`: half-width of the front obstacle-detection corridor.
+- `emergency_stop_distance`: obstacle distance along the commanded arc that
+  starts the reverse recovery.
+- `recovery_reverse_distance`, `recovery_reverse_speed`: how far and how fast
+  to back up. Distance is integrated from the command (no odometry).
+- `recovery_curvature`: steering while reversing; higher turns away more.
+- `recovery_pause`: zero-speed hold before and after reversing.
+- `recovery_max_attempts`, `recovery_reset_distance`: retry limit; `0`
+  attempts restores the plain emergency stop.
+
+The recovery publishes negative `linear.x` with `angular.z = linear.x *
+curvature`. Verify on blocks that the Ackermann driver reverses and that the
+nose swings away from the wall; nothing behind the robot is checked.
+- `front_half_width`: half-width of the front band and of the swept arc corridor.
 - `cloud_timeout`: maximum accepted age of the latest point cloud.
 
 Do not reduce `emergency_stop_distance` merely to avoid false stops. First

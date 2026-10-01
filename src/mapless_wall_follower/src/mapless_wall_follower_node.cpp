@@ -54,6 +54,7 @@ public:
     fit_residual_threshold_ = declare_parameter("fit_residual_threshold", 0.08);
     max_fit_rms_ = declare_parameter("max_fit_rms", 0.06);
     max_fit_points_ = declare_parameter("max_fit_points", 2000);
+    wall_detection_hold_time_ = declare_parameter("wall_detection_hold_time", 0.20);
 
     wall_lookahead_ = declare_parameter("wall_lookahead", 0.80);
     min_corridor_width_ = declare_parameter("min_corridor_width", 0.70);
@@ -71,16 +72,28 @@ public:
 
     straight_speed_ = declare_parameter("straight_speed", 0.30);
     turn_speed_ = declare_parameter("turn_speed", 0.15);
+    min_speed_ = declare_parameter("min_speed", 0.15);
     max_lateral_acceleration_ = declare_parameter("max_lateral_acceleration", 0.50);
     max_curvature_ = declare_parameter("max_curvature", 2.70);
     max_yaw_rate_ = declare_parameter("max_yaw_rate", 1.35);
     max_linear_acceleration_ = declare_parameter("max_linear_acceleration", 0.40);
     max_linear_deceleration_ = declare_parameter("max_linear_deceleration", 0.80);
-    max_yaw_acceleration_ = declare_parameter("max_yaw_acceleration", 1.50);
+    max_curvature_rate_ = declare_parameter("max_curvature_rate", 3.00);
+    preview_wall_offset_ = declare_parameter("preview_wall_offset", 0.16);
+    control_latency_ = declare_parameter("control_latency", 0.20);
+
+    recovery_max_attempts_ = declare_parameter("recovery_max_attempts", 3);
+    recovery_reverse_distance_ = declare_parameter("recovery_reverse_distance", 0.08);
+    recovery_reverse_speed_ = declare_parameter("recovery_reverse_speed", 0.20);
+    recovery_curvature_ = declare_parameter("recovery_curvature", 1.50);
+    recovery_pause_ = declare_parameter("recovery_pause", 0.30);
+    recovery_reset_distance_ = declare_parameter("recovery_reset_distance", 0.50);
+    recovery_flip_after_attempts_ = declare_parameter("recovery_flip_after_attempts", 2);
 
     if (control_frequency_ <= 0.0 || debug_log_frequency_ <= 0.0 ||
       point_stride_ < 1 || min_wall_points_ < 2 ||
       max_fit_points_ < min_wall_points_ || min_x_ >= max_x_ || min_z_ >= max_z_ ||
+      wall_detection_hold_time_ < 0.0 || wall_detection_hold_time_ > cloud_timeout_ ||
       side_min_abs_y_ >= side_max_abs_y_ || wall_lookahead_ <= 0.0 ||
       min_corridor_width_ >= max_corridor_width_ ||
       right_wall_target_distance_ <= 0.0 || left_wall_target_distance_ <= 0.0 ||
@@ -88,9 +101,15 @@ public:
       emergency_stop_distance_ <= 0.0 ||
       emergency_stop_distance_ >= turn_enter_front_distance_ ||
       straight_speed_ <= 0.0 || turn_speed_ <= 0.0 ||
+      min_speed_ <= 0.0 || min_speed_ > turn_speed_ || min_speed_ > straight_speed_ ||
       max_curvature_ <= 0.0 || max_yaw_rate_ <= 0.0 ||
       max_linear_acceleration_ <= 0.0 || max_linear_deceleration_ <= 0.0 ||
-      max_yaw_acceleration_ <= 0.0)
+      max_curvature_rate_ <= 0.0 || preview_wall_offset_ <= 0.0 ||
+      control_latency_ < 0.0 ||
+      recovery_max_attempts_ < 0 || recovery_reverse_distance_ <= 0.0 ||
+      recovery_reverse_speed_ <= 0.0 || recovery_curvature_ < 0.0 ||
+      recovery_curvature_ > max_curvature_ || recovery_pause_ < 0.0 ||
+      recovery_reset_distance_ <= 0.0 || recovery_flip_after_attempts_ < 0)
     {
       throw std::invalid_argument("Invalid mapless wall follower parameters");
     }
@@ -150,9 +169,21 @@ private:
     double left_y{0.0};
     double right_y{0.0};
     double front_distance{std::numeric_limits<double>::infinity()};
+    double path_clearance{std::numeric_limits<double>::infinity()};
+    double path_clearance_y{0.0};
     std::size_t left_point_count{0};
     std::size_t right_point_count{0};
+    bool left_held{false};
+    bool right_held{false};
+    bool pair_inconsistent{false};
     rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
+  };
+
+  struct SpeedProfile
+  {
+    double preview_curvature{0.0};
+    double curve_limit{std::numeric_limits<double>::infinity()};
+    double clearance_limit{std::numeric_limits<double>::infinity()};
   };
 
   enum class Mode
@@ -161,6 +192,14 @@ private:
     CENTERING,
     RIGHT_WALL,
     LEFT_WALL
+  };
+
+  enum class RecoveryPhase
+  {
+    NONE,
+    BRAKING,
+    REVERSING,
+    SETTLING
   };
 
   static LineFit leastSquares(const std::vector<Point2D> & points)
@@ -277,6 +316,106 @@ private:
     return fit;
   }
 
+  // Arc length along the commanded path before the point enters the swept corridor.
+  double arcDistance(double x, double y, double curvature) const
+  {
+    if (std::abs(curvature) < 1e-3) {
+      return (x > 0.0 && std::abs(y) <= front_half_width_) ?
+             x : std::numeric_limits<double>::infinity();
+    }
+    const double radius = 1.0 / std::abs(curvature);
+    const double inner_y = curvature > 0.0 ? y : -y;
+    const double radial = std::hypot(x, inner_y - radius);
+    if (std::abs(radial - radius) > front_half_width_) {
+      return std::numeric_limits<double>::infinity();
+    }
+    const double angle = std::atan2(x, radius - inner_y);
+    return angle > 0.0 ? radius * angle : std::numeric_limits<double>::infinity();
+  }
+
+  // Centerline curvature of a bend whose outer wall enters the front band at this distance.
+  double previewCurvature(double front_distance) const
+  {
+    if (!std::isfinite(front_distance)) {
+      return 0.0;
+    }
+    const double offset = preview_wall_offset_;
+    if (front_distance <= offset) {
+      return max_curvature_;
+    }
+    return std::min(
+      max_curvature_,
+      2.0 * offset / (front_distance * front_distance - offset * offset));
+  }
+
+  static bool firstFitIsBetter(const LineFit & first, const LineFit & second)
+  {
+    if (first.inliers != second.inliers) {
+      return first.inliers > second.inliers;
+    }
+    return first.rms <= second.rms;
+  }
+
+  void rejectInconsistentWallPair(WallMeasurement & measurement) const
+  {
+    if (!measurement.left.valid || !measurement.right.valid) {
+      return;
+    }
+
+    const double width = measurement.left_y - measurement.right_y;
+    if (width >= min_corridor_width_ && width <= max_corridor_width_) {
+      return;
+    }
+
+    measurement.pair_inconsistent = true;
+    if (firstFitIsBetter(measurement.left, measurement.right)) {
+      measurement.right.valid = false;
+      measurement.right_held = false;
+    } else {
+      measurement.left.valid = false;
+      measurement.left_held = false;
+    }
+  }
+
+  bool isRecent(const rclcpp::Time & stamp, const rclcpp::Time & current) const
+  {
+    if (stamp.nanoseconds() == 0) {
+      return false;
+    }
+    const double age = (current - stamp).seconds();
+    return age >= 0.0 && age <= wall_detection_hold_time_;
+  }
+
+  void holdRecentWalls(WallMeasurement & measurement) const
+  {
+    if (!measurement.left.valid && isRecent(last_left_wall_stamp_, measurement.stamp)) {
+      measurement.left = last_left_wall_;
+      measurement.left_y = last_left_y_;
+      measurement.left.valid = true;
+      measurement.left_held = true;
+    }
+    if (!measurement.right.valid && isRecent(last_right_wall_stamp_, measurement.stamp)) {
+      measurement.right = last_right_wall_;
+      measurement.right_y = last_right_y_;
+      measurement.right.valid = true;
+      measurement.right_held = true;
+    }
+  }
+
+  void rememberCurrentWalls(const WallMeasurement & measurement)
+  {
+    if (measurement.left.valid && !measurement.left_held) {
+      last_left_wall_ = measurement.left;
+      last_left_y_ = measurement.left_y;
+      last_left_wall_stamp_ = measurement.stamp;
+    }
+    if (measurement.right.valid && !measurement.right_held) {
+      last_right_wall_ = measurement.right;
+      last_right_y_ = measurement.right_y;
+      last_right_wall_stamp_ = measurement.stamp;
+    }
+  }
+
   void cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr cloud)
   {
     if (cloud->header.frame_id != "base_link") {
@@ -292,6 +431,9 @@ private:
     left_points.reserve(std::min<std::size_t>(cloud->width, max_fit_points_));
     right_points.reserve(std::min<std::size_t>(cloud->width, max_fit_points_));
     double front_distance = std::numeric_limits<double>::infinity();
+    double path_clearance = std::numeric_limits<double>::infinity();
+    double path_clearance_y = 0.0;
+    const double clearance_curvature = commanded_curvature_.load();
 
     try {
       sensor_msgs::PointCloud2ConstIterator<float> x_iterator(*cloud, "x");
@@ -315,6 +457,11 @@ private:
 
         if (x > 0.0 && std::abs(y) <= front_half_width_) {
           front_distance = std::min(front_distance, x);
+        }
+        const double arc_distance = arcDistance(x, y, clearance_curvature);
+        if (arc_distance < path_clearance) {
+          path_clearance = arc_distance;
+          path_clearance_y = y;
         }
         if (x < min_x_ || x > max_x_) {
           continue;
@@ -342,6 +489,8 @@ private:
     measurement.left = fitWall(left_points);
     measurement.right = fitWall(right_points);
     measurement.front_distance = front_distance;
+    measurement.path_clearance = path_clearance;
+    measurement.path_clearance_y = path_clearance_y;
     measurement.left_point_count = left_points.size();
     measurement.right_point_count = right_points.size();
     measurement.stamp = now();
@@ -356,13 +505,10 @@ private:
         measurement.right.slope * wall_lookahead_ + measurement.right.intercept;
       measurement.right.valid = measurement.right_y < 0.0;
     }
-    if (measurement.left.valid && measurement.right.valid) {
-      const double width = measurement.left_y - measurement.right_y;
-      if (width < min_corridor_width_ || width > max_corridor_width_) {
-        measurement.left.valid = false;
-        measurement.right.valid = false;
-      }
-    }
+    rejectInconsistentWallPair(measurement);
+    holdRecentWalls(measurement);
+    rejectInconsistentWallPair(measurement);
+    rememberCurrentWalls(measurement);
 
     std::lock_guard<std::mutex> lock(measurement_mutex_);
     latest_measurement_ = measurement;
@@ -391,17 +537,29 @@ private:
 
     if (!enabled_.load()) {
       mode_ = Mode::STOPPED;
+      recovery_phase_ = RecoveryPhase::NONE;
+      recovery_attempts_ = 0;
       stop("DISABLED", dt, &measurement, cloud_age);
       return;
     }
 
     if (cloud_age > cloud_timeout_) {
       mode_ = Mode::STOPPED;
+      recovery_phase_ = RecoveryPhase::NONE;
       stop("STALE_CLOUD", dt, &measurement, cloud_age);
       return;
     }
-    if (measurement.front_distance <= emergency_stop_distance_) {
+    if (recovery_phase_ != RecoveryPhase::NONE) {
+      runRecovery(dt, measurement, cloud_age);
+      return;
+    }
+    if (measurement.path_clearance <= emergency_stop_distance_) {
       mode_ = Mode::STOPPED;
+      if (recovery_attempts_ < recovery_max_attempts_) {
+        startRecovery(measurement);
+        runRecovery(dt, measurement, cloud_age);
+        return;
+      }
       stop("EMERGENCY_FRONT_STOP", dt, &measurement, cloud_age);
       return;
     }
@@ -459,30 +617,124 @@ private:
     }
 
     curvature = std::clamp(curvature, -max_curvature_, max_curvature_);
-    if (std::abs(curvature) > 1e-4) {
-      requested_speed = std::min(
-        requested_speed,
-        std::sqrt(max_lateral_acceleration_ / std::abs(curvature)));
-    }
-    double requested_yaw_rate = requested_speed * curvature;
-    requested_yaw_rate = std::clamp(requested_yaw_rate, -max_yaw_rate_, max_yaw_rate_);
 
-    publishRateLimited(requested_speed, requested_yaw_rate, dt);
+    SpeedProfile profile;
+    profile.preview_curvature = previewCurvature(measurement.front_distance);
+    const double profile_curvature =
+      std::max(std::abs(curvature), profile.preview_curvature);
+    if (profile_curvature > 1e-4) {
+      profile.curve_limit = std::min(
+        std::sqrt(max_lateral_acceleration_ / profile_curvature),
+        max_yaw_rate_ / profile_curvature);
+    }
+    const double braking_distance =
+      measurement.path_clearance - emergency_stop_distance_ -
+      last_linear_command_ * control_latency_;
+    profile.clearance_limit =
+      std::sqrt(2.0 * max_linear_deceleration_ * std::max(0.0, braking_distance));
+    requested_speed = std::max(
+      min_speed_,
+      std::min({requested_speed, profile.curve_limit, profile.clearance_limit}));
+    const double requested_yaw_rate = std::clamp(
+      requested_speed * curvature, -max_yaw_rate_, max_yaw_rate_);
+
+    publishRateLimited(requested_speed, curvature, dt);
+    forward_since_recovery_ += std::max(0.0, last_linear_command_) * dt;
+    if (forward_since_recovery_ >= recovery_reset_distance_) {
+      recovery_attempts_ = 0;
+    }
     publishState(state);
     logDebug(
       state, &measurement, cloud_age, lateral_error, heading_error,
-      curvature, requested_speed, requested_yaw_rate);
+      curvature, requested_speed, requested_yaw_rate, &profile);
   }
 
-  void publishRateLimited(double speed, double yaw_rate, double dt)
+  void startRecovery(const WallMeasurement & measurement)
+  {
+    // +1 turns the heading left (toward +y); pick the side away from the blocking point.
+    const double obstacle_y = measurement.path_clearance_y;
+    if (std::abs(obstacle_y) > 0.05 || std::abs(last_curvature_command_) < 1e-3) {
+      recovery_turn_sign_ = obstacle_y > 0.0 ? -1.0 : 1.0;
+    } else {
+      // Head-on: keep turning the way the controller was already steering.
+      recovery_turn_sign_ = last_curvature_command_ > 0.0 ? 1.0 : -1.0;
+    }
+    ++recovery_attempts_;
+    const bool flipped =
+      recovery_flip_after_attempts_ > 0 && recovery_attempts_ > recovery_flip_after_attempts_;
+    if (flipped) {
+      recovery_turn_sign_ = -recovery_turn_sign_;
+    }
+    forward_since_recovery_ = 0.0;
+    recovery_travel_ = 0.0;
+    recovery_timer_ = 0.0;
+    recovery_phase_ = RecoveryPhase::BRAKING;
+    RCLCPP_WARN(
+      get_logger(),
+      "Wall too close (clearance %.3f m, y %.3f m): recovery %d/%d, reversing and turning %s%s",
+      measurement.path_clearance, obstacle_y, recovery_attempts_, recovery_max_attempts_,
+      recovery_turn_sign_ > 0.0 ? "LEFT" : "RIGHT", flipped ? " (FLIPPED fallback)" : "");
+  }
+
+  // Stop, reverse a short distance while yawing away from the wall, then stop and pre-steer away.
+  void runRecovery(double dt, const WallMeasurement & measurement, double cloud_age)
+  {
+    // Twist yaw = speed * curvature, so reversing needs the opposite curvature sign.
+    const double reverse_curvature = -recovery_turn_sign_ * recovery_curvature_;
+    const double forward_curvature = recovery_turn_sign_ * recovery_curvature_;
+    std::string state;
+
+    switch (recovery_phase_) {
+      case RecoveryPhase::BRAKING:
+        state = "RECOVERY_BRAKING";
+        publishRateLimited(0.0, reverse_curvature, dt);
+        if (std::abs(last_linear_command_) < 1e-3) {
+          recovery_timer_ += dt;
+          if (recovery_timer_ >= recovery_pause_) {
+            recovery_phase_ = RecoveryPhase::REVERSING;
+          }
+        }
+        break;
+      case RecoveryPhase::REVERSING:
+        state = "RECOVERY_REVERSING";
+        publishRateLimited(-recovery_reverse_speed_, reverse_curvature, dt);
+        recovery_travel_ += std::abs(last_linear_command_) * dt;
+        if (recovery_travel_ >= recovery_reverse_distance_) {
+          recovery_timer_ = 0.0;
+          recovery_phase_ = RecoveryPhase::SETTLING;
+        }
+        break;
+      case RecoveryPhase::SETTLING:
+        state = "RECOVERY_SETTLING";
+        publishRateLimited(0.0, forward_curvature, dt);
+        if (std::abs(last_linear_command_) < 1e-3) {
+          recovery_timer_ += dt;
+          if (recovery_timer_ >= recovery_pause_) {
+            recovery_phase_ = RecoveryPhase::NONE;
+          }
+        }
+        break;
+      case RecoveryPhase::NONE:
+        return;
+    }
+
+    publishState(state);
+    logDebug(state, &measurement, cloud_age, 0.0, 0.0, 0.0, 0.0, 0.0);
+  }
+
+  // Limits speed and curvature separately so braking never tightens the commanded arc.
+  void publishRateLimited(double speed, double curvature, double dt)
   {
     const double speed_delta = speed - last_linear_command_;
     const double speed_limit =
       (speed_delta >= 0.0 ? max_linear_acceleration_ : max_linear_deceleration_) * dt;
-    const double yaw_limit = max_yaw_acceleration_ * dt;
+    const double curvature_limit = max_curvature_rate_ * dt;
     last_linear_command_ += std::clamp(speed_delta, -speed_limit, speed_limit);
-    last_yaw_command_ += std::clamp(
-      yaw_rate - last_yaw_command_, -yaw_limit, yaw_limit);
+    last_curvature_command_ += std::clamp(
+      curvature - last_curvature_command_, -curvature_limit, curvature_limit);
+    commanded_curvature_.store(last_curvature_command_);
+    last_yaw_command_ = std::clamp(
+      last_linear_command_ * last_curvature_command_, -max_yaw_rate_, max_yaw_rate_);
 
     geometry_msgs::msg::Twist command;
     command.linear.x = last_linear_command_;
@@ -498,7 +750,7 @@ private:
     if (dt <= 0.0) {
       dt = 1.0 / control_frequency_;
     }
-    publishRateLimited(0.0, 0.0, dt);
+    publishRateLimited(0.0, last_curvature_command_, dt);
     publishState(state);
     logDebug(state, measurement, cloud_age, 0.0, 0.0, 0.0, 0.0, 0.0);
   }
@@ -506,7 +758,8 @@ private:
   void logDebug(
     const std::string & state, const WallMeasurement * measurement,
     double cloud_age, double lateral_error, double heading_error,
-    double curvature, double requested_speed, double requested_yaw_rate)
+    double curvature, double requested_speed, double requested_yaw_rate,
+    const SpeedProfile * profile = nullptr)
   {
     const rclcpp::Time current_time = now();
     if ((current_time - last_debug_log_time_).seconds() <
@@ -523,10 +776,16 @@ private:
            << " cloud_age=" << cloud_age;
     if (measurement != nullptr) {
       stream << " front_distance=" << measurement->front_distance
+             << " path_clearance=" << measurement->path_clearance
+             << " path_clearance_y=" << measurement->path_clearance_y
              << " left_points=" << measurement->left_point_count
              << " right_points=" << measurement->right_point_count
              << " left_valid=" << (measurement->left.valid ? "true" : "false")
              << " right_valid=" << (measurement->right.valid ? "true" : "false")
+             << " left_held=" << (measurement->left_held ? "true" : "false")
+             << " right_held=" << (measurement->right_held ? "true" : "false")
+             << " pair_inconsistent="
+             << (measurement->pair_inconsistent ? "true" : "false")
              << " left_y=" << measurement->left_y
              << " right_y=" << measurement->right_y
              << " left_heading=" << measurement->left.heading
@@ -536,12 +795,18 @@ private:
              << " left_rms=" << measurement->left.rms
              << " right_rms=" << measurement->right.rms;
     }
+    if (profile != nullptr) {
+      stream << " preview_curvature=" << profile->preview_curvature
+             << " curve_speed_limit=" << profile->curve_limit
+             << " clearance_speed_limit=" << profile->clearance_limit;
+    }
     stream << " lateral_error=" << lateral_error
            << " heading_error=" << heading_error
            << " curvature=" << curvature
            << " requested_speed=" << requested_speed
            << " requested_yaw_rate=" << requested_yaw_rate
            << " command_speed=" << last_linear_command_
+           << " command_curvature=" << last_curvature_command_
            << " command_yaw_rate=" << last_yaw_command_;
 
     RCLCPP_INFO(get_logger(), "CONTROL DEBUG | %s", stream.str().c_str());
@@ -578,6 +843,7 @@ private:
   double fit_residual_threshold_;
   double max_fit_rms_;
   int max_fit_points_;
+  double wall_detection_hold_time_;
   double wall_lookahead_;
   double min_corridor_width_;
   double max_corridor_width_;
@@ -592,12 +858,22 @@ private:
   double emergency_stop_distance_;
   double straight_speed_;
   double turn_speed_;
+  double min_speed_;
   double max_lateral_acceleration_;
   double max_curvature_;
   double max_yaw_rate_;
   double max_linear_acceleration_;
   double max_linear_deceleration_;
-  double max_yaw_acceleration_;
+  double max_curvature_rate_;
+  double preview_wall_offset_;
+  double control_latency_;
+  int recovery_max_attempts_;
+  double recovery_reverse_distance_;
+  double recovery_reverse_speed_;
+  double recovery_curvature_;
+  double recovery_pause_;
+  double recovery_reset_distance_;
+  int recovery_flip_after_attempts_;
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr enable_sub_;
@@ -609,9 +885,23 @@ private:
   std::atomic_bool enabled_{false};
   WallMeasurement latest_measurement_;
   bool have_measurement_{false};
+  LineFit last_left_wall_;
+  LineFit last_right_wall_;
+  double last_left_y_{0.0};
+  double last_right_y_{0.0};
+  rclcpp::Time last_left_wall_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_right_wall_stamp_{0, 0, RCL_ROS_TIME};
   Mode mode_{Mode::STOPPED};
   double last_linear_command_{0.0};
+  double last_curvature_command_{0.0};
   double last_yaw_command_{0.0};
+  std::atomic<double> commanded_curvature_{0.0};
+  RecoveryPhase recovery_phase_{RecoveryPhase::NONE};
+  int recovery_attempts_{0};
+  double recovery_turn_sign_{1.0};
+  double recovery_travel_{0.0};
+  double recovery_timer_{0.0};
+  double forward_since_recovery_{0.0};
   std::string last_state_;
   rclcpp::Time last_control_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_debug_log_time_{0, 0, RCL_ROS_TIME};
