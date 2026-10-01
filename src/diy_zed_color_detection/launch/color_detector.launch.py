@@ -40,9 +40,19 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'startup_delay', default_value='5.0',
             description='Seconds to wait before starting the color detector node'),
+        DeclareLaunchArgument(
+            'zed_publish_tf', default_value='false',
+            description='ZED odom -> zed_camera_link TF (clashes with the URDF parent of zed_camera_link)'),
+        DeclareLaunchArgument(
+            'zed_publish_map_tf', default_value='false',
+            description='ZED map -> odom TF (map -> odom belongs to mcl_3dl)'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(zed_wrapper_launch),
-            launch_arguments={'camera_model': LaunchConfiguration('camera_model')}.items(),
+            launch_arguments={
+                'camera_model': LaunchConfiguration('camera_model'),
+                'publish_tf': LaunchConfiguration('zed_publish_tf'),
+                'publish_map_tf': LaunchConfiguration('zed_publish_map_tf'),
+            }.items(),
         ),
         TimerAction(
             period=startup_delay,
