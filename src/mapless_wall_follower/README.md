@@ -140,25 +140,11 @@ it also starts Nav2 or mapping components. Start only the dependencies below.
 
 ### Jetson one-command bringup
 
-`challenge_bringup/launch/mapless_wall_follower_jetson.sh` runs steps 2-4 and 6
-below in order, waiting for each required topic before the next step:
-
-1. Waits for `/imu/data` (the IMU still runs on the Raspberry Pi).
-2. Starts `robot_description`.
-3. Starts the Hesai LiDAR and waits for `/lidar_points`.
-4. Starts FAST-LIO and waits for `/cloud_registered_body`.
-5. Starts the wall follower in the foreground so `CONTROL DEBUG` is visible.
-
-Start the IMU (step 1) and the Ackermann driver (step 5) separately first.
-Script options come first; all remaining arguments are forwarded to the
-wall-follower launch:
-
-- `--terminals`: open each launch in its own terminal window instead of
-  logging to files.
-- `--green-light`: also start `diy_zed_color_detection` (with the ZED wrapper),
-  wait for `/color_detector/green_light`, and launch the wall follower with
-  `wait_for_green_light:=true`. Passing `wait_for_green_light:=true` directly
-  does the same.
+`challenge_bringup/launch/mapless_wall_follower_jetson.sh` opens one
+gnome-terminal window per launch for steps 2, 3, 4 and 6 below, with short
+pauses between them. With `wait_for_green_light:=true` it also opens
+`diy_zed_color_detection`. Start the IMU (step 1) and the Ackermann driver
+(step 5) separately first. Arguments are forwarded to the wall-follower launch:
 
 ```bash
 cd ~/DIY-Challenge-Repo
@@ -167,26 +153,13 @@ src/challenge_bringup/launch/mapless_wall_follower_jetson.sh
 # Direct moving test to the Ackermann driver
 src/challenge_bringup/launch/mapless_wall_follower_jetson.sh \
   cmd_vel_topic:=/cmd_vel_smoothed
-# Race start on the green light, one window per launch
-src/challenge_bringup/launch/mapless_wall_follower_jetson.sh --terminals \
-  --green-light cmd_vel_topic:=/cmd_vel_smoothed
+# Race start on the green light
+src/challenge_bringup/launch/mapless_wall_follower_jetson.sh \
+  cmd_vel_topic:=/cmd_vel_smoothed wait_for_green_light:=true
 ```
 
-Environment overrides:
-
-- `DIY_WS`: workspace root containing `install/setup.bash` (default: derived
-  from the script location).
-- `TOPIC_TIMEOUT`: seconds to wait for each topic (default `30`). The script
-  exits if a topic does not appear.
-- `CAMERA_TIMEOUT`: seconds to wait for `/color_detector/green_light`
-  (default `90`). On timeout the script only warns and still starts the wall
-  follower (disabled); the trigger stays armed, so enable manually or publish a
-  fake green light as shown above.
-- `LOG_DIR`: background launch logs (default
-  `/tmp/mapless_wall_follower_<timestamp>`).
-
-Ctrl+C stops all started launches in reverse order. Build the workspace first;
-the script sources `install/setup.bash`.
+Stop each launch with Ctrl+C in its window. Build the workspace first; the
+script sources `install/setup.bash`.
 
 ### 1. Start the IMU
 
