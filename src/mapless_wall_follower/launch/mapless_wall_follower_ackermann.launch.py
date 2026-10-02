@@ -13,9 +13,7 @@ from launch_ros.actions import Node
 # Disable it and command a controlled stop with:
 # ros2 topic pub --once /mapless_wall_follower/enable std_msgs/msg/Bool "{data: false}"
 # Use the physical emergency stop when an immediate hardware stop is required.
-# ros2 launch mapless_wall_follower \
-#   mapless_wall_follower_ackermann.launch.py \
-#   cmd_vel_topic:=/cmd_vel_smoothed
+# ros2 launch mapless_wall_follower mapless_wall_follower_ackermann.launch.py
 
 
 def generate_launch_description():
@@ -41,13 +39,11 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'cmd_vel_topic',
-            default_value='/cmd_vel_nav',
-            # Production: wall follower -> /cmd_vel_nav -> safety/mux/smoother
-            # -> /cmd_vel_smoothed -> Ackermann driver.
-            # Direct test without a mux/smoother: the current Ackermann driver
-            # listens on /cmd_vel_smoothed, so launch with:
-            #   cmd_vel_topic:=/cmd_vel_smoothed
-            description='Autonomous Twist output; override for direct driver testing',
+            # ackermann-drive (driveStack) listens on /cmd_vel_smoothed. Under
+            # course_supervisor the follower runs on /cmd_vel_wall_follower
+            # instead and the supervisor forwards it.
+            default_value='/cmd_vel_smoothed',
+            description='Twist output (ackermann-drive input by default)',
         ),
         DeclareLaunchArgument(
             'wait_for_green_light',

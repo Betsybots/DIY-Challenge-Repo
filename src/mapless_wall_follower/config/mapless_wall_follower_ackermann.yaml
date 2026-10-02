@@ -4,7 +4,7 @@
 # when centered, and its centerline is 18 in (0.4572 m) from either wall.
 # Stage 1 - Stationary: keep the drive disabled; verify cloud axes (+x forward,
 #   +y left, +z up), wall detections, state transitions, steering direction,
-#   and that this is the only controller publishing to /cmd_vel_nav.
+#   and that this is the only controller publishing to /cmd_vel_smoothed.
 # Stage 2 - First motion (active defaults below): use 0.30 m/s straight and
 #   0.15 m/s in turns. Verify emergency stopping and steering direction.
 # Stage 3 - Course validation: after Stage 2 succeeds, use 0.50 m/s straight

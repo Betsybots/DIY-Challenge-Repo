@@ -63,7 +63,7 @@ def generate_launch_description():
             'use_respawn': use_respawn,
             'log_level': log_level,
             # MPPI and wall recovery are mutually exclusive and share the
-            # smoother input; the smoother alone publishes /cmd_vel_nav.
+            # smoother input; the smoother alone publishes /cmd_vel_smoothed.
             'behavior_cmd_vel_topic': 'cmd_vel_mppi_raw',
         }.items(),
     )

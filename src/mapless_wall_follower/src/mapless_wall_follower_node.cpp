@@ -32,6 +32,10 @@ public:
   : Node("mapless_wall_follower")
   {
     cloud_topic_ = declare_parameter("cloud_topic", std::string("/cloud_registered_body"));
+    // Cloud frames accepted as the robot body frame (x forward, y left, z up).
+    // FAST-LIO in this repo stamps /cloud_registered_body as base_footprint.
+    accepted_cloud_frames_ = declare_parameter(
+      "accepted_cloud_frames", std::vector<std::string>{"base_link", "base_footprint"});
     cmd_vel_topic_ = declare_parameter("cmd_vel_topic", std::string("/cmd_vel_nav"));
     enable_topic_ = declare_parameter(
       "enable_topic", std::string("/mapless_wall_follower/enable"));
@@ -502,10 +506,12 @@ private:
 
   void cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr cloud)
   {
-    if (cloud->header.frame_id != "base_footprint") {
+    if (std::find(accepted_cloud_frames_.begin(), accepted_cloud_frames_.end(),
+        cloud->header.frame_id) == accepted_cloud_frames_.end())
+    {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
-        "Expected cloud frame base_footprint but received %s",
+        "Ignoring cloud in frame %s (accepted_cloud_frames does not include it)",
         cloud->header.frame_id.c_str());
       return;
     }
@@ -924,6 +930,7 @@ private:
   }
 
   std::string cloud_topic_;
+  std::vector<std::string> accepted_cloud_frames_;
   std::string cmd_vel_topic_;
   std::string enable_topic_;
   std::string state_topic_;

@@ -213,6 +213,9 @@ bool Parameters::load(rclcpp::Node& pnh)
   declareParam(pnh, "fix_z", fix_z_, false);
   declareParam(pnh, "fix_z_value", fix_z_value_, z);
 
+  declareParam(pnh, "use_measurement_gate", use_measurement_gate_, false);
+  declareParam(pnh, "measurement_gate_timeout", measurement_gate_timeout_, 1.0);
+
   declareParam(pnh, "use_random_sampler_with_normal", use_random_sampler_with_normal_, false);
 
   if (use_random_sampler_with_normal_)

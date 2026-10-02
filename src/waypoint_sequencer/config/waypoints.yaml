@@ -1,134 +1,184 @@
-# waypoints.yaml — example waypoint sequence for diy_waypoint_sequencer
+# waypoints.yaml -- OBSTACLE COURSE waypoint sequence for diy_waypoint_sequencer
 # ═══════════════════════════════════════════════════════════════════════════
-# Replace with your real course waypoints (map-frame coordinates, meters).
-# This is a DELIBERATELY SIMPLE schema — just a sequence of goal poses, not
-# zone_nav's richer zone_waypoints.yaml (radius/exit_radius/mode/inflation_radius
-# etc.) which encodes Nav2 costmap + BLIND_DRIVE state-machine behavior this
-# A*/PD stack does not use at all. If you later need a real zone-aware state
-# machine again, use zone_nav's config format instead — don't try to grow
-# this one to match it; keep this file's job to just "which poses, in what
-# order."
+# Map frame of diy_localization/map/Obstacle_course (mcl_map.pcd / obstacle_course_clean.pgm,
+# origin = run3 start pose). Generated from the run3 driving line, centred in the lane on
+# obstacle_course_clean.pgm, plus hoop gates measured in the run3 point cloud:
+#   * Helix: 3 waypoints so the planner can't cut from the bridge straight into the tunnel.
+#   * Bucket zone: NO waypoint inside it -- last one in the wide section, next one past the
+#     36 in gap; the local costmap / MPPI avoids the buckets on the way.
+#   * Hoops: before / through / after each gate, along the gate's crossing direction
+#     (gate openings ~0.63-0.67 m; 'through' = gate centre). Hoops can be moved along their
+#     dashed lines on the day: re-measure and update the three hoop groups if they move.
+#   * Costmap obstacle height must stay below the hoop arch (0.36 m) or the arches block
+#     the gates (see nav2_params_3d_obstacle_course_mppi_ackermann.yaml max_obstacle_height).
+# yaw in radians (map frame). Previous (speed-course) version: git history of this file.
 
 frame_id: "map"   # must match nav2_map_server's published /map frame
-loop: false        # true = wrap back to the first waypoint after the last
-# loop_count: 3    # optional: only used when loop is true -- caps the
-                   # total number of full circuits before stopping instead
-                   # of looping forever. Omit (or leave unset) for
-                   # unlimited looping. Can also be set via the
-                   # loop_count launch argument instead of in this file.
+loop: true         # the run is 2 laps: wrap back to wp1 after the finish waypoint
+loop_count: 2      # stop after 2 full laps (launch arg loop_count overrides; -1 there = use this)
 
 waypoints:
-  - label: "wp1"
-    x: 6.3091
-    y: 0.7403
-    yaw: 0.3883
+  - label: "wp1_start_lane"
+    x: 1.9940
+    y: -0.0818
+    yaw: -0.0798
 
-  - label: "wp2"
-    x: 10.025
-    y: 2.2604
-    yaw: 0.7118
+  - label: "wp2_ramp_up"
+    x: 5.4602
+    y: -0.5061
+    yaw: -0.0798
 
-  - label: "wp3"
-    x: 12.8964
-    y: 4.7377
-    yaw: 1.7069
+  - label: "wp3_bridge"
+    x: 8.3739
+    y: -0.9564
+    yaw: 0.0997
 
-  - label: "wp4"
-    x: 12.3334
-    y: 8.8477
-    yaw: 1.1659
+  - label: "wp4_helix"
+    x: 10.1713
+    y: 0.1765
+    yaw: 1.3854
 
-  - label: "wp5"
-    x: 13.6846
-    y: 12.0006
-    yaw: -1.0704
+  - label: "wp5_helix"
+    x: 8.5668
+    y: 1.3693
+    yaw: -2.8578
 
-  - label: "wp6"
-    x: 15.6552
-    y: 8.3973
-    yaw: -1.8753
+  - label: "wp6_helix_exit_tunnel"
+    x: 7.7447
+    y: -0.2629
+    yaw: -1.6705
 
-  - label: "wp7"
-    x: 14.4165
-    y: 4.4562
-    yaw: -2.3463
+  - label: "wp7_tunnel"
+    x: 7.4225
+    y: -3.4427
+    yaw: -1.6926
 
-  - label: "wp8"
-    x: 11.6015
-    y: 1.5848
-    yaw: -2.6978
+  - label: "wp8_20in_lane"
+    x: 7.1702
+    y: -6.9276
+    yaw: -1.6108
 
-  - label: "wp9"
-    x: 8.1671
-    y: -0.0479
-    yaw: -2.9466
+  - label: "wp9_narrow_turn"
+    x: 6.5720
+    y: -9.3267
+    yaw: -2.2143
 
-  - label: "wp10"
-    x: 3.6066
-    y: -0.9488
-    yaw: -3.0719
+  - label: "wp10_gravel_lane_start"
+    x: 3.7910
+    y: -10.0305
+    yaw: 3.0419
 
-  - label: "wp11"
-    x: -1.2353
-    y: -1.2866
-    yaw: -3.0814
+  - label: "wp11_gravel"
+    x: 0.3003
+    y: -9.8076
+    yaw: -3.0399
 
-  - label: "wp12"
-    x: -5.9083
-    y: -1.5681
-    yaw: -3.116
+  - label: "wp12_before_bank"
+    x: -2.6766
+    y: -10.0583
+    yaw: 3.1216
 
-  - label: "wp13"
-    x: -12.4956
-    y: -1.737
-    yaw: 2.9442
+  - label: "wp13_bank_U_turn"
+    x: -4.0197
+    y: -9.8897
+    yaw: 2.4285
 
-  - label: "wp14"
-    x: -17.2812
-    y: -0.7799
-    yaw: 2.5749
+  - label: "wp14_bank_U_turn"
+    x: -3.6768
+    y: -8.8099
+    yaw: 1.1442
 
-  - label: "wp15"
-    x: -20.9971
-    y: 1.5848
-    yaw: 2.1036
+  - label: "wp15_bank_exit"
+    x: -3.0645
+    y: -8.4330
+    yaw: -0.3029
 
-  - label: "wp16"
-    x: -23.587
-    y: 5.9763
-    yaw: 0.8699
+  - label: "wp16_potholes"
+    x: -0.0083
+    y: -8.4331
+    yaw: -0.1194
 
-  - label: "wp17"
-    x: -20.5467
-    y: 9.5796
-    yaw: -1.6198
+  - label: "wp17_potholes_end"
+    x: 2.9732
+    y: -8.4551
+    yaw: -0.0400
 
-  - label: "wp18"
-    x: -20.8282
-    y: 3.8369
-    yaw: -0.6963
+  - label: "wp18_turn_into_wide_section"
+    x: 5.0403
+    y: -7.9244
+    yaw: 1.5300
 
-  - label: "wp19"
-    x: -17.3938
-    y: 0.9655
-    yaw: -0.1989
+  - label: "wp19_wide_section"
+    x: 4.1714
+    y: -5.9226
+    yaw: 0.9151
 
-  - label: "wp20"
-    x: -10.4124
-    y: -0.442
-    yaw: 0.0636
+  - label: "wp20_wide_section_before_bucket_zone"
+    x: 5.3175
+    y: -3.5948
+    yaw: 1.6926
 
-  - label: "wp21"
-    x: -4.2193
-    y: -0.0479
-    yaw: 0.048
+  - label: "wp21_after_bucket_zone_36in_gap"
+    x: -1.4590
+    y: -1.9083
+    yaw: 2.8771
 
-  - label: "wp22"
-    x: 1.6361
-    y: 0.2336
-    yaw: -2.9998
+  - label: "wp22_hoop_1_before"
+    x: -3.2120
+    y: -1.6801
+    yaw: 3.0246
 
-  - label: "wp23"
-    x: 0.0
-    y: 0.0
-    yaw: 0.1168
+  - label: "wp23_hoop_1_through"
+    x: -4.0065
+    y: -1.5867
+    yaw: 3.0246
+
+  - label: "wp24_hoop_1_after"
+    x: -4.8010
+    y: -1.4933
+    yaw: 3.0246
+
+  - label: "wp25_hoop_2_through"
+    x: -5.8506
+    y: -1.6257
+    yaw: 3.0988
+
+  - label: "wp26_hoop_2_after"
+    x: -6.6499
+    y: -1.5914
+    yaw: 3.0988
+
+  - label: "wp27_hoop_3_before"
+    x: -8.0938
+    y: -0.1295
+    yaw: 1.3120
+
+  - label: "wp28_hoop_3_through"
+    x: -7.8890
+    y: 0.6439
+    yaw: 1.3120
+
+  - label: "wp29_hoop_3_after"
+    x: -7.6843
+    y: 1.4172
+    yaw: 1.3120
+
+  - label: "wp30_loop"
+    x: -6.1010
+    y: 1.7154
+    yaw: -0.4182
+
+  - label: "wp31_loop_exit"
+    x: -4.3255
+    y: 0.3678
+    yaw: -0.3218
+
+  - label: "wp32_car_wash"
+    x: -2.4900
+    y: 0.2221
+    yaw: -0.1218
+
+  - label: "wp33_finish"
+    x: -0.1045
+    y: -0.0138
+    yaw: -0.1270

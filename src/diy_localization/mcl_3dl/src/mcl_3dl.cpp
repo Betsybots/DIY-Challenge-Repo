@@ -55,6 +55,7 @@
 #include <mcl_3dl/srv/resize_particle.hpp>
 #include <mcl_3dl/srv/load_pcd.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 
@@ -313,12 +314,30 @@ protected:
     return true;
   }
 
+  bool lidarMeasurementEnabled()
+  {
+    if (!params_.use_measurement_gate_ || !gate_has_msg_)
+      return true;
+    if ((get_clock()->now() - gate_msg_time_).seconds() > params_.measurement_gate_timeout_)
+      return true;
+    return gate_msg_enabled_;
+  }
+
   void measure()
   {
     cnt_measure_++;
     if (cnt_measure_ % static_cast<size_t>(params_.skip_measure_) != 0)
     {
       return;
+    }
+
+    const bool lidar_enabled = lidarMeasurementEnabled();
+    if (lidar_enabled != gate_was_enabled_)
+    {
+      RCLCPP_INFO(get_logger(), lidar_enabled ?
+                  "Lidar measurement gate: lidar matching resumed" :
+                  "Lidar measurement gate: lidar matching paused, following odometry");
+      gate_was_enabled_ = lidar_enabled;
     }
 
     if (pc_accum_header_.empty())
@@ -435,7 +454,8 @@ protected:
           odom_error_lin_nd(s.odom_err_integ_lin_.norm());
       return likelihood * odom_error;
     };
-    pf_->measure(measure_func);
+    if (lidar_enabled)
+      pf_->measure(measure_func);
 
     if (static_cast<int>(pf_->getParticleSize()) > params_.num_particles_)
     {
@@ -819,13 +839,16 @@ protected:
 
     publishParticles();
 
-    pf_->resample(State6DOF(
-        Vec3(params_.resample_var_x_,
-             params_.resample_var_y_,
-             params_.resample_var_z_),
-        Vec3(params_.resample_var_roll_,
-             params_.resample_var_pitch_,
-             params_.resample_var_yaw_)));
+    if (lidar_enabled)
+    {
+      pf_->resample(State6DOF(
+          Vec3(params_.resample_var_x_,
+               params_.resample_var_y_,
+               params_.resample_var_z_),
+          Vec3(params_.resample_var_roll_,
+               params_.resample_var_pitch_,
+               params_.resample_var_yaw_)));
+    }
 
     std::normal_distribution<float> noise(0.0, 1.0);
     const auto update_noise_func = [this, &noise](State6DOF& s)
@@ -1267,6 +1290,19 @@ public:
     sub_mapcloud_update_ = create_subscription<sensor_msgs::msg::PointCloud2>("mapcloud_update", 1, std::bind(&MCL3dlNode::cbMapcloudUpdate, this, std::placeholders::_1));
     sub_position_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>("initialpose", 1, std::bind(&MCL3dlNode::cbPosition, this, std::placeholders::_1));
     sub_landmark_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>("mcl_measurement", 1, std::bind(&MCL3dlNode::cbLandmark, this, std::placeholders::_1));
+    if (params_.use_measurement_gate_)
+    {
+      sub_measurement_gate_ = create_subscription<std_msgs::msg::Bool>(
+          "mcl_measurement_enabled", 10,
+          [this](const std_msgs::msg::Bool::ConstSharedPtr msg)
+          {
+            gate_msg_enabled_ = msg->data;
+            gate_msg_time_ = get_clock()->now();
+            gate_has_msg_ = true;
+          });
+      RCLCPP_INFO(get_logger(), "Lidar measurement gate enabled (topic: mcl_measurement_enabled, timeout %.1f s)",
+                  params_.measurement_gate_timeout_);
+    }
 
     pub_pose_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("amcl_pose", 5);
     pub_particle_ = create_publisher<geometry_msgs::msg::PoseArray>("particles", 1);
@@ -1407,6 +1443,11 @@ protected:
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr sub_position_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr sub_landmark_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_measurement_gate_;
+  bool gate_msg_enabled_{true};
+  bool gate_has_msg_{false};
+  bool gate_was_enabled_{true};
+  rclcpp::Time gate_msg_time_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pub_pose_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pub_particle_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_mapcloud_;

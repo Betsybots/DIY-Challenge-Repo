@@ -1,0 +1,63 @@
+course_supervisor:
+  ros__parameters:
+    # course_file is set by the launch file (course_file argument).
+    robot_frame: base_footprint
+    rate: 20.0
+    # This node is the only publisher on drive_cmd_topic (ackermann-drive input).
+    # nav2 / path_tracker go through the velocity smoother (output_cmd_topic in,
+    # smoother_out_topic out); the wall follower goes straight to the drive.
+    # drive_cmd_topic / smoother_out_topic are set by the launch file.
+    output_cmd_topic: cmd_vel_mppi_raw
+    cmd_timeout: 0.3          # s: forward zero if the active controller goes quiet
+    goal_tolerance: 0.3       # m before the end of the driving line -> stop
+    progress_back: 0.5        # m: projection window behind current progress
+    progress_ahead: 2.5       # m: projection window ahead of current progress
+    max_path_offset: 1.5      # m: farther than this from the line = "lost" (progress frozen)
+
+    wait_for_green_light: true
+    green_light_topic: /green_light
+
+    # nav2 mode: controller_server follows the driving line (FollowPath).
+    nav2_cmd_topic: /cmd_vel_mppi
+    follow_path_action: follow_path
+    controller_id: FollowPath
+    goal_checker_id: general_goal_checker
+    nav2_preload_distance: 3.0  # m: start the FollowPath goal this far before a nav2 section
+    nav2_resend_period: 2.0     # s: minimum time between FollowPath (re)sends
+
+    # wall_follower mode
+    wall_cmd_topic: /cmd_vel_wall_follower
+    wall_enable_topic: /mapless_wall_follower/enable
+
+    # path_tracker mode (pure pursuit on the driving line, ignores the costmap)
+    tracker_speed: 0.30       # m/s, unless the section sets speed
+    tracker_lookahead: 0.6    # m
+    min_turn_radius: 0.371    # m, full-lock path radius
+
+    # mcl_3dl lidar gate (use_measurement_gate must be true in mcl_3dl)
+    lidar_gate_topic: mcl_measurement_enabled
+
+    # AprilTags (zed_apriltag): TF <robot_frame> -> <tag_frame_prefix><id>
+    tag_info_topic: apriltag/tag_info
+    tag_frame_prefix: tag_
+    tag_max_range: 2.0        # m: matches the zed_apriltag detection range on the robot
+    tag_sigma_xy: 0.05        # m: position std-dev of a tag fix
+    tag_sigma_yaw_deg: 3.0    # deg: heading std-dev of a tag fix
+    tag_min_interval: 0.5     # s: per-tag rate limit
+    measurement_topic: mcl_measurement
+    use_label_poses: true     # accept 'NAME @ x, y, [z,] facing_deg' poses written in tag labels
+    tag_default_z: 0.13       # m, map z of a tag centre when not given (floor is ~ -0.12 in the map)
+    # Position comes from the tag's measured position (depth + sideways offset) and a
+    # heading. The tag's own orientation (PnP) can flip when seen nearly face-on, so
+    # it's used for heading only if within tag_yaw_gate_deg of the current heading;
+    # otherwise the fix is position-only and uses the current heading.
+    tag_yaw_gate_deg: 8.0
+    # Used only when TF has no base_footprint -> <ZED optical frame> chain: camera mount
+    # from base_footprint to the ZED LEFT camera (the one the tag detector uses), metres;
+    # rpy 0 = camera looking straight ahead. From the URDF / zed_base_odom_relay
+    # (zed_camera_link at ~0.21, 0.02, 0.23) plus the ZED2i left-eye offset (+0.06 y).
+    # Measure on the robot. Survey and fixes use the same value, so small errors largely cancel.
+    camera_tf_fallback: true
+    camera_offset_xyz: [0.21, 0.08, 0.24]
+    camera_offset_rpy: [0.0, 0.0, 0.0]
+    tag_prior_yaw_sigma_deg: 3.0

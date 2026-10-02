@@ -67,8 +67,10 @@ are published with label `UNKNOWN`):
 ```yaml
 tag_labels:
   ID0: "RampDetection"
-  ID1: "Narrow Path"
-  ID2: "TBD"
+  ID1: "NARROW_PATH_END"
+  ID2: "TUNNEL_EXIT"
+  ID3: "CAR_WASH_ENTRY"
+  ID4: "HELIX_EXIT"
 ```
 
 ## Inspect

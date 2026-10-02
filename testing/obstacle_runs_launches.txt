@@ -1,0 +1,12 @@
+ros2 run diy_state_estimate zed_base_odom_relay --ros-args \
+  -p publish_tf:=true \
+  -p output_topic:=/odom \
+  -p odom_frame:=odom \
+  -p base_frame:=base_footprint
+
+
+ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i \
+  publish_tf:=false publish_map_tf:=false
+
+
+

@@ -62,6 +62,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     pkg_dir = get_package_share_directory('challenge_bringup')
@@ -69,11 +70,20 @@ def generate_launch_description():
     use_rviz = LaunchConfiguration('use_rviz')
     startup_delay = LaunchConfiguration('startup_delay')
     nav2_launch_file = LaunchConfiguration('nav2_launch_file')
+    use_lidar_gate = LaunchConfiguration('use_lidar_gate')
+    use_course_supervisor = LaunchConfiguration('use_course_supervisor')
 
     # ── Argument declarations ──────────────────────────────────────────────
 
     declare_use_rviz = DeclareLaunchArgument('use_rviz', default_value='false')
     declare_autonomous = DeclareLaunchArgument('autonomous', default_value='true')
+    # Optional: pause mcl_3dl lidar matching (odometry only) in the ramp/bridge,
+    # helix, tunnel and car-wash zones of mcl_3dl's lidar_gate_zones_obstacle_course.yaml.
+    declare_use_lidar_gate = DeclareLaunchArgument('use_lidar_gate', default_value='false')
+    # Optional: course_supervisor (section-by-section Nav2 path following / wall
+    # follower / push-through tracker) instead of nav2_launch_file. When combined
+    # with use_lidar_gate, the supervisor drives the mcl_3dl lidar gate per section.
+    declare_use_course_supervisor = DeclareLaunchArgument('use_course_supervisor', default_value='false')
     declare_nav2_launch_file = DeclareLaunchArgument(
         'nav2_launch_file',
         default_value='nav2_navigation_launch.py',
@@ -182,6 +192,9 @@ def generate_launch_description():
                     # base_footprint odometry from zed_base_odom_relay (not the raw
                     # camera pose on /zed/zed_node/odom) — matches robot_frame.
                     'odom_topic': '/odom',
+                    'use_lidar_gate': use_lidar_gate,
+                    'start_lidar_gate_zones': PythonExpression(
+                        ["'false' if '", use_course_supervisor, "' == 'true' else 'true'"]),
                 }.items(),
                 condition=IfCondition(autonomous),
             ),
@@ -229,7 +242,19 @@ def generate_launch_description():
                 nav2_launch_file,
             ])
         ),
-        condition=IfCondition(autonomous),
+        condition=IfCondition(PythonExpression(
+            ["'", autonomous, "' == 'true' and '", use_course_supervisor, "' != 'true'"])),
+    )
+
+    course_supervisor_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('course_supervisor'), 'launch', 'course_supervisor.launch.py',
+            ])
+        ),
+        launch_arguments={'drive_lidar_gate': use_lidar_gate}.items(),
+        condition=IfCondition(PythonExpression(
+            ["'", autonomous, "' == 'true' and '", use_course_supervisor, "' == 'true'"])),
     )
 
     rviz_node = Node(
@@ -243,13 +268,15 @@ def generate_launch_description():
 
     delayed_nav2 = TimerAction(
         period=5.0,
-        actions=[nav2_launch],
+        actions=[nav2_launch, course_supervisor_launch],
     )
 
 
     return LaunchDescription([
         declare_startup_delay,
         declare_autonomous,
+        declare_use_lidar_gate,
+        declare_use_course_supervisor,
         declare_nav2_launch_file,
         declare_use_rviz,
         robot_description_launch,        # always

@@ -1,8 +1,9 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -26,6 +27,21 @@ def generate_launch_description():
         # every ~5s (imu_last_ never advances while the lookup keeps failing).
         DeclareLaunchArgument("imu_topic", default_value="/imu/data"),
         DeclareLaunchArgument("odom_topic", default_value="/zed/zed_node/odom"),
+        # Optional lidar gate (default off = unchanged behaviour). When true,
+        # mcl_3dl stops lidar matching inside the zones of lidar_gate_zones_file
+        # (ramp/bridge, helix, tunnel, car wash) and follows odometry there.
+        DeclareLaunchArgument("use_lidar_gate", default_value="false"),
+        DeclareLaunchArgument(
+            "lidar_gate_zones_file",
+            default_value=PathJoinSubstitution([
+                FindPackageShare("mcl_3dl"), "config", "lidar_gate_zones_obstacle_course.yaml"
+            ]),
+        ),
+        DeclareLaunchArgument("lidar_gate_robot_frame", default_value="base_footprint"),
+        # With use_lidar_gate, something must publish mcl_measurement_enabled:
+        # the zone node below (default) or course_supervisor (drive_lidar_gate:=true,
+        # then set this to false).
+        DeclareLaunchArgument("start_lidar_gate_zones", default_value="true"),
         Node( 
             package="pcl_ros",
             executable="pcd_to_pointcloud",
@@ -44,13 +60,28 @@ def generate_launch_description():
                     executable="mcl_3dl",
                     name="mcl_3dl",
                     output="screen",
-                    parameters=[config_file],
+                    parameters=[config_file,
+                                {"use_measurement_gate": ParameterValue(
+                                    LaunchConfiguration("use_lidar_gate"), value_type=bool)}],
                     remappings=[
                         # ("/cloud", "/cloud_registered_body")
                         ("/cloud", LaunchConfiguration("cloud_topic")),
                         ("/imu/data", LaunchConfiguration("imu_topic")),
                         ("/odom", LaunchConfiguration("odom_topic"))
                     ],
+                ),
+                Node(
+                    package="mcl_3dl",
+                    executable="lidar_gate_zones.py",
+                    name="lidar_gate_zones",
+                    output="screen",
+                    parameters=[{
+                        "zones_file": LaunchConfiguration("lidar_gate_zones_file"),
+                        "robot_frame": LaunchConfiguration("lidar_gate_robot_frame"),
+                    }],
+                    condition=IfCondition(PythonExpression([
+                        "'", LaunchConfiguration("use_lidar_gate"), "' == 'true' and '",
+                        LaunchConfiguration("start_lidar_gate_zones"), "' == 'true'"])),
                 ),
             ],
         ),

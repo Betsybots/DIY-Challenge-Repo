@@ -1,0 +1,47 @@
+# Section template for the obstacle course (map frame of
+# diy_localization/map/Obstacle_course/mcl_map.pcd). Regenerate the course file with:
+#   ros2 run course_supervisor make_course_file \
+#     --poses src/diy_localization/map/Obstacle_course/poses.txt \
+#     --template src/course_supervisor/config/obstacle_course_template.yaml \
+#     --output   src/course_supervisor/config/obstacle_course.yaml
+#
+# mode:   nav2          Nav2 controller (MPPI) follows the driving line, avoids obstacles
+#         wall_follower mapless wall follower centres between real walls (lidar only)
+#         path_tracker  pure pursuit on the driving line, ignores the costmap (push through)
+#         stop          hold still
+# lidar:  false -> mcl_3dl lidar matching paused here (odometry only), when the
+#         supervisor drives the lidar gate (drive_lidar_gate:=true).
+# speed:  path_tracker speed (m/s); other modes keep their own speed limits.
+# trigger_label / trigger_range: optional AprilTag (label text from
+#         aprilTag/config/tag_labels.yaml; or trigger_tag: <ID>) that, when seen
+#         within trigger_range metres, moves progress straight to this section's
+#         start (forward only). Tag positions and trigger ranges come from
+#         config/tag_plan_obstacle_course.yaml (ros2 run course_supervisor plan_tags).
+#         Only active with use_tag_triggers:=true.
+end_kf: 164
+sections:
+  - {name: start_lane, start_kf: 0, mode: nav2, lidar: true}
+  # 20% ramp up + bridge deck: costmap would see the ramp as a wall; the wall
+  # follower cannot see the 6 in side rails (below its min_z).
+  - {name: ramp_and_bridge, start_kf: 5.1, mode: path_tracker, lidar: false, speed: 0.30,
+     trigger_label: RampDetection, trigger_range: 0.95}
+  - {name: helix, start_kf: 17.0, mode: path_tracker, lidar: false, speed: 0.25}
+  # Helix exit -> under the bridge -> closed 10 ft tunnel (32 in): pushed through on
+  # odometry (a foil-lined closed tunnel can confuse the lidar wall follower).
+  - {name: tunnel, start_kf: 34.5, mode: path_tracker, lidar: false, speed: 0.30}
+  # Narrow path: tunnel exit -> 20 in straight -> 26 in curved turn -> 2 in ramp up ->
+  # gravel box -> 2 in ramp down. Wall follower (slow, wall-centred) from the moment
+  # TUNNEL_EXIT is reported (tag 0.4 m past the exit, fires at it) or odometry progress
+  # reaches the exit, whichever comes first.
+  - {name: narrow_path, start_xy: [7.23, -5.10], mode: wall_follower, lidar: true,
+     trigger_label: TUNNEL_EXIT, trigger_range: 0.42}
+  # Off the gravel (end of the 2 in ramp down, s ~30.3): the NARROW_PATH_END tag (just after
+  # the gravel) hands over to Nav2 at full speed -> flat, bank, potholes, wide section,
+  # buckets, 36 in gap, hoops, loop.
+  - {name: after_gravel_to_hoops, start_xy: [0.003, -9.853], mode: nav2, lidar: true,
+     trigger_label: NARROW_PATH_END, trigger_range: 0.89}
+  # Hanging ribbons: both the costmap and the wall follower would see walls.
+  # CAR_WASH_ENTRY tag (left wall, fires at the car wash start) -> push-through.
+  - {name: car_wash, start_kf: 155.6, mode: path_tracker, lidar: false, speed: 0.35,
+     trigger_label: CAR_WASH_ENTRY, trigger_range: 0.82}
+  - {name: finish, start_kf: 159.7, mode: nav2, lidar: true}

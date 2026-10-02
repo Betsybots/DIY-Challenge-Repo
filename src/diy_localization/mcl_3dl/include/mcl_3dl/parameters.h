@@ -200,6 +200,13 @@ public:
   // full 6DOF filter. Disable before relying on real z tracking (e.g. a ramp).
   bool fix_z_;
   double fix_z_value_;
+  // Optional lidar measurement gate (off by default). When enabled, a
+  // std_msgs/Bool on "mcl_measurement_enabled" == false skips the lidar
+  // likelihood update and resampling (pose follows odometry only) while the TF
+  // keeps being published. Without a message for measurement_gate_timeout
+  // seconds the gate fails open (lidar matching on).
+  bool use_measurement_gate_;
+  double measurement_gate_timeout_;
   bool use_random_sampler_with_normal_;
   std::shared_ptr<PointCloudSamplerWithNormalParameters> random_sampler_with_normal_params_;
   std::shared_ptr<LidarMeasurementModelLikelihoodParameters> lidar_measurement_likelihood_params_;

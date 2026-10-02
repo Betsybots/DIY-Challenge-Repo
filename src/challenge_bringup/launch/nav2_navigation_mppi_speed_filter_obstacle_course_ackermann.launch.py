@@ -24,6 +24,7 @@ def generate_launch_description():
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
     behavior_cmd_vel_topic = LaunchConfiguration('behavior_cmd_vel_topic')
+    drive_cmd_vel_topic = LaunchConfiguration('drive_cmd_vel_topic')
 
     filter_mask_server = Node(
         package='nav2_map_server',
@@ -81,7 +82,8 @@ def generate_launch_description():
         ],
         remappings=[
             ('cmd_vel', 'cmd_vel_mppi_raw'),
-            ('cmd_vel_smoothed', 'cmd_vel_nav'),
+            # ackermann-drive (driveStack) subscribes to /cmd_vel_smoothed.
+            ('cmd_vel_smoothed', drive_cmd_vel_topic),
         ],
     )
 
@@ -180,8 +182,15 @@ def generate_launch_description():
         DeclareLaunchArgument('use_respawn', default_value='False'),
         DeclareLaunchArgument('log_level', default_value='info'),
         DeclareLaunchArgument(
+            'drive_cmd_vel_topic',
+            default_value='/cmd_vel_smoothed',
+            description='Smoothed command for the Ackermann drive (ackermann-drive cmd_vel_topic)',
+        ),
+        DeclareLaunchArgument(
             'behavior_cmd_vel_topic',
-            default_value='cmd_vel_nav',
+            # Recoveries (BackUp reverses) bypass the forward-only smoother and
+            # go straight to the drive, unless a wrapper overrides this.
+            default_value=drive_cmd_vel_topic,
             description='Recovery behavior output topic',
         ),
         filter_mask_server,

@@ -1,0 +1,32 @@
+# AprilTag poses in the map frame (same frame as diy_localization/map/Obstacle_course/mcl_map.pcd).
+# Used by course_supervisor when use_apriltag_fix:=true: every sighting of a listed
+# tag becomes a robot pose fix for mcl_3dl (x, y, heading).
+#
+# One line per tag ID (the ID printed on the tag, as in aprilTag/config/tag_labels.yaml):
+#   <id>: {x: <m>, y: <m>, z: <m>, facing_deg: <deg>}
+#     x, y      tag centre in the map
+#     z         tag centre height above the floor (map z of the floor is ~ -0.12; use the
+#               measured height above the floor minus 0.12). Only affects the fix weakly.
+#     facing_deg map yaw the PRINTED FACE points to. A tag the robot drives toward faces
+#               back at it: facing_deg = robot heading + 180 (e.g. robot heading -92 -> 88).
+# Tags must be mounted upright (vertical). Full 6-DoF entries are also accepted:
+#   <id>: {position: [x, y, z], orientation: [qx, qy, qz, qw]}
+#
+# How to get the numbers:
+#   a) Survey (most accurate): run with start_apriltag:=true tag_survey_file:=/tmp/tags.yaml
+#      and drive past the tags with lidar localization working; copy the lines it writes.
+#   b) From the map: in RViz (fixed frame map, mcl_map.pcd shown) use "Publish Point" on the
+#      spot where the tag is mounted (ros2 topic echo /clicked_point), and take facing_deg
+#      from the robot heading at that spot (+180).
+#   c) No file at all: put the pose in the label in aprilTag/config/tag_labels.yaml,
+#      e.g.  ID2: "TUNNEL_EXIT @ 7.45, -6.10, 0.13, 88"   (x, y, [z,] facing_deg).
+# Entries here take precedence over label poses.
+# PLANNED positions from config/tag_plan_obstacle_course.yaml (plan_tags, 2D map, 2.0 m
+# detection range), for tags on top of the wall at its inner edge, centre 0.55 m above the
+# floor. Replace with survey results or measured values once mounted.
+tags:
+  0: {x: 3.72, y: 0.17, z: 0.43, facing_deg: 168}   # RampDetection, LEFT wall at the ramp foot -> ramp section
+  1: {x: -0.79, y: -10.54, z: 0.43, facing_deg: 10}   # NARROW_PATH_END, LEFT wall just after the gravel -> Nav2 at full speed
+  2: {x: 6.99, y: -5.52, z: 0.43, facing_deg: 88}   # TUNNEL_EXIT, RIGHT wall 0.4 m into the 20 in lane -> wall follower
+  3: {x: -1.84, y: 0.78, z: 0.43, facing_deg: 175}   # CAR_WASH_ENTRY, LEFT wall ~0.8 m into the car wash -> push-through
+  4: {x: 7.29, y: 0.20, z: 0.43, facing_deg: 82}   # HELIX_EXIT, RIGHT wall at the helix bottom, before the bridge (fix only)

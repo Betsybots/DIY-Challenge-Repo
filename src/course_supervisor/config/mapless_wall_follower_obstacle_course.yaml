@@ -1,0 +1,39 @@
+# Obstacle-course overrides for mapless_wall_follower, loaded on top of
+# mapless_wall_follower/config/mapless_wall_follower_ackermann.yaml when the
+# course supervisor starts the wall follower. Used on the narrow path: tunnel exit ->
+# 20 in lane -> 26 in turn -> gravel (32-50 in). The speed-course config is not changed.
+#
+# Geometry: robot half-width 0.203 m; 20 in lane half-width 0.254 m -> ~5 cm per side.
+# With the speed-course values (front_half_width 0.30, side_min_abs_y 0.22, wall
+# targets 0.46) a synthetic 20 in corridor never drives: the lane's own walls fall in
+# the front band and the robot cycles through recovery. With the values below it
+# centres at 0.30 m/s (also 3 cm off-centre, 5 deg heading, 26 in and 32 in lanes).
+mapless_wall_follower:
+  ros__parameters:
+    # Private output; course_supervisor forwards it to /cmd_vel_smoothed only in
+    # wall_follower sections.
+    cmd_vel_topic: /cmd_vel_wall_follower
+    enable_topic: /mapless_wall_follower/enable
+    start_enabled: false
+    # FAST-LIO in this repo stamps /cloud_registered_body as base_footprint.
+    accepted_cloud_frames: [base_link, base_footprint]
+
+    # Front band / swept corridor: just over the robot half-width (0.203) and below
+    # the 20 in lane half-width (0.254), so the lane walls are not "obstacles ahead".
+    front_half_width: 0.215
+    # Keep the near wall even when 3-5 cm off-centre (FAST-LIO's 0.5 m blind zone
+    # already removes the robot's own body returns).
+    side_min_abs_y: 0.10
+    # Accept the wall pairs of the narrow path: 20 in = 0.51 m up to the gravel box
+    # (~50 in = 1.26 m), so it keeps centring through the gravel.
+    min_corridor_width: 0.45
+    max_corridor_width: 1.35
+    # Single-wall fallback: half of the 20 in lane (speed course used 0.46).
+    right_wall_target_distance: 0.26
+    left_wall_target_distance: 0.26
+    # Lane half-width minus front_half_width (speed course: 0.457 - 0.30).
+    preview_wall_offset: 0.04
+
+    # Conservative speeds for the narrow sections. TUNE on the course.
+    straight_speed: 0.30
+    turn_speed: 0.20

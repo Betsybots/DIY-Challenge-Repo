@@ -193,12 +193,15 @@ local_costmap:
         origin_z: 0.0
         z_resolution: 0.125
         z_voxels: 16
-        max_obstacle_height: 2.0
+        # Hoop arches start at 0.36 m above the floor (run3 point cloud): anything above
+        # 0.33 m is ignored so the arches don't close the hoop gates. Walls, buckets and
+        # hoop posts are still marked by their lower parts. Was 2.0.
+        max_obstacle_height: 0.33
         mark_threshold: 0
         observation_sources: lidar_points
         lidar_points:
           topic: /cloud_registered_body
-          max_obstacle_height: 2.0
+          max_obstacle_height: 0.33  # below the hoop arches (0.36 m); was 2.0
           clearing: true
           marking: true
           data_type: "PointCloud2"
@@ -236,7 +239,7 @@ global_costmap:
         observation_sources: lidar_points
         lidar_points:
           topic: /cloud_registered_body
-          max_obstacle_height: 2.0
+          max_obstacle_height: 0.33  # below the hoop arches (0.36 m); was 2.0
           clearing: true
           marking: true
           data_type: "PointCloud2"

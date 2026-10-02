@@ -1,0 +1,57 @@
+# Lidar measurement gate zones for mcl_3dl (obstacle course, map frame of
+# map/Obstacle_course/mcl_map.pcd). Used only when mcl_localizer.launch.py is
+# started with use_lidar_gate:=true; otherwise this file is ignored.
+#
+# Inside an enabled zone, lidar_gate_zones publishes
+# mcl_measurement_enabled=false and mcl_3dl follows odometry only (no lidar
+# likelihood update, no resampling); the map->odom TF keeps being published.
+#
+# Zone types:
+#   corridor: points = polyline [[x, y], ...]; inside if within half_width of it.
+#   polygon:  points = vertices [[x, y], ...]; inside if within the polygon.
+# Optional heading filter (map-frame yaw of robot_frame, degrees): the zone only
+# applies while |yaw - heading_deg| <= heading_tolerance_deg. Used where the
+# bridge deck sits directly above the tunnel: on the bridge the robot faces ~0
+# deg, in the tunnel ~-95 deg.
+zones:
+  # Ramp foot -> 20% ramp -> bridge deck (body up to 0.67 m above the floor,
+  # while fix_z pins z to 0).
+  - name: ramp_and_bridge
+    enabled: true
+    type: corridor
+    half_width: 0.6
+    heading_deg: 0.0
+    heading_tolerance_deg: 50.0
+    points: [[3.25, -0.15], [3.57, -0.19], [3.95, -0.28], [4.43, -0.38], [4.88, -0.46],
+             [5.34, -0.51], [5.79, -0.55], [6.23, -0.57], [6.68, -0.59], [7.11, -0.62],
+             [7.53, -0.66], [8.06, -0.74], [8.55, -0.70], [9.10, -0.60]]
+
+  # Helix down from the bridge back to the floor; ends just before the tunnel
+  # under the bridge (helix exit is back at floor height).
+  - name: helix
+    enabled: true
+    type: corridor
+    half_width: 0.6
+    points: [[8.55, -0.70], [9.10, -0.60], [9.39, -0.45], [9.62, -0.22], [9.78, 0.09],
+             [9.84, 0.40], [9.81, 0.67], [9.67, 1.03], [9.49, 1.22], [9.26, 1.34],
+             [9.05, 1.39], [8.80, 1.37], [8.43, 1.28], [8.14, 1.12], [7.89, 0.86],
+             [7.72, 0.56], [7.68, 0.40]]
+
+  # Tunnel: under the bridge deck (5 ft) + closed tunnel section (10 ft), 32 in
+  # wide. Closed top/sides (possibly foil-lined): the walls are inside the
+  # lidar's ~0.5 m blind range, foil reflects, and in run3 the 10 ft section was
+  # open, so the map has no roof there. Disable if the tunnel is left open.
+  - name: tunnel
+    enabled: true
+    type: corridor
+    half_width: 0.6
+    heading_deg: -95.0
+    heading_tolerance_deg: 50.0
+    points: [[7.64, 0.23], [7.60, -0.25], [7.55, -0.70], [7.47, -1.20], [7.45, -1.70],
+             [7.41, -2.13], [7.40, -3.20], [7.31, -3.90], [7.25, -4.34], [7.23, -5.10]]
+
+  # Car wash: densely hanging ribbons in the lane.
+  - name: car_wash
+    enabled: true
+    type: polygon
+    points: [[-2.65, -0.22], [-0.30, -0.22], [-0.30, 0.78], [-2.65, 0.78]]
