@@ -57,7 +57,7 @@ mapless_wall_follower:
 
     # Normal mode centers between both fitted walls.
     wall_lookahead: 0.50  # Short projection reduces error through S-turn transitions.
-    min_corridor_width: 0.70  # Reject wall pairs far narrower than the 0.9144 m path.
+    min_corridor_width: 0.45 # (Changed for Obstacle course to 0.45 m )0.70  # Reject wall pairs far narrower than the 0.9144 m path.
     max_corridor_width: 1.40  # Allows projected width growth while following curved walls.
     center_gain: 1.8  # TUNE: centering correction; lower if oscillating.
     heading_gain: 1.6  # TUNE: wall-heading correction; lower if steering is nervous.
