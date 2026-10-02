@@ -159,7 +159,7 @@ supervisor publishes can move the robot.
 **Jetson** (same as the obstacle-course bringup, without Nav2):
 
 ```bash
-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i
+ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i publish_tf:=false publish_map_tf:=false
 ros2 launch robot_description description.launch.py
 ros2 run diy_state_estimate zed_base_odom_relay --ros-args \
   -p zed_odom_topic:=/zed/zed_node/odom -p output_topic:=/odom \

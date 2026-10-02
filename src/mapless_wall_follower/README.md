@@ -6,12 +6,12 @@ does not use a map, localization, Nav2, a global path, or odometry.
 ## Behavior
 
 1. `CENTERING`: when both walls are valid, track their centerline.
-2. `LEFT_WALL`: when only the left wall is valid, follow it at the configured
-   distance.
-3. `RIGHT_WALL`: when only the right wall is valid, follow it at the configured
-   distance. A right-turn bias is added while the front is blocked.
-4. `NO_WALL_DETECTED`: stop when neither wall is valid.
-5. `RECOVERY_BRAKING` -> `RECOVERY_REVERSING` -> `RECOVERY_SETTLING`: when an
+2. `LEFT_WALL` / `RIGHT_WALL`: when only one wall is valid, follow it at the
+   configured distance, with curvature feedforward from that wall's bend. While
+   the front is closing, a turn bias is added toward the bend the wall shows
+   (right if the bend is unknown in `RIGHT_WALL`).
+3. `NO_WALL_DETECTED`: stop when neither wall is valid.
+4. `RECOVERY_BRAKING` -> `RECOVERY_REVERSING` -> `RECOVERY_SETTLING`: when an
    obstacle is within `emergency_stop_distance` along the commanded arc, stop,
    reverse `recovery_reverse_distance` while the heading turns away from the
    blocking wall (toward the path center), stop, pre-steer away, and resume.
@@ -21,7 +21,7 @@ does not use a map, localization, Nav2, a global path, or odometry.
    fallback. After `recovery_max_attempts` back-to-back
    attempts without `recovery_reset_distance` of forward driving, it latches
    `EMERGENCY_FRONT_STOP`.
-6. Also stop if the cloud is stale.
+5. Also stop if the cloud is stale.
 
 The controller publishes its current state on
 `/mapless_wall_follower/state`.
@@ -320,16 +320,19 @@ closer.
   steering is nervous; increase it if the vehicle remains angled to the walls.
 - `right_wall_gain`, `left_wall_gain`: distance correction in single-wall
   modes. Tune them independently if one side tracks differently.
-- `right_turn_curvature_bias`: extra right curvature when only the right wall is
-  valid and the front is closing. Reduce it if turns are too sharp; increase it
-  if right turns start too slowly.
+- `right_turn_curvature_bias`: extra curvature toward the bend when only one
+  wall is valid and the front is closing. Reduce it if turns are too sharp;
+  increase it if turns start too slowly.
 
 Change gains in small steps of approximately 0.1 to 0.2.
 
 ### 4. Speed and turn slowdown
 
 - `straight_speed`: ceiling while both walls are valid (straight zones).
-- `turn_speed`: ceiling while following only one wall.
+- `turn_speed`: ceiling while following only one wall in a bend tighter than
+  `tight_turn_radius`, or when the wall's bend is unknown.
+- `tight_turn_radius`: 6.10 m (20 ft). One-wall bends wider than this keep
+  `straight_speed` (the curve and clearance limits still apply).
 - `min_speed`: floor while driving so the steering keeps authority.
 - `max_lateral_acceleration`: main bend-speed knob. Speed is limited by
   `sqrt(a_lat / k)`, where `k` is the larger of the commanded curvature and the

@@ -21,6 +21,10 @@ mapless_wall_follower:
     # Front band / swept corridor: just over the robot half-width (0.203) and below
     # the 20 in lane half-width (0.254), so the lane walls are not "obstacles ahead".
     front_half_width: 0.215
+    # Must not exceed front_half_width.
+    stop_half_width: 0.215
+    # Speed-course keep-out (0.36 m) is wider than this lane's half-width.
+    wall_keep_out_gain: 0.0
     # Keep the near wall even when 3-5 cm off-centre (FAST-LIO's 0.5 m blind zone
     # already removes the robot's own body returns).
     side_min_abs_y: 0.10

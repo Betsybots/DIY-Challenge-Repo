@@ -48,7 +48,8 @@ mapless_wall_follower:
     max_z: 1.20  # TUNE: reject overhead returns above this height.
     side_min_abs_y: 0.22  # 0.203 m vehicle half-width plus a small body-return margin.
     side_max_abs_y: 1.50  # TUNE: maximum wall distance considered.
-    front_half_width: 0.30  # Vehicle half-width plus 0.097 m detection margin.
+    front_half_width: 0.30  # Vehicle half-width plus 0.097 m detection margin (speed limit).
+    stop_half_width: 0.24  # Hard-stop band: 0.203 m half-width + 3.7 cm, so a wall beside the body does not latch a stop.
     min_wall_points: 20  # TUNE: minimum RANSAC inliers for a valid wall.
     fit_residual_threshold: 0.10  # Curved-wall tolerance for local line-fit inliers.
     max_fit_rms: 0.08  # Accept modest curvature while still rejecting noisy fits.
@@ -68,6 +69,8 @@ mapless_wall_follower:
     right_wall_gain: 2.2  # TUNE: right-wall distance correction.
     left_wall_gain: 2.2  # TUNE: left-wall distance correction.
     right_turn_curvature_bias: 0.80  # TUNE: initial right steering when a front wall appears.
+    wall_keep_out_distance: 0.36  # m center-to-wall (~10 cm off center); closer walls add steering away.
+    wall_keep_out_gain: 8.0  # TUNE: 1/m^2 push per m inside keep-out; 0 disables.
     turn_enter_front_distance: 1.20  # TUNE: enter right-turn mode before the front wall.
     emergency_stop_distance: 0.30  # Hard stop, measured along the commanded arc (was 0.45).
 
@@ -79,7 +82,8 @@ mapless_wall_follower:
     # Fit-tuning rollback: max_x 3.00, wall_lookahead 0.80, fit_residual_threshold 0.08,
     # max_fit_rms 0.06, emergency_stop_distance 0.45, turn_speed 0.25.
     straight_speed: 2.0  # Straight-zone ceiling.
-    turn_speed: 0.35  # Ceiling while only one wall is valid.
+    turn_speed: 0.35  # Ceiling with one wall valid, only in bends tighter than tight_turn_radius.
+    tight_turn_radius: 6.10  # m (20 ft): one-wall bends wider than this keep straight_speed (curve limit still applies).
     min_speed: 0.20  # Floor while driving so the steering keeps authority.
     max_lateral_acceleration: 0.50  # TUNE: main bend-speed knob in m/s^2 (tip-over ~6.6 m/s^2).
     max_curvature: 2.70  # 1/m: tan(40 deg) / 0.31115 m wheelbase.

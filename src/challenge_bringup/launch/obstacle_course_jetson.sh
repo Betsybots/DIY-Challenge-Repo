@@ -17,7 +17,8 @@ open_terminal() {
   gnome-terminal --title="$1" -- bash -ic "source ${WS}/install/setup.bash; $2; exec bash"
 }
 
-open_terminal zed_camera "ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i"
+open_terminal zed_camera "ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i \
+  publish_tf:=false publish_map_tf:=false"
 sleep 10
 
 open_terminal robot_description "ros2 launch robot_description description.launch.py"

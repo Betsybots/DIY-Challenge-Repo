@@ -54,6 +54,7 @@ public:
     side_min_abs_y_ = declare_parameter("side_min_abs_y", 0.22);
     side_max_abs_y_ = declare_parameter("side_max_abs_y", 1.50);
     front_half_width_ = declare_parameter("front_half_width", 0.30);
+    stop_half_width_ = declare_parameter("stop_half_width", front_half_width_);
     min_wall_points_ = declare_parameter("min_wall_points", 20);
     fit_residual_threshold_ = declare_parameter("fit_residual_threshold", 0.08);
     max_fit_rms_ = declare_parameter("max_fit_rms", 0.06);
@@ -70,12 +71,15 @@ public:
     left_wall_gain_ = declare_parameter("left_wall_gain", 2.2);
     heading_gain_ = declare_parameter("heading_gain", 1.6);
     right_turn_curvature_bias_ = declare_parameter("right_turn_curvature_bias", 0.80);
+    wall_keep_out_distance_ = declare_parameter("wall_keep_out_distance", 0.36);
+    wall_keep_out_gain_ = declare_parameter("wall_keep_out_gain", 0.0);
 
     turn_enter_front_distance_ = declare_parameter("turn_enter_front_distance", 1.20);
     emergency_stop_distance_ = declare_parameter("emergency_stop_distance", 0.45);
 
     straight_speed_ = declare_parameter("straight_speed", 0.30);
     turn_speed_ = declare_parameter("turn_speed", 0.15);
+    tight_turn_radius_ = declare_parameter("tight_turn_radius", 6.10);
     min_speed_ = declare_parameter("min_speed", 0.15);
     max_lateral_acceleration_ = declare_parameter("max_lateral_acceleration", 0.50);
     max_curvature_ = declare_parameter("max_curvature", 2.70);
@@ -101,12 +105,14 @@ public:
       max_fit_points_ < min_wall_points_ || min_x_ >= max_x_ || min_z_ >= max_z_ ||
       wall_detection_hold_time_ < 0.0 || wall_detection_hold_time_ > cloud_timeout_ ||
       side_min_abs_y_ >= side_max_abs_y_ || wall_lookahead_ <= 0.0 ||
+      stop_half_width_ <= 0.0 || stop_half_width_ > front_half_width_ ||
+      wall_keep_out_distance_ < 0.0 || wall_keep_out_gain_ < 0.0 ||
       min_corridor_width_ >= max_corridor_width_ ||
       right_wall_target_distance_ <= 0.0 || left_wall_target_distance_ <= 0.0 ||
       right_wall_gain_ <= 0.0 || left_wall_gain_ <= 0.0 ||
       emergency_stop_distance_ <= 0.0 ||
       emergency_stop_distance_ >= turn_enter_front_distance_ ||
-      straight_speed_ <= 0.0 || turn_speed_ <= 0.0 ||
+      straight_speed_ <= 0.0 || turn_speed_ <= 0.0 || tight_turn_radius_ <= 0.0 ||
       min_speed_ <= 0.0 || min_speed_ > turn_speed_ || min_speed_ > straight_speed_ ||
       max_curvature_ <= 0.0 || max_yaw_rate_ <= 0.0 ||
       max_linear_acceleration_ <= 0.0 || max_linear_deceleration_ <= 0.0 ||
@@ -181,6 +187,8 @@ private:
     double front_distance{std::numeric_limits<double>::infinity()};
     double path_clearance{std::numeric_limits<double>::infinity()};
     double path_clearance_y{0.0};
+    double stop_clearance{std::numeric_limits<double>::infinity()};
+    double stop_clearance_y{0.0};
     std::size_t left_point_count{0};
     std::size_t right_point_count{0};
     bool left_held{false};
@@ -406,16 +414,16 @@ private:
   }
 
   // Arc length along the commanded path before the point enters the swept corridor.
-  double arcDistance(double x, double y, double curvature) const
+  double arcDistance(double x, double y, double curvature, double half_width) const
   {
     if (std::abs(curvature) < 1e-3) {
-      return (x > 0.0 && std::abs(y) <= front_half_width_) ?
+      return (x > 0.0 && std::abs(y) <= half_width) ?
              x : std::numeric_limits<double>::infinity();
     }
     const double radius = 1.0 / std::abs(curvature);
     const double inner_y = curvature > 0.0 ? y : -y;
     const double radial = std::hypot(x, inner_y - radius);
-    if (std::abs(radial - radius) > front_half_width_) {
+    if (std::abs(radial - radius) > half_width) {
       return std::numeric_limits<double>::infinity();
     }
     const double angle = std::atan2(x, radius - inner_y);
@@ -435,6 +443,28 @@ private:
     return std::min(
       max_curvature_,
       2.0 * offset / (front_distance * front_distance - offset * offset));
+  }
+
+  // Centerline curvature from one wall; offset is the centerline's signed y relative to that wall.
+  double singleWallRoadCurvature(const LineFit & wall, double offset) const
+  {
+    if (!wall.curvature_valid) {
+      return 0.0;
+    }
+    const double denominator = std::max(0.2, 1.0 - offset * wall.curvature);
+    return std::clamp(wall.curvature / denominator, -max_curvature_, max_curvature_);
+  }
+
+  // Single-wall ceiling: turn_speed only in tight or unknown bends, else the straight ceiling.
+  double singleWallSpeedCeiling(
+    const LineFit & wall, double road_curvature, double front_distance) const
+  {
+    const double bend_curvature =
+      std::max(std::abs(road_curvature), previewCurvature(front_distance));
+    if (!wall.curvature_valid || bend_curvature > 1.0 / tight_turn_radius_) {
+      return turn_speed_;
+    }
+    return straight_speed_;
   }
 
   static bool firstFitIsBetter(const LineFit & first, const LineFit & second)
@@ -523,6 +553,8 @@ private:
     double front_distance = std::numeric_limits<double>::infinity();
     double path_clearance = std::numeric_limits<double>::infinity();
     double path_clearance_y = 0.0;
+    double stop_clearance = std::numeric_limits<double>::infinity();
+    double stop_clearance_y = 0.0;
     const double clearance_curvature = commanded_curvature_.load();
 
     try {
@@ -548,10 +580,19 @@ private:
         if (x > 0.0 && std::abs(y) <= front_half_width_) {
           front_distance = std::min(front_distance, x);
         }
-        const double arc_distance = arcDistance(x, y, clearance_curvature);
+        const double arc_distance =
+          arcDistance(x, y, clearance_curvature, front_half_width_);
         if (arc_distance < path_clearance) {
           path_clearance = arc_distance;
           path_clearance_y = y;
+        }
+        if (arc_distance < stop_clearance) {
+          const double stop_distance =
+            arcDistance(x, y, clearance_curvature, stop_half_width_);
+          if (stop_distance < stop_clearance) {
+            stop_clearance = stop_distance;
+            stop_clearance_y = y;
+          }
         }
         if (x < min_x_ || x > max_x_) {
           continue;
@@ -581,6 +622,8 @@ private:
     measurement.front_distance = front_distance;
     measurement.path_clearance = path_clearance;
     measurement.path_clearance_y = path_clearance_y;
+    measurement.stop_clearance = stop_clearance;
+    measurement.stop_clearance_y = stop_clearance_y;
     measurement.left_point_count = left_points.size();
     measurement.right_point_count = right_points.size();
     measurement.stamp = now();
@@ -643,7 +686,7 @@ private:
       runRecovery(dt, measurement, cloud_age);
       return;
     }
-    if (measurement.path_clearance <= emergency_stop_distance_) {
+    if (measurement.stop_clearance <= emergency_stop_distance_) {
       mode_ = Mode::STOPPED;
       if (recovery_attempts_ < recovery_max_attempts_) {
         startRecovery(measurement);
@@ -686,32 +729,47 @@ private:
           (measurement.left.curvature + measurement.right.curvature) / curved_walls;
       }
       curvature = road_curvature + center_gain_ * lateral_error + heading_gain_ * heading_error;
-    } else if (mode_ == Mode::RIGHT_WALL) {
-      lateral_error = measurement.right_y + right_wall_target_distance_;
-      heading_error = measurement.right.heading;
+    } else if (mode_ == Mode::RIGHT_WALL || mode_ == Mode::LEFT_WALL) {
+      const bool right = mode_ == Mode::RIGHT_WALL;
+      const LineFit & wall = right ? measurement.right : measurement.left;
+      lateral_error = right ?
+        measurement.right_y + right_wall_target_distance_ :
+        measurement.left_y - left_wall_target_distance_;
+      heading_error = wall.heading;
+      const double bend_curvature = singleWallRoadCurvature(
+        wall, right ? right_wall_target_distance_ : -left_wall_target_distance_);
+      road_curvature = curvature_feedforward_gain_ * bend_curvature;
       curvature =
-        right_wall_gain_ * lateral_error +
+        road_curvature + (right ? right_wall_gain_ : left_wall_gain_) * lateral_error +
         heading_gain_ * heading_error;
+      // Bias toward the bend the wall shows; with no curvature estimate keep the old right-only bias.
+      double bias_sign = right ? -1.0 : 0.0;
+      if (std::abs(bend_curvature) > 0.05) {
+        bias_sign = bend_curvature > 0.0 ? 1.0 : -1.0;
+      }
       if (measurement.front_distance < turn_enter_front_distance_) {
         const double front_ratio = std::clamp(
           (turn_enter_front_distance_ - measurement.front_distance) /
           (turn_enter_front_distance_ - emergency_stop_distance_),
           0.0, 1.0);
-        curvature -= right_turn_curvature_bias_ * front_ratio;
+        curvature += bias_sign * right_turn_curvature_bias_ * front_ratio;
       }
-      requested_speed = turn_speed_;
-      state = "RIGHT_WALL";
-    } else if (mode_ == Mode::LEFT_WALL) {
-      lateral_error = measurement.left_y - left_wall_target_distance_;
-      heading_error = measurement.left.heading;
-      curvature =
-        left_wall_gain_ * lateral_error +
-        heading_gain_ * heading_error;
-      requested_speed = turn_speed_;
-      state = "LEFT_WALL";
+      requested_speed =
+        singleWallSpeedCeiling(wall, bend_curvature, measurement.front_distance);
+      state = right ? "RIGHT_WALL" : "LEFT_WALL";
     } else {
       stop("STOPPED", dt, &measurement, cloud_age);
       return;
+    }
+
+    // Push away from a wall closer than wall_keep_out_distance at the robot (x = 0).
+    if (measurement.left.valid) {
+      curvature -= wall_keep_out_gain_ *
+        std::max(0.0, wall_keep_out_distance_ - measurement.left.intercept);
+    }
+    if (measurement.right.valid) {
+      curvature += wall_keep_out_gain_ *
+        std::max(0.0, wall_keep_out_distance_ + measurement.right.intercept);
     }
 
     curvature = std::clamp(curvature, -max_curvature_, max_curvature_);
@@ -750,7 +808,7 @@ private:
   void startRecovery(const WallMeasurement & measurement)
   {
     // +1 turns the heading left (toward +y); pick the side away from the blocking point.
-    const double obstacle_y = measurement.path_clearance_y;
+    const double obstacle_y = measurement.stop_clearance_y;
     if (std::abs(obstacle_y) > 0.05 || std::abs(last_curvature_command_) < 1e-3) {
       recovery_turn_sign_ = obstacle_y > 0.0 ? -1.0 : 1.0;
     } else {
@@ -770,7 +828,7 @@ private:
     RCLCPP_WARN(
       get_logger(),
       "Wall too close (clearance %.3f m, y %.3f m): recovery %d/%d, reversing and turning %s%s",
-      measurement.path_clearance, obstacle_y, recovery_attempts_, recovery_max_attempts_,
+      measurement.stop_clearance, obstacle_y, recovery_attempts_, recovery_max_attempts_,
       recovery_turn_sign_ > 0.0 ? "LEFT" : "RIGHT", flipped ? " (FLIPPED fallback)" : "");
   }
 
@@ -882,6 +940,7 @@ private:
       stream << " front_distance=" << measurement->front_distance
              << " path_clearance=" << measurement->path_clearance
              << " path_clearance_y=" << measurement->path_clearance_y
+             << " stop_clearance=" << measurement->stop_clearance
              << " left_points=" << measurement->left_point_count
              << " right_points=" << measurement->right_point_count
              << " left_valid=" << (measurement->left.valid ? "true" : "false")
@@ -945,6 +1004,7 @@ private:
   double side_min_abs_y_;
   double side_max_abs_y_;
   double front_half_width_;
+  double stop_half_width_;
   int min_wall_points_;
   double fit_residual_threshold_;
   double max_fit_rms_;
@@ -960,10 +1020,13 @@ private:
   double left_wall_gain_;
   double heading_gain_;
   double right_turn_curvature_bias_;
+  double wall_keep_out_distance_;
+  double wall_keep_out_gain_;
   double turn_enter_front_distance_;
   double emergency_stop_distance_;
   double straight_speed_;
   double turn_speed_;
+  double tight_turn_radius_;
   double min_speed_;
   double max_lateral_acceleration_;
   double max_curvature_;
