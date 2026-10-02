@@ -1,11 +1,18 @@
 scan_resolution: 0.1
 
+# Outdoor cleanup (patches are body-frame keyframe scans)
+max_range: 6.0    # drop patch points farther than this from the sensor (m); <= 0 disables
+sor_mean_k: 20    # StatisticalOutlierRemoval neighbors on the saved map; <= 0 disables
+sor_std_mul: 1.0  # SOR stddev multiplier (lower = more aggressive removal)
+z_removal: false  # true = remove the ground plane from the saved refined_map.pcd
+ground_dist_thresh: 0.1 # points within this distance (m) of the fitted ground plane are removed
+
 window_size: 20
 stride: 10
 voxel_size: 0.5
-min_point_num: 10
+min_point_num: 15
 max_layer: 3
-plane_thresh: 0.01
+plane_thresh: 0.005
 ba_max_iter: 10
 hba_iter: 5
 down_sample: 0.1

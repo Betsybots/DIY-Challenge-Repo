@@ -4,6 +4,10 @@
 #include <yaml-cpp/yaml.h>
 #include "hba/hba.h"
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/ModelCoefficients.h>
 #include <filesystem>
 #include <pcl/io/pcd_io.h>
 #include <chrono>
@@ -32,6 +36,11 @@ void fromStr(const std::string &str, std::string &file_name, Pose &pose)
 struct NodeConfig
 {
     double scan_resolution = 0.1;
+    double max_range = 0.0;   // crop patch points farther than this from the sensor (m); <= 0 disables
+    int sor_mean_k = 0;       // StatisticalOutlierRemoval neighbors; <= 0 disables SOR on the saved map
+    double sor_std_mul = 1.0; // SOR stddev multiplier threshold
+    bool z_removal = false;   // remove the ground plane from the saved map
+    double ground_dist_thresh = 0.1; // RANSAC inlier distance for the ground plane (m)
 };
 
 class HBANode : public rclcpp::Node
@@ -67,6 +76,16 @@ public:
         RCLCPP_INFO(this->get_logger(), "LOAD FROM YAML CONFIG PATH: %s", config_path.c_str());
 
         m_node_config.scan_resolution = config["scan_resolution"].as<double>();
+        if (config["max_range"])
+            m_node_config.max_range = config["max_range"].as<double>();
+        if (config["sor_mean_k"])
+            m_node_config.sor_mean_k = config["sor_mean_k"].as<int>();
+        if (config["sor_std_mul"])
+            m_node_config.sor_std_mul = config["sor_std_mul"].as<double>();
+        if (config["z_removal"])
+            m_node_config.z_removal = config["z_removal"].as<bool>();
+        if (config["ground_dist_thresh"])
+            m_node_config.ground_dist_thresh = config["ground_dist_thresh"].as<double>();
         m_hba_config.window_size = config["window_size"].as<int>();
         m_hba_config.stride = config["stride"].as<int>();
         m_hba_config.voxel_size = config["voxel_size"].as<double>();
@@ -124,6 +143,7 @@ public:
             }
             pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
             reader.read(pcd_file, *cloud);
+            cropByRange(cloud);
             m_voxel_grid.setInputCloud(cloud);
             m_voxel_grid.filter(*cloud);
             m_hba->insert(cloud, pose);
@@ -217,6 +237,19 @@ public:
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud = m_hba->getMapPoints();
         m_voxel_grid.setInputCloud(cloud);
         m_voxel_grid.filter(*cloud);
+        if (m_node_config.z_removal)
+            removeGroundPlane(cloud);
+        if (m_node_config.sor_mean_k > 0 && !cloud->empty())
+        {
+            const size_t before = cloud->size();
+            pcl::StatisticalOutlierRemoval<pcl::PointXYZI> sor;
+            sor.setMeanK(m_node_config.sor_mean_k);
+            sor.setStddevMulThresh(m_node_config.sor_std_mul);
+            sor.setInputCloud(cloud);
+            sor.filter(*cloud);
+            RCLCPP_INFO(this->get_logger(), "SOR REMOVED %lu OUTLIER POINTS (%lu -> %lu)",
+                        before - cloud->size(), before, cloud->size());
+        }
         const std::filesystem::path map_path = m_maps_path / "refined_map.pcd";
         if (pcl::io::savePCDFileBinary(map_path.string(), *cloud) != 0)
         {
@@ -224,6 +257,54 @@ public:
             return;
         }
         RCLCPP_INFO(this->get_logger(), "SAVED REFINED MAP: %s", map_path.string().c_str());
+    }
+
+    void removeGroundPlane(pcl::PointCloud<pcl::PointXYZI>::Ptr &cloud)
+    {
+        if (cloud->empty())
+            return;
+        pcl::SACSegmentation<pcl::PointXYZI> seg;
+        seg.setOptimizeCoefficients(true);
+        // Only accept near-horizontal planes so walls are never mistaken for ground
+        seg.setModelType(pcl::SACMODEL_PERPENDICULAR_PLANE);
+        seg.setAxis(Eigen::Vector3f::UnitZ());
+        seg.setEpsAngle(15.0 * M_PI / 180.0);
+        seg.setMethodType(pcl::SAC_RANSAC);
+        seg.setDistanceThreshold(m_node_config.ground_dist_thresh);
+        seg.setMaxIterations(200);
+        seg.setInputCloud(cloud);
+
+        pcl::ModelCoefficients coefficients;
+        pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+        seg.segment(*inliers, coefficients);
+        if (inliers->indices.empty())
+        {
+            RCLCPP_WARN(this->get_logger(), "Z REMOVAL: NO GROUND PLANE FOUND, SKIPPING");
+            return;
+        }
+        const size_t before = cloud->size();
+        pcl::ExtractIndices<pcl::PointXYZI> extract;
+        extract.setInputCloud(cloud);
+        extract.setIndices(inliers);
+        extract.setNegative(true);
+        extract.filter(*cloud);
+        RCLCPP_INFO(this->get_logger(), "Z REMOVAL: REMOVED %lu GROUND POINTS (%lu -> %lu)",
+                    before - cloud->size(), before, cloud->size());
+    }
+
+    void cropByRange(pcl::PointCloud<pcl::PointXYZI>::Ptr &cloud)
+    {
+        if (m_node_config.max_range <= 0.0 || cloud->empty())
+            return;
+        const float max_sq = static_cast<float>(m_node_config.max_range * m_node_config.max_range);
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cropped(new pcl::PointCloud<pcl::PointXYZI>);
+        cropped->reserve(cloud->size());
+        for (const auto &p : cloud->points)
+        {
+            if (p.x * p.x + p.y * p.y + p.z * p.z <= max_sq)
+                cropped->push_back(p);
+        }
+        cloud.swap(cropped);
     }
 
     void publishMap()
