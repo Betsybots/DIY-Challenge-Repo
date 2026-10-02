@@ -26,7 +26,7 @@
             lid_topic:  "/lidar_points"
             # QT64 is a mechanical spinning LiDAR with no built-in IMU.
             # Point this at your external IMU driver's topic.
-            #imu_topic:  "/zed/zed_node/imu/data"
+            # imu_topic:  "/zed/zed_node/imu/data"
             imu_topic:  "/imu/data"
             time_sync_en: false                 # Enable if your LiDAR and IMU are time-synchronized (requires accurate timestamps)
             publish_tf: false
@@ -83,7 +83,7 @@
             # extrinsic_T: [0.083680, 0.58493, -0.107740]
             # extrinsic_T: [0.055, 0.012, 0.152]
             extrinsic_T: [0.055, 0.0, 0.225]    # With ACEINNA IMU
-            #extrinsic_T: [0.315, 0.0, 0.31]    # With ZED IMU
+            # extrinsic_T: [0.315, 0.0, 0.31]    # With ZED IMU
             # Rotation from the LiDAR frame to the (raw) IMU frame (row-major).
             # FAST-LIO applies this as: p_imu = extrinsic_R * p_lidar + extrinsic_T
             # (see offset_R_L_I / offset_T_L_I in laserMapping.cpp), so both
@@ -130,13 +130,13 @@
             reject_low_quality_scans: true
             # Keep the gate realistic for a moving vehicle so it doesn't
             # false-positive on normal driving:
-            min_effective_features: 10
+            min_effective_features: 30
             # Mean point-to-plane residual (m) above which a scan is rejected.
             # 0.1 was too strict for real motion (good indoor scans often sit
             # just under it), which starves the map of updates; 0.3 still
             # rejects genuinely mis-registered scans.
             max_mean_residual:  0.3
-            shock_accel_deviation_threshold: 8.0    # 8.0 m/s^2 deviation from gravity; raise to avoid false positives
+            shock_accel_deviation_threshold: 9.0    # 8.0 m/s^2 deviation from gravity; raise to avoid false positives
             shock_process_noise_scale: 25.0           # 25.0 temporary IMU process-noise multiplier during a shock
             # Catches fast rotations (e.g. an in-place spin) that
             # shock_accel_deviation_threshold alone misses -- a pure rotation
@@ -192,6 +192,40 @@
             # sliding direction, at the cost of not extending the map while degenerate).
             degeneracy_min_eig: 0.05
             degeneracy_hold_map: false
+
+            # --- ZUPT (zero-velocity update) -----------------------------------
+            # FAST-LIO's velocity state is a pure IMU integral -- it is never
+            # directly observed by the LiDAR point-to-plane measurement model (see
+            # get_f() in use-ikfom.hpp) -- so a residual accel-bias/gravity error
+            # keeps silently integrating into velocity even while the platform is
+            # perfectly still. That phantom velocity is why odometry/TF appear to
+            # "keep moving" for a bit right after the robot actually stops. When
+            # accel stays within zupt_accel_tol of gravity AND gyro stays within
+            # zupt_gyro_tol for zupt_required_samples consecutive IMU intervals,
+            # the velocity state is zeroed and its covariance collapsed so the
+            # filter stops dead-reckoning motion that isn't happening.
+            zupt_enable: true
+            zupt_accel_tol: 0.3           # m/s^2; accel deviation from gravity below this counts as "still"
+            zupt_gyro_tol: 0.05           # rad/s; gyro magnitude below this counts as "still"
+            zupt_required_samples: 5      # consecutive IMU intervals of stillness required before zeroing vel
+            zupt_vel_cov: 0.0001          # covariance the velocity block collapses to once ZUPT fires
+
+            # --- ZUPT wheel-odometry gate ---------------------------------------
+            # Confirmed via bag analysis (2026-10-01): IMU-only stillness (accel ~=
+            # gravity AND gyro ~= 0) cannot tell a parked robot from one cruising in
+            # a straight line at constant velocity -- neither sensor is excited by
+            # steady, non-rotating motion. ZUPT was repeatedly engaging mid-drive at
+            # 0.1-0.4 m/s during ordinary smooth driving, forcibly zeroing a real
+            # non-zero velocity each time. Wheel encoders directly sense wheel
+            # rotation and are not fooled by constant velocity, so when
+            # zupt_use_wheel_odom is true, ZUPT only engages while BOTH the IMU test
+            # AND the wheel-odom speed say the platform is still.
+            # true  -> require /wheel_odom speed < zupt_wheel_speed_tol too
+            # false -> original IMU-only ZUPT behavior (ignore wheel odom)
+            zupt_use_wheel_odom: true
+            zupt_wheel_speed_tol: 0.03        # m/s; wheel-odom speed below this counts as "still"
+            zupt_wheel_odom_max_age: 0.5      # seconds; ignore wheel odom older than this (treated as "not confirmed still")
+            zupt_wheel_odom_topic: "/wheel_odom"
 
         # Absolute path for the final full-map PCD save (on shutdown or /map_save
         # service call). Used as-is since it starts with "/". Leave empty ("") to

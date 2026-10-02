@@ -37,58 +37,58 @@ pure_pursuit:
 
 # minimum allowable turn radius is 18 inches
 motions:
-  - type: STRAIGHT
-    distance: 376.0
-    velocity: 1.0
-    stop:
-      - type: COMPLETE
+  # - type: STRAIGHT
+  #   distance: 376.0
+  #   velocity: 1.0
+  #   stop:
+  #     - type: COMPLETE
 
   - type: TURN
-    turn_radius: 48.0
-    stop_angle: 90.0
+    turn_radius: 29.0
+    stop_angle: 180.0
     velocity: 0.6
     stop:
       - type: COMPLETE
 
-  - type: WALL_FOLLOW
-    velocity: 1.0
-    stop:
-      - type: OBSTACLE
-        distance: 39.37  # stop 1 meter before an obstacle
+  # - type: WALL_FOLLOW
+  #   velocity: 1.0
+  #   stop:
+  #     - type: OBSTACLE
+  #       distance: 39.37  # stop 1 meter before an obstacle
 
-  - type: TURN
-    turn_radius: 39.37  # still needs tuning
-    stop_angle: -180.0
-    velocity: 0.6
-    stop:
-      - type: COMPLETE
+  # - type: TURN
+  #   turn_radius: 39.37  # still needs tuning
+  #   stop_angle: -180.0
+  #   velocity: 0.6
+  #   stop:
+  #     - type: COMPLETE
 
-  - type: STRAIGHT
-    distance: 157.48  # still needs tuning
-    velocity: 2.0
-    stop:
-      - type: OBSTACLE
-        distance: 39.37  # stop 1 meter before an obstacle
+  # - type: STRAIGHT
+  #   distance: 157.48  # still needs tuning
+  #   velocity: 2.0
+  #   stop:
+  #     - type: OBSTACLE
+  #       distance: 39.37  # stop 1 meter before an obstacle
 
-  - type: TURN
-    turn_radius: 20  # still needs tuning
-    stop_angle: 100.0
-    velocity: 0.6
-    stop:
-      - type: COMPLETE
+  # - type: TURN
+  #   turn_radius: 20  # still needs tuning
+  #   stop_angle: 100.0
+  #   velocity: 0.6
+  #   stop:
+  #     - type: COMPLETE
 
-  - type: TURN
-    turn_radius: 20  # still needs tuning
-    stop_angle: -100.0
-    velocity: 0.6
-    stop:
-      - type: COMPLETE
+  # - type: TURN
+  #   turn_radius: 20  # still needs tuning
+  #   stop_angle: -100.0
+  #   velocity: 0.6
+  #   stop:
+  #     - type: COMPLETE
 
-  - type: STRAIGHT
-    distance: 157.48
-    velocity: 1.0
+  # - type: STRAIGHT
+  #   distance: 157.48
+  #   velocity: 1.0
     
-  - type: TURN
-    turn_radius: 39.37
-    stop_angle: 90.0
-    velocity: 0.6
+  # - type: TURN
+  #   turn_radius: 39.37
+  #   stop_angle: 90.0
+  #   velocity: 0.6

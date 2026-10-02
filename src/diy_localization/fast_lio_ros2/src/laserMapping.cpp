@@ -49,6 +49,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 #include <omp.h>
+#include <atomic>
 #include <mutex>
 #include <math.h>
 #include <thread>
@@ -130,6 +131,40 @@ int    rejected_scan_count = 0;
 bool   recovery_mode_active = false;
 int    recovery_good_scan_count = 0;
 double last_processed_lidar_end_time = -1.0;
+
+// ZUPT (zero-velocity update): FAST-LIO's velocity state is a pure IMU
+// integral never directly observed by the LiDAR measurement model (see
+// get_f() in use-ikfom.hpp), so residual accel-bias/gravity error keeps
+// integrating into velocity even while genuinely stationary -- the
+// confirmed cause of odometry/TF appearing to "still be moving" for a
+// while right after the robot actually stops. When ImuProcess flags
+// sustained stillness, zero the velocity state directly and shrink its
+// covariance so the filter stops dead-reckoning phantom motion.
+bool   zupt_enable = true;
+double zupt_accel_tol = 0.3;        // m/s^2; accel deviation from gravity below this counts as "still"
+double zupt_gyro_tol = 0.05;        // rad/s; gyro magnitude below this counts as "still"
+int    zupt_required_samples = 5;   // consecutive IMU intervals of stillness required before zeroing vel
+double zupt_vel_cov = 0.0001;       // covariance to collapse the velocity block to once ZUPT fires
+bool   zupt_was_active = false;
+
+// --- ZUPT wheel-odometry gate ---------------------------------------------
+// IMU-only stillness (accel ~= gravity AND gyro ~= 0) cannot distinguish a
+// parked platform from one cruising in a straight line at constant velocity:
+// an accelerometer only senses acceleration and a gyro only senses rotation
+// rate, so neither is excited by steady, non-rotating motion. Confirmed via
+// bag analysis: ZUPT was repeatedly engaging mid-drive (0.1-0.4 m/s per
+// /wheel_odom) during ordinary smooth driving, not just real stops, each
+// time forcibly zeroing a real non-zero velocity. Wheel encoders directly
+// sense wheel rotation, so they do not share this ambiguity -- when this
+// gate is enabled, ZUPT only engages while BOTH the IMU test AND the wheel
+// odometry speed say the platform is still. Set zupt_use_wheel_odom: false
+// to fall back to the original IMU-only behavior (e.g. if wheel odom is
+// unavailable/untrusted).
+bool   zupt_use_wheel_odom = false;
+double zupt_wheel_speed_tol = 0.03;      // m/s; wheel-odom speed below this counts as "still"
+double zupt_wheel_odom_max_age = 0.5;    // seconds; ignore wheel odom older than this (treat as unknown/moving)
+std::atomic<double> g_wheel_speed{0.0};
+std::atomic<int64_t> g_wheel_odom_stamp_ns{0};
 
 float res_last[100000] = {0.0};
 float DET_RANGE = 300.0f;
@@ -370,6 +405,17 @@ void standard_pcl_cbk(const sensor_msgs::msg::PointCloud2::UniquePtr msg)
 }
 
 double timediff_lidar_wrt_imu = 0.0;
+
+// Tracks the latest wheel-odometry speed for the ZUPT wheel-odom gate (see
+// zupt_use_wheel_odom above). Stored as atomics since this callback and the
+// main scan-processing timer run on different executor threads/groups.
+void wheel_odom_cbk(const nav_msgs::msg::Odometry::UniquePtr msg_in)
+{
+    const double vx = msg_in->twist.twist.linear.x;
+    const double vy = msg_in->twist.twist.linear.y;
+    g_wheel_speed.store(std::sqrt(vx * vx + vy * vy));
+    g_wheel_odom_stamp_ns.store(static_cast<int64_t>(get_time_sec(msg_in->header.stamp) * 1e9));
+}
 
 void imu_cbk(const sensor_msgs::msg::Imu::UniquePtr msg_in)
 {
@@ -1008,6 +1054,15 @@ public:
         this->declare_parameter<bool>("frontend.recovery_enable", true);
         this->declare_parameter<double>("frontend.recovery_lidar_gap", 0.75);
         this->declare_parameter<int>("frontend.recovery_good_scans", 3);
+        this->declare_parameter<bool>("frontend.zupt_enable", true);
+        this->declare_parameter<double>("frontend.zupt_accel_tol", 0.3);
+        this->declare_parameter<double>("frontend.zupt_gyro_tol", 0.05);
+        this->declare_parameter<int>("frontend.zupt_required_samples", 5);
+        this->declare_parameter<double>("frontend.zupt_vel_cov", 0.0001);
+        this->declare_parameter<bool>("frontend.zupt_use_wheel_odom", false);
+        this->declare_parameter<double>("frontend.zupt_wheel_speed_tol", 0.03);
+        this->declare_parameter<double>("frontend.zupt_wheel_odom_max_age", 0.5);
+        this->declare_parameter<std::string>("frontend.zupt_wheel_odom_topic", "/wheel_odom");
         this->get_parameter_or<bool>("publish.path_en", path_en, true);
         this->get_parameter_or<bool>("publish.effect_map_en", effect_pub_en, false);
         this->get_parameter_or<bool>("publish.map_en", map_pub_en, false);
@@ -1072,6 +1127,16 @@ public:
         this->get_parameter_or<bool>("frontend.recovery_enable", recovery_enable, true);
         this->get_parameter_or<double>("frontend.recovery_lidar_gap", recovery_lidar_gap, 0.75);
         this->get_parameter_or<int>("frontend.recovery_good_scans", recovery_good_scans, 3);
+        this->get_parameter_or<bool>("frontend.zupt_enable", zupt_enable, true);
+        this->get_parameter_or<double>("frontend.zupt_accel_tol", zupt_accel_tol, 0.3);
+        this->get_parameter_or<double>("frontend.zupt_gyro_tol", zupt_gyro_tol, 0.05);
+        this->get_parameter_or<int>("frontend.zupt_required_samples", zupt_required_samples, 5);
+        this->get_parameter_or<double>("frontend.zupt_vel_cov", zupt_vel_cov, 0.0001);
+        this->get_parameter_or<bool>("frontend.zupt_use_wheel_odom", zupt_use_wheel_odom, false);
+        this->get_parameter_or<double>("frontend.zupt_wheel_speed_tol", zupt_wheel_speed_tol, 0.03);
+        this->get_parameter_or<double>("frontend.zupt_wheel_odom_max_age", zupt_wheel_odom_max_age, 0.5);
+        std::string zupt_wheel_odom_topic = "/wheel_odom";
+        this->get_parameter_or<std::string>("frontend.zupt_wheel_odom_topic", zupt_wheel_odom_topic, "/wheel_odom");
 
         RCLCPP_INFO(this->get_logger(), "LiDAR type: %d (%s)", p_pre->lidar_type, lidar_type_name(p_pre->lidar_type));
 
@@ -1103,6 +1168,7 @@ public:
         p_imu->set_gyr_bias_cov(V3D(b_gyr_cov, b_gyr_cov, b_gyr_cov));
         p_imu->set_acc_bias_cov(V3D(b_acc_cov, b_acc_cov, b_acc_cov));
         p_imu->set_shock_detection(G_m_s2, shock_accel_deviation_threshold, shock_process_noise_scale, shock_gyro_threshold);
+        p_imu->set_zupt_detection(G_m_s2, zupt_accel_tol, zupt_gyro_tol, zupt_required_samples);
 
         fill(epsi, epsi+23, 0.001);
         kf.init_dyn_share(get_f, df_dx, df_dw, h_share_model, NUM_MAX_ITERATIONS, epsi);
@@ -1140,6 +1206,10 @@ public:
         sensor_sub_opts.callback_group = sensor_cb_group_;
         sub_pcl_pc_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(lid_topic, rclcpp::SensorDataQoS(), standard_pcl_cbk, sensor_sub_opts);
         sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, rclcpp::QoS(200), imu_cbk, sensor_sub_opts);
+        if (zupt_use_wheel_odom)
+        {
+            sub_wheel_odom_ = this->create_subscription<nav_msgs::msg::Odometry>(zupt_wheel_odom_topic, rclcpp::QoS(50), wheel_odom_cbk, sensor_sub_opts);
+        }
         pubLaserCloudFull_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
         pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
         pubLaserCloudEffect_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
@@ -1451,6 +1521,59 @@ private:
             const bool hold_map_updates = scan_is_low_quality || recovery_settling ||
                                           (degeneracy_hold_map && scan_is_degenerate);
 
+            // ---------- ZUPT (zero-velocity update) ----------
+            // Velocity is never directly measured by the LiDAR (get_f() in
+            // use-ikfom.hpp integrates it purely from bias-corrected accel),
+            // so it does not automatically collapse to zero when the robot
+            // actually stops -- residual accel-bias/gravity error keeps
+            // integrating a phantom velocity that the position correction
+            // then has to fight down scan-by-scan. Once ImuProcess confirms
+            // sustained stillness (accel/gyro within tolerance for
+            // zupt_required_samples consecutive IMU intervals), zero the
+            // velocity state directly and shrink its covariance block
+            // (error-state indices 12-14, see df_dx in use-ikfom.hpp) so the
+            // filter stops predicting motion that isn't happening.
+            //
+            // IMU-only stillness is ambiguous for straight, constant-velocity
+            // driving (confirmed by bag analysis: ZUPT was repeatedly firing
+            // mid-drive at 0.1-0.4 m/s). When zupt_use_wheel_odom is true,
+            // additionally require the wheel-odom speed to be below
+            // zupt_wheel_speed_tol (and the wheel-odom reading to be recent)
+            // before engaging -- wheel encoders are not fooled by constant
+            // velocity the way accel/gyro are. Set it false to keep the
+            // original IMU-only behavior.
+            bool wheel_confirms_still = true;
+            if (zupt_use_wheel_odom)
+            {
+                const double wheel_odom_age = this->get_clock()->now().seconds() -
+                                               (static_cast<double>(g_wheel_odom_stamp_ns.load()) * 1e-9);
+                const bool wheel_odom_fresh = g_wheel_odom_stamp_ns.load() > 0 && wheel_odom_age <= zupt_wheel_odom_max_age;
+                wheel_confirms_still = wheel_odom_fresh && (g_wheel_speed.load() <= zupt_wheel_speed_tol);
+            }
+            const bool zupt_active = zupt_enable && p_imu->isStationary() && wheel_confirms_still;
+            if (zupt_active)
+            {
+                state_point.vel.setZero();
+                kf.change_x(state_point);
+                auto P_zupt = kf.get_P();
+                for (int i = 12; i < 15; i++)
+                {
+                    for (int j = 0; j < 23; j++)
+                    {
+                        P_zupt(i, j) = 0.0;
+                        P_zupt(j, i) = 0.0;
+                    }
+                    P_zupt(i, i) = zupt_vel_cov;
+                }
+                kf.change_P(P_zupt);
+                state_point = kf.get_x();
+            }
+            if (zupt_active != zupt_was_active)
+            {
+                RCLCPP_INFO(this->get_logger(), "ZUPT %s", zupt_active ? "engaged (velocity zeroed, platform stationary)" : "released (platform moving again)");
+                zupt_was_active = zupt_active;
+            }
+
             /******* Publish odometry *******/
             publish_odometry(pubOdomAftMapped_, tf_broadcaster_);
 
@@ -1555,6 +1678,7 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pubPath_;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_pcl_pc_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr sub_wheel_odom_;
     rclcpp::CallbackGroup::SharedPtr sensor_cb_group_;
 
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;

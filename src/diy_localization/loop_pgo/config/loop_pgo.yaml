@@ -1,7 +1,7 @@
 # Input topics and TF frame names.
 cloud_topic: /cloud_registered_body
-odom_topic: /zed/zed_node/odom
-imu_topic: /zed/zed_node/imu/data
+odom_topic: /odom
+imu_topic: /imu/data
 map_frame: map
 local_frame: odom
 

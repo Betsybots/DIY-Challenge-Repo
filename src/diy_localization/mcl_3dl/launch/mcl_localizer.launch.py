@@ -34,7 +34,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "lidar_gate_zones_file",
             default_value=PathJoinSubstitution([
-                FindPackageShare("mcl_3dl"), "config", "lidar_gate_zones_obstacle_course.yaml"
+                # FindPackageShare("mcl_3dl"), "config", "lidar_gate_zones_obstacle_course.yaml"
+                FindPackageShare("mcl_3dl"), "config", "test_localization.yaml"
             ]),
         ),
         DeclareLaunchArgument("lidar_gate_robot_frame", default_value="base_footprint"),

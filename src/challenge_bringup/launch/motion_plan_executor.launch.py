@@ -25,7 +25,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'pose_topic',
-            default_value='/wheel_odom',
+            default_value='/zed/zed_node/odom',
             description='Pose input topic (geometry_msgs/msg/PoseStamped)',
         ),
         DeclareLaunchArgument(

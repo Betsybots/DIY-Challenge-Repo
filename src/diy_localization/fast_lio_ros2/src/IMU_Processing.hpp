@@ -57,6 +57,20 @@ class ImuProcess
   //   linear acceleration change (e.g. an in-place spin) would otherwise not
   //   be flagged at all.
   void set_shock_detection(double gravity_mag, double accel_deviation_threshold, double process_noise_scale, double gyro_threshold);
+  // Zero-velocity update (ZUPT) detector: FAST-LIO's velocity state is a pure
+  // IMU integral (see get_f() in use-ikfom.hpp -- no LiDAR measurement ever
+  // observes velocity directly), so a residual accel-bias/gravity estimation
+  // error keeps silently integrating into velocity even while the platform
+  // is perfectly still. That phantom velocity then has to be fought down
+  // scan-by-scan through the EKF's position-velocity covariance coupling,
+  // which is the confirmed cause of "odometry still thinks it's moving for a
+  // bit after a real stop". This flags sustained stillness (both accel near
+  // gravity AND gyro near zero for accel/gyro_tol over required_samples
+  // consecutive IMU intervals, not reset per-scan like the shock flags
+  // above) so the caller can directly zero the velocity state and shrink its
+  // covariance once that holds.
+  void set_zupt_detection(double gravity_mag, double accel_tol, double gyro_tol, int required_samples);
+  bool isStationary() const { return last_is_stationary_; }
   double getMaxImuGap() const { return last_max_imu_gap_; }
   bool hadShock() const { return last_had_shock_; }
   // Diagnostics: which trigger(s) actually fired, so a rejected-scan log can
@@ -111,6 +125,15 @@ class ImuProcess
   bool   last_had_accel_shock_ = false;
   bool   last_had_gyro_shock_ = false;
   double last_shock_time_ = -1e9;
+
+  // ZUPT (stationary) detection state -- persists across Process() calls
+  // (unlike the per-scan shock flags above) since stillness is judged over a
+  // run of consecutive IMU intervals that can span multiple LiDAR scans.
+  double zupt_accel_tol_ = 0.3;
+  double zupt_gyro_tol_ = 0.05;
+  int    zupt_required_samples_ = 5;
+  int    stationary_sample_count_ = 0;
+  bool   last_is_stationary_ = false;
 };
 
 ImuProcess::ImuProcess()
@@ -191,6 +214,14 @@ void ImuProcess::set_shock_detection(double gravity_mag, double accel_deviation_
   shock_accel_deviation_threshold_ = accel_deviation_threshold;
   shock_process_noise_scale_ = process_noise_scale;
   shock_gyro_threshold_ = gyro_threshold;
+}
+
+void ImuProcess::set_zupt_detection(double gravity_mag, double accel_tol, double gyro_tol, int required_samples)
+{
+  gravity_mag_ = gravity_mag;
+  zupt_accel_tol_ = accel_tol;
+  zupt_gyro_tol_ = gyro_tol;
+  zupt_required_samples_ = required_samples;
 }
 
 void ImuProcess::IMU_init(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 12, input_ikfom> &kf_state, int &N)
@@ -322,6 +353,22 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
       last_had_gyro_shock_ = last_had_gyro_shock_ || gyro_shock_this_step;
       last_shock_time_ = tail_stamp;
     }
+
+    // ZUPT stillness check: both accel (gravity-scale calibrated above) and
+    // gyro must stay within tolerance for zupt_required_samples_ consecutive
+    // IMU intervals. Persists across scans (not reset per-call like the
+    // shock flags) so a stop that straddles a scan boundary still counts.
+    const bool sample_stationary = std::abs(acc_avr.norm() - gravity_mag_) < zupt_accel_tol_ &&
+                                    angvel_avr.norm() < zupt_gyro_tol_;
+    if (sample_stationary)
+    {
+      if (stationary_sample_count_ < zupt_required_samples_) stationary_sample_count_++;
+    }
+    else
+    {
+      stationary_sample_count_ = 0;
+    }
+    last_is_stationary_ = stationary_sample_count_ >= zupt_required_samples_;
 
     if(head_stamp < last_lidar_end_time_)
     {

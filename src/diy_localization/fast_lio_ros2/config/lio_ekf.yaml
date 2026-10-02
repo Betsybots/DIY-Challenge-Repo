@@ -23,16 +23,10 @@
 #   carry it through LIO-degenerate stretches (open outdoor ground with few
 #   returns inside the QT64's used 3-5 m range) without ever yanking the
 #   absolute pose:
-#     * /zed/zed_node/odom is fused DIFFERENTIALLY (x, y). Two reasons it
-#       must not be an absolute source: it is the CAMERA's pose, not
-#       base_footprint's (~0.30 m lever-arm error after a 90 deg turn on
-#       this robot's 0.21 m offset), and ZED VO can jump/teleport on
-#       relocalization events -- as an ungated absolute input those jumps
-#       went straight into odom->base_footprint.
 #     * /wheel_odom contributes body twist (vx, vy) only.
-#     * The ZED gyro contributes vyaw only. Its SDK-fused ABSOLUTE yaw is
-#       in the ZED's own reference frame and fights both VO and LIO yaw,
-#       so it is not fused.
+#     * The ACEINNA IMU's gyro contributes vyaw only. Its own SDK-fused
+#       (if any) absolute yaw is not used -- it would fight LIO yaw -- only
+#       the raw angular-velocity measurement is fused.
 #
 # GATING NOTE (learned the hard way): robot_localization ignores
 #   odomN_pose_rejection_threshold when odomN_differential is true -- the
@@ -47,9 +41,8 @@
 #
 # TRUST LEVELS -> IMPLEMENTATION
 #   odom0 /Odometry (FAST-LIO2)     HIGH     absolute x, y, yaw; no gate
-#   odom1 /zed/zed_node/odom        MEDIUM   differential x, y; twist gate 2.0
-#   odom2 /wheel_odom               MEDIUM   vx, vy twist; twist gate 2.5
-#   imu0  /zed/zed_node/imu/data    MEDIUM   vyaw only; twist gate 3.0
+#   odom1 /wheel_odom               MEDIUM   vx, vy twist; twist gate 2.5
+#   imu0  /imu/data (ACEINNA)       MEDIUM   vyaw only; twist gate 3.0
 #
 # Fused state order (every *_config vector and both covariance matrices):
 #   [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
@@ -95,45 +88,26 @@ ekf_filter_node:
     odom0_differential: false
     odom0_relative: false
 
-    # -- odom1: ZED visual odometry -- MEDIUM TRUST, differential x,y -------
-    # Differential so it contributes pose INCREMENTS (converted to twist by
-    # robot_localization) instead of its absolute camera-frame pose: that
-    # removes the ZED relocalization teleports and most of the camera
-    # lever-arm error from the fused state. Yaw increments are left out --
-    # the gyro (imu0 vyaw) is a better rotation-rate source. Gated as twist
-    # (the only gate that applies to differential data).
-    odom1: /zed/zed_node/odom
-    odom1_config: [true,  true,  false,
-                   false, false, false,
-                   false, false, false,
-                   false, false, false,
-                   false, false, false]
-    odom1_queue_size: 20
-    odom1_nodelay: true
-    odom1_differential: true
-    odom1_relative: false
-    odom1_twist_rejection_threshold: 2.0
-
-    # -- odom2: wheel odometry -- MEDIUM TRUST, vx/vy only (as requested) --
-    odom2: /wheel_odom
-    odom2_config: [false, false, false,
+    # -- odom1: wheel odometry -- MEDIUM TRUST, vx/vy only (as requested) --
+    odom1: /wheel_odom
+    odom1_config: [false, false, false,
                    false, false, false,
                    true,  true,  false,
                    false, false, false,
                    false, false, false]
-    odom2_queue_size: 15
-    odom2_nodelay: true
-    odom2_differential: false
-    odom2_relative: false
-    odom2_twist_rejection_threshold: 2.5
+    odom1_queue_size: 15
+    odom1_nodelay: true
+    odom1_differential: false
+    odom1_relative: false
+    odom1_twist_rejection_threshold: 2.5
 
-    # -- imu0: ZED IMU -- MEDIUM TRUST, gyro rate only -----------------------
-    # vyaw only. The SDK-fused ABSOLUTE orientation lives in the ZED's own
-    # reference frame and fights the LIO/VO yaw, so it is not fused (same
-    # conclusion as ekf_fusion.yaml for this physical gyro). Roll/pitch are
-    # ignored by two_d_mode anyway. No linear acceleration (raw ax/ay are
-    # gravity-contaminated on slopes -- relevant outdoors).
-    imu0: /zed/zed_node/imu/data
+    # -- imu0: ACEINNA IMU -- MEDIUM TRUST, gyro rate only -------------------
+    # vyaw only. No SDK-fused absolute orientation is consumed here -- only
+    # the raw angular-velocity measurement -- so it can't fight LIO's yaw.
+    # Roll/pitch are ignored by two_d_mode anyway. No linear acceleration
+    # (raw ax/ay would be gravity-contaminated on slopes -- relevant
+    # outdoors -- and FAST-LIO already consumes this IMU's accel directly).
+    imu0: /imu/data
     imu0_config: [false, false, false,
                   false, false, false,
                   false, false, false,
