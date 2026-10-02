@@ -57,8 +57,8 @@ mapless_wall_follower:
     wall_detection_hold_time: 0.20  # s: reuse the last good wall fit through brief dropouts.
 
     # Normal mode centers between both fitted walls.
-    wall_lookahead: 0.50  # Short projection reduces error through S-turn transitions.
-    min_corridor_width: 0.45 # (Changed for Obstacle course to 0.45 m )0.70  # Reject wall pairs far narrower than the 0.9144 m path.
+    wall_lookahead: 0.5  # Short projection reduces error through S-turn transitions.
+    min_corridor_width: 0.7 # (Changed for Obstacle course to 0.45 m )0.70  # Reject wall pairs far narrower than the 0.9144 m path.
     max_corridor_width: 1.40  # Allows projected width growth while following curved walls.
     center_gain: 1.8  # TUNE: centering correction; lower if oscillating.
     heading_gain: 1.6  # TUNE: wall-heading correction; lower if steering is nervous.
@@ -81,15 +81,15 @@ mapless_wall_follower:
     # reaches 2.5 m/s): straight 2.50, lat 1.50, accel 1.20, decel 1.20, max_yaw_rate 2.00.
     # Fit-tuning rollback: max_x 3.00, wall_lookahead 0.80, fit_residual_threshold 0.08,
     # max_fit_rms 0.06, emergency_stop_distance 0.45, turn_speed 0.25.
-    straight_speed: 2.0  # Straight-zone ceiling.
-    turn_speed: 0.60  # Ceiling with one wall valid, only in bends tighter than tight_turn_radius (sim: 0.8 hits wall).
-    tight_turn_radius: 6.10  # m (20 ft): one-wall bends wider than this keep straight_speed (curve limit still applies).
-    min_speed: 0.20  # Floor while driving so the steering keeps authority.
-    max_lateral_acceleration: 0.50  # TUNE: main bend-speed knob in m/s^2 (tip-over ~6.6 m/s^2).
+    straight_speed: 5.0  # Straight-zone ceiling.
+    turn_speed: 0.50  # Ceiling with one wall valid, only in bends tighter than tight_turn_radius (sim: 0.8 hits wall).
+    tight_turn_radius: 4.5  # m (20 ft): one-wall bends wider than this keep straight_speed (curve limit still applies).
+    min_speed: 0.40  # Floor while driving so the steering keeps authority.
+    max_lateral_acceleration: 1.5 # 0.70  # TUNE: main bend-speed knob in m/s^2 (tip-over ~6.6 m/s^2).
     max_curvature: 2.70  # 1/m: tan(40 deg) / 0.31115 m wheelbase.
     max_yaw_rate: 1.35  # rad/s: also caps speed in tight curvature.
-    max_linear_acceleration: 1.00  # TUNE: forward acceleration out of bends.
-    max_linear_deceleration: 1.00  # TUNE: braking used by the clearance limit; keep achievable.
+    max_linear_acceleration: 2.0 # 2.0  # TUNE: forward acceleration out of bends.
+    max_linear_deceleration: 1.2 #1.00  # TUNE: braking used by the clearance limit; keep achievable.
     max_curvature_rate: 3.00  # TUNE: 1/(m*s) steering slew; raise if turn entry lags.
     preview_wall_offset: 0.16  # 0.457 m centerline-to-wall minus 0.30 m front_half_width.
     control_latency: 0.20  # s: cloud + control + driver delay added to braking distance.
@@ -101,10 +101,10 @@ mapless_wall_follower:
     # Wall-too-close recovery: on emergency_stop_distance, stop, reverse a few inches
     # while yawing away from the wall, stop, pre-steer away, then resume.
     recovery_max_attempts: 3  # Back-to-back attempts before latching EMERGENCY_FRONT_STOP; 0 disables.
-    recovery_reverse_distance: 0.08  # m (~3 in), integrated from the reverse command.
-    recovery_reverse_speed: 0.20  # TUNE: m/s; raise if the motor does not move in reverse.
+    recovery_reverse_distance: 0.3  # m (~3 in), integrated from the reverse command.
+    recovery_reverse_speed: 0.30  # TUNE: m/s; raise if the motor does not move in reverse.
     recovery_curvature: 1.50  # TUNE: 1/m steering while reversing; ~7 deg heading change at 0.08 m.
-    recovery_pause: 0.30  # s at zero speed before and after reversing.
+    recovery_pause: 0.10  # s at zero speed before and after reversing.
     recovery_reset_distance: 0.50  # m of forward driving that resets the attempt count.
     recovery_flip_after_attempts: 2  # Later attempts steer the opposite way as a fallback; 0 disables.
 
