@@ -10,8 +10,9 @@ its meaning from a YAML label map, plus TF transforms.
 - Detects AprilTags using OpenCV's ArUco AprilTag detector (default `tag36h11`).
 - Looks up each tag ID in `config/tag_labels.yaml` (ID0 = "RampDetection", ...).
 - Estimates each tag's 6-DoF pose with `solvePnP` from the camera_info intrinsics.
+- Optionally ignores tags farther than a configurable distance (`max_tag_distance`).
 - Publishes:
-  - `apriltag/tag_info` (`zed_apriltag/TagInfo`: header, `id`, `label`) — one per detected tag
+  - `apriltag/tag_info` (`zed_apriltag/TagInfo`: header, `id`, `label`, `distance`) — one per detected tag within range
   - `apriltag/detections` (`apriltag_msgs/AprilTagDetectionArray`)
   - `apriltag/image` (`sensor_msgs/Image`, annotated, optional)
   - TF `<image frame>` -> `tag_<id>`
@@ -55,16 +56,23 @@ ros2 launch zed_apriltag zed_apriltag.launch.py tag_size:=0.16 tag_family:=tag36
 | `tag_size`            | `0.16`                              | Tag edge length in meters            |
 | `tag_family`          | `tag36h11`                          | `tag16h5`/`tag25h9`/`tag36h10`/`tag36h11` |
 | `image_topic`         | `/zed/zed_node/rgb/color/rect/image` | Rectified image from the ZED wrapper |
-| `camera_info_topic`   | `/zed/zed_node/rgb/camera_info`     | Intrinsics for pose estimation       |
-| `tag_labels_file`     | `config/tag_labels.yaml` (installed) | YAML mapping tag IDs to labels       |
+| `camera_info_topic`   | `/zed/zed_node/rgb/color/rect/camera_info` | Intrinsics for pose estimation (companion to `image_topic`) |
+| `tag_labels_file`     | `config/tag_labels.yaml` (installed) | YAML mapping tag IDs to labels + `max_tag_distance` |
 | `publish_debug_image` | `true`                              | Publish annotated image              |
 
-### Tag labels
+> `max_tag_distance` relies on the pose estimated from `camera_info`; until the
+> first `camera_info` message arrives, tags are dropped (with a throttled
+> warning) rather than published with an unknown distance.
+
+### Tag labels & max distance
 
 Edit `config/tag_labels.yaml` to give each ID a meaning (IDs without an entry
-are published with label `UNKNOWN`):
+are published with label `UNKNOWN`) and to set the max camera-to-tag distance
+(meters) a tag must be within to be reported; `<= 0` disables the filter:
 
 ```yaml
+max_tag_distance: 0.0
+
 tag_labels:
   ID0: "RampDetection"
   ID1: "Narrow Path"

@@ -41,9 +41,10 @@ public:
 		const std::string image_topic =
 			declare_parameter<std::string>("image_topic", "/zed/zed_node/rgb/color/rect/image");
 		const std::string camera_info_topic =
-			declare_parameter<std::string>("camera_info_topic", "/zed/zed_node/rgb/camera_info");
+			declare_parameter<std::string>("camera_info_topic", "/zed/zed_node/rgb/color/rect/camera_info");
 		const std::string labels_file = declare_parameter<std::string>("tag_labels_file", "");
 
+		// max_tag_distance (<= 0 disables the filter) is read from tag_labels_file below.
 		loadLabels(labels_file);
 
 		// --- publishers ---
@@ -67,8 +68,10 @@ public:
 			std::bind(&ZedAprilTagNode::onImage, this, std::placeholders::_1));
 
 		RCLCPP_INFO(get_logger(),
-					"zed_apriltag_node started (tag_size=%.3f m, family=%s, image=%s, %zu labels)",
-					tag_size_, tag_family.c_str(), image_topic.c_str(), labels_.size());
+					"zed_apriltag_node started (tag_size=%.3f m, family=%s, image=%s, %zu labels, "
+					"max_tag_distance=%.2f m)",
+					tag_size_, tag_family.c_str(), image_topic.c_str(), labels_.size(),
+					max_tag_distance_);
 	}
 
 private:
@@ -87,6 +90,11 @@ private:
 			return;
 		}
 		YAML::Node root = YAML::LoadFile(path);
+
+		if (root["max_tag_distance"]) {
+			max_tag_distance_ = root["max_tag_distance"].as<double>();
+		}
+
 		const YAML::Node map = root["tag_labels"] ? root["tag_labels"] : root;
 		if (!map.IsMap()) {
 			throw std::runtime_error("tag_labels_file must contain a 'tag_labels' mapping");
@@ -136,12 +144,40 @@ private:
 		const std::vector<cv::Point3f> obj_pts = {
 			{-s,  s, 0.f}, { s,  s, 0.f}, { s, -s, 0.f}, {-s, -s, 0.f}};
 
+		// Markers that pass the (optional) distance filter; used for the debug image.
+		std::vector<std::vector<cv::Point2f>> kept_corners;
+		std::vector<int> kept_ids;
+
 		for (size_t i = 0; i < ids.size(); ++i) {
+			// Pose needs intrinsics from camera_info; also used for distance filtering.
+			cv::Vec3d rvec, tvec;
+			bool has_pose = false;
+			if (has_camera_info_) {
+				has_pose = cv::solvePnP(obj_pts, corners[i], camera_matrix_, dist_coeffs_,
+										 rvec, tvec, false, cv::SOLVEPNP_IPPE_SQUARE);
+			}
+			const double distance = has_pose ? cv::norm(tvec) : -1.0;
+
+			if (max_tag_distance_ > 0.0) {
+				if (!has_pose) {
+					RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+						"max_tag_distance set but no camera_info/pose yet; dropping tag %d", ids[i]);
+					continue;
+				}
+				if (distance > max_tag_distance_) {
+					continue;  // tag is farther than the configured limit; ignore it
+				}
+			}
+
+			kept_corners.push_back(corners[i]);
+			kept_ids.push_back(ids[i]);
+
 			zed_apriltag::msg::TagInfo info;
 			info.header = msg->header;
 			info.id = ids[i];
 			const auto it = labels_.find(ids[i]);
 			info.label = (it != labels_.end()) ? it->second : "UNKNOWN";
+			info.distance = distance;
 			tag_info_pub_->publish(info);
 
 			apriltag_msgs::msg::AprilTagDetection det;
@@ -156,21 +192,16 @@ private:
 			det.centre.y = center.y;
 			det_array.detections.push_back(det);
 
-			// Pose/TF needs intrinsics from camera_info.
-			if (has_camera_info_) {
-				cv::Vec3d rvec, tvec;
-				if (cv::solvePnP(obj_pts, corners[i], camera_matrix_, dist_coeffs_,
-								 rvec, tvec, false, cv::SOLVEPNP_IPPE_SQUARE)) {
-					publishTransform(msg->header, ids[i], rvec, tvec);
-				}
+			if (has_pose) {
+				publishTransform(msg->header, ids[i], rvec, tvec);
 			}
 		}
 
 		detections_pub_->publish(det_array);
 
 		if (publish_image_ && image_pub_->get_subscription_count() > 0) {
-			if (!ids.empty()) {
-				cv::aruco::drawDetectedMarkers(cv->image, corners, ids);
+			if (!kept_ids.empty()) {
+				cv::aruco::drawDetectedMarkers(cv->image, kept_corners, kept_ids);
 			}
 			image_pub_->publish(*cv_bridge::CvImage(msg->header, "bgr8", cv->image).toImageMsg());
 		}
@@ -229,6 +260,7 @@ private:
 	cv::aruco::ArucoDetector detector_;
 	double tag_size_{0.16};
 	bool publish_image_{true};
+	double max_tag_distance_{0.0};  // meters; <= 0 means unlimited
 	std::map<int, std::string> labels_;
 
 	// Intrinsics from camera_info

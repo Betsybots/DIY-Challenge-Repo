@@ -216,7 +216,7 @@ ros2 topic echo /cloud_registered_body --once
 ros2 topic hz /cloud_registered_body
 ```
 
-The cloud must have `frame_id: base_link`, with +X forward, +Y left, and +Z up.
+The cloud must have `frame_id: base_footprint`, with +X forward, +Y left, and +Z up.
 
 ### 5. Start the Ackermann driver for a moving test
 

@@ -145,7 +145,7 @@ public:
       state_topic_.c_str());
     RCLCPP_INFO(
       get_logger(),
-      "Expected cloud frame/axes: base_link, +x forward, +y left, +z up");
+      "Expected cloud frame/axes: base_footprint, +x forward, +y left, +z up");
   }
 
 private:
@@ -502,10 +502,10 @@ private:
 
   void cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr cloud)
   {
-    if (cloud->header.frame_id != "base_link") {
+    if (cloud->header.frame_id != "base_footprint") {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
-        "Expected cloud frame base_link but received %s",
+        "Expected cloud frame base_footprint but received %s",
         cloud->header.frame_id.c_str());
       return;
     }

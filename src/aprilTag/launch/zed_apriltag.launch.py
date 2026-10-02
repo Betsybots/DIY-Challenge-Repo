@@ -16,7 +16,7 @@ def generate_launch_description():
     image_topic = DeclareLaunchArgument(
         "image_topic", default_value="/zed/zed_node/rgb/color/rect/image")
     camera_info_topic = DeclareLaunchArgument(
-        "camera_info_topic", default_value="/zed/zed_node/rgb/camera_info")
+        "camera_info_topic", default_value="/zed/zed_node/rgb/color/rect/camera_info")
     tag_labels_file = DeclareLaunchArgument(
         "tag_labels_file", default_value=default_labels)
 
