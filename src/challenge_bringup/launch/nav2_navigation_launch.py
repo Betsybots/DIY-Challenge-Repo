@@ -18,7 +18,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, SetEnvironmentVariable
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import LoadComposableNodes
 from launch_ros.actions import Node
@@ -45,15 +45,16 @@ def generate_launch_description():
     behavior_cmd_vel_topic = LaunchConfiguration('behavior_cmd_vel_topic')
     controller_cmd_vel_topic = LaunchConfiguration('controller_cmd_vel_topic')
     behavior_cmd_vel_topic = LaunchConfiguration('behavior_cmd_vel_topic')
+    use_internal_velocity_smoother = LaunchConfiguration('use_internal_velocity_smoother')
 
-    lifecycle_nodes = ['map_server',
-                       'controller_server',
-                       'smoother_server',
-                       'planner_server',
-                       'behavior_server',
-                       'bt_navigator',
-                       'waypoint_follower',
-                       'velocity_smoother']
+    base_lifecycle_nodes = ['map_server',
+                             'controller_server',
+                             'smoother_server',
+                             'planner_server',
+                             'behavior_server',
+                             'bt_navigator',
+                             'waypoint_follower']
+    lifecycle_nodes = base_lifecycle_nodes + ['velocity_smoother']
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -190,6 +191,17 @@ def generate_launch_description():
         default_value='cmd_vel_nav',
         description='Output topic for Nav2 recovery behavior velocity commands')
 
+    declare_use_internal_velocity_smoother_cmd = DeclareLaunchArgument(
+        'use_internal_velocity_smoother',
+        default_value='True',
+        description=(
+            'Whether this file should launch its own velocity_smoother and manage it '
+            'via lifecycle_manager_navigation. Set to False when the including launch '
+            'file already provides its own velocity_smoother (e.g. MPPI obstacle-course '
+            'variants), to avoid a duplicate node name clashing with a second lifecycle '
+            'manager.'
+        ))
+
     load_nodes = GroupAction(
         condition=IfCondition(PythonExpression(['not ', use_composition])),
         actions=[
@@ -269,6 +281,7 @@ def generate_launch_description():
                 respawn_delay=2.0,
                 parameters=node_params,
                 arguments=['--ros-args', '--log-level', log_level],
+                condition=IfCondition(use_internal_velocity_smoother),
                 # remappings=remappings +
                 #         [('cmd_vel', 'cmd_vel_nav'), ('cmd_vel_smoothed', 'cmd_vel_smoothed')]
                 ),
@@ -278,9 +291,20 @@ def generate_launch_description():
                 name='lifecycle_manager_navigation',
                 output='screen',
                 arguments=['--ros-args', '--log-level', log_level],
+                condition=IfCondition(use_internal_velocity_smoother),
                 parameters=[{'use_sim_time': use_sim_time},
                             {'autostart': autostart},
                             {'node_names': lifecycle_nodes}]),
+            Node(
+                package='nav2_lifecycle_manager',
+                executable='lifecycle_manager',
+                name='lifecycle_manager_navigation',
+                output='screen',
+                arguments=['--ros-args', '--log-level', log_level],
+                condition=UnlessCondition(use_internal_velocity_smoother),
+                parameters=[{'use_sim_time': use_sim_time},
+                            {'autostart': autostart},
+                            {'node_names': base_lifecycle_nodes}]),
             Node(
              package='rviz2',
              executable='rviz2',
@@ -377,6 +401,7 @@ def generate_launch_description():
     ld.add_action(declare_log_level_cmd)
     ld.add_action(declare_controller_cmd_vel_topic_cmd)
     ld.add_action(declare_behavior_cmd_vel_topic_cmd)
+    ld.add_action(declare_use_internal_velocity_smoother_cmd)
     # Add the actions to launch all of the navigation nodes
     ld.add_action(load_nodes)
     ld.add_action(load_composable_nodes)

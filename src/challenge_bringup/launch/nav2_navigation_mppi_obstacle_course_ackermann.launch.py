@@ -128,6 +128,10 @@ def generate_launch_description():
                 'log_level': log_level,
                 'controller_cmd_vel_topic': 'cmd_vel_mppi_raw',
                 'behavior_cmd_vel_topic': behavior_cmd_vel_topic,
+                # This file already launches its own velocity_smoother managed by
+                # lifecycle_manager_mppi_smoother; disable the internal one here to
+                # avoid a duplicate node name clashing with lifecycle_manager_navigation.
+                'use_internal_velocity_smoother': 'False',
             }.items(),
         ),
     ])
