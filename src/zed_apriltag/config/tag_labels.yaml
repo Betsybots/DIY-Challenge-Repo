@@ -2,7 +2,7 @@
 
 # Max camera-to-tag distance (meters) to report a tag.
 # <= 0 disables the filter (all detected tags are published).
-max_tag_distance: 1.0
+max_tag_distance: 2.0
 
 tag_labels:
   ID0: "RampDetection"
