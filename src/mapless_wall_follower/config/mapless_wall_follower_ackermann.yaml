@@ -82,7 +82,7 @@ mapless_wall_follower:
     # Fit-tuning rollback: max_x 3.00, wall_lookahead 0.80, fit_residual_threshold 0.08,
     # max_fit_rms 0.06, emergency_stop_distance 0.45, turn_speed 0.25.
     straight_speed: 2.0  # Straight-zone ceiling.
-    turn_speed: 0.35  # Ceiling with one wall valid, only in bends tighter than tight_turn_radius.
+    turn_speed: 0.60  # Ceiling with one wall valid, only in bends tighter than tight_turn_radius (sim: 0.8 hits wall).
     tight_turn_radius: 6.10  # m (20 ft): one-wall bends wider than this keep straight_speed (curve limit still applies).
     min_speed: 0.20  # Floor while driving so the steering keeps authority.
     max_lateral_acceleration: 0.50  # TUNE: main bend-speed knob in m/s^2 (tip-over ~6.6 m/s^2).

@@ -351,8 +351,8 @@ See the YAML header for the staged speed progression and expected bend speeds.
 
 - `turn_enter_front_distance`: distance at which right-wall mode adds its
   right-turn steering bias.
-- `emergency_stop_distance`: obstacle distance along the commanded arc that
-  starts the reverse recovery.
+- `emergency_stop_distance`: obstacle distance along the commanded arc, inside
+  `stop_half_width`, that starts the reverse recovery.
 - `recovery_reverse_distance`, `recovery_reverse_speed`: how far and how fast
   to back up. Distance is integrated from the command (no odometry).
 - `recovery_curvature`: steering while reversing; higher turns away more.
@@ -363,7 +363,14 @@ See the YAML header for the staged speed progression and expected bend speeds.
 The recovery publishes negative `linear.x` with `angular.z = linear.x *
 curvature`. Verify on blocks that the Ackermann driver reverses and that the
 nose swings away from the wall; nothing behind the robot is checked.
-- `front_half_width`: half-width of the front band and of the swept arc corridor.
+- `front_half_width`: half-width of the front band and of the swept arc corridor
+  used for the clearance speed limit.
+- `stop_half_width`: narrower swept corridor for the hard stop (defaults to
+  `front_half_width`). A wall beside the body inside the wider band only slows
+  the robot instead of latching `EMERGENCY_FRONT_STOP`.
+- `wall_keep_out_distance`, `wall_keep_out_gain`: when a wall is closer than the
+  keep-out distance at the robot, add `gain * (keep_out - distance)` curvature
+  away from it. `0` gain disables.
 - `cloud_timeout`: maximum accepted age of the latest point cloud.
 
 Do not reduce `emergency_stop_distance` merely to avoid false stops. First
