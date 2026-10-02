@@ -8,12 +8,16 @@
         # FAST-LIO2 frontend parameters
 
         # The frontend uses an iterated EKF to fit the current scan to the map.
-        # Raised from 3: more iterated-EKF passes per scan improve plane-fit
-        # convergence during fast rotation, at a small CPU cost.
-        max_iteration: 7                     #5 and 10 working good/best
+        # More iterated-EKF passes per scan improve plane-fit convergence during
+        # fast rotation, at a CPU cost. 5 is the sweet spot measured on this
+        # robot ("5 and 10 working good/best"); 7 only added latency.
+        max_iteration: 5
         filter_size_surf: 0.1                #0.3                # Voxel filter size for surf points
         filter_size_map:  0.1                #0.3                # Voxel filter size for the map points
-        cube_side_length: 500.0              # Side length of the cube used for voxel grid filtering, units in meters. This is used to limit the size of the map and reduce memory usage.
+        # Side length of the local-map cube in meters. 100 m is more than enough
+        # for a short-range (3-5 m useful range) indoor robot and keeps the
+        # ikd-tree small -> faster nearest-neighbor searches, lower memory.
+        cube_side_length: 100.0
         
         # Enable or disable runtime position logging. If enabled, the position will be logged to a file in the PCD directory. This is useful for debugging and analysis, but may slow down the system. If disabled, the position will not be logged to a file.
         runtime_pos_log_enable: false
@@ -26,6 +30,10 @@
             imu_topic:  "/imu/data"
             time_sync_en: false                 # Enable if your LiDAR and IMU are time-synchronized (requires accurate timestamps)
             publish_tf: false
+            # The ZED2i IMU is NOT hardware-synced with the QT64; both are
+            # stamped on the same host, so the residual offset is a small
+            # constant. If deskew looks wrong (smearing during rotation),
+            # calibrate this with hku-mars/LiDAR_IMU_Init and set it here.
             time_offset_lidar_to_imu: 0.0       # Time offset from LiDAR to IMU in seconds
             # Verify your IMU driver's angular_velocity units before running:
             # treating deg/s data as rad/s (or vice versa) causes large
@@ -42,28 +50,25 @@
             timestamp_unit: 0            # 0-second, 1-millisecond, 2-microsecond, 3-nanosecond
             scan_rate: 10                # Hz
             blind: 0.5                   # Blind zone of the LiDAR in meters (QT64 has a blind zone of ~1 m)
-            # filtered_cloud_scan_line: 32
-            # filtered_cloud_ring_min: 5
-            # filtered_cloud_ring_max: 36
-            # filtered_cloud_detection_range: 3.0
-            # filtered_cloud_fov_min_angle: 30.0
-            # filtered_cloud_fov_max_angle: 150.0
             
         mapping:
-            acc_cov: 0.001
-            # gyr_cov is the gyro measurement/process-noise variance in
-            # (rad/s)^2: how much the EKF trusts gyro-driven propagation
-            # between LiDAR corrections. 0.1 is the standard FAST-LIO default.
-            # A much smaller value makes the
-            # filter over-trust raw gyro integration, so small real angular
-            # noise/wiggle (or any residual imu_gyr_unit mismatch) gets
-            # corrected more slowly by the LiDAR and shows up as the map/path
-            # swinging even while the platform is stationary.
-            gyr_cov: 0.001
+            # acc_cov / gyr_cov are the IMU measurement/process-noise variances:
+            # how much the EKF trusts IMU-driven propagation between LiDAR
+            # corrections. 0.1 is the standard FAST-LIO default and is right for
+            # a consumer MEMS IMU like the ZED2i's. The previous 0.001 made the
+            # filter over-trust raw IMU integration by 100x, so real IMU noise
+            # (or any residual unit/extrinsic mismatch) was corrected far too
+            # slowly by the LiDAR -- showing up as the odometry/TF "flying away"
+            # and the map swinging even while the platform was stationary.
+            acc_cov: 0.1
+            gyr_cov: 0.1
             b_acc_cov: 0.0001
             b_gyr_cov: 0.0001
             fov_degree: 360.0   # Field of view of the LiDAR in degrees
-            det_range: 10.0      #30.0   # Detection range of the LiDAR in meters (QT64 is a short-range LiDAR, ~30 m max)
+            # Useful detection range of this deployment in meters. The QT64 is
+            # rated to ~25-30 m but this application only relies on 3-5 m
+            # returns; 5.0 keeps the local-map maintenance window tight.
+            det_range: 5.0
             # Online LiDAR-IMU extrinsic estimation needs rich 6-DOF excitation
             # (rotation about all axes). Motion that is mostly translational
             # (e.g. back-and-forth driving) cannot observe the rotational
@@ -104,7 +109,6 @@
             scan_publish_en: true
             dense_publish_en: false
             scan_bodyframe_pub_en: true # Publish the scan in the body frame of the vehicle
-            filtered_cloud_pub_en: false
 
         pcd_save:
             pcd_save_en: false
@@ -117,22 +121,21 @@
             recovery_enable: true
             recovery_lidar_gap: 1.0          # seconds; enter recovery after this much time without a valid LiDAR scan
             recovery_good_scans: 5            # consecutive good scans required before map updates resume
-            # `false`, which disables this entire gate (and the
-            # shock-rollback fix + gyro-rate criterion below, both built
-            # specifically for this) -- directly contradicts the very next
-            # comment's own stated intent ("Leave the gate enabled..."). Flipped
-            # to `true` (the code's own declare_parameter default, see
-            # laserMapping.cpp) since a disabled gate is a direct, fact-checked
-            # explanation for why fast linear/angular motion produces badly
-            # distorted scans (map_localizer rough fitness scores up to ~1.2,
-            # vs. a 0.2 threshold) with nothing catching/rolling them back.
-            reject_low_quality_scans: false
-            # Leave the gate enabled, but keep it realistic for a moving vehicle.
-            # A 4.0 m/s^2 threshold is too strict for normal acceleration during
-            # turns / starts / stops, which causes false shock detections and scan
-            # rejection even when the cloud itself is valid.
-            min_effective_features: 10                # 10
-            max_mean_residual:  0.1                  # 1.0
+            # Enable the gate: without it, a shock-corrupted or feature-starved
+            # scan's bad correction goes straight into the published odometry/TF
+            # and the persistent map (a direct, confirmed cause of sudden pose
+            # jumps and badly distorted scans slipping into the map during fast
+            # linear/angular motion). The shock-rollback fix and the gyro-rate
+            # criterion below only do anything when this is true.
+            reject_low_quality_scans: true
+            # Keep the gate realistic for a moving vehicle so it doesn't
+            # false-positive on normal driving:
+            min_effective_features: 10
+            # Mean point-to-plane residual (m) above which a scan is rejected.
+            # 0.1 was too strict for real motion (good indoor scans often sit
+            # just under it), which starves the map of updates; 0.3 still
+            # rejects genuinely mis-registered scans.
+            max_mean_residual:  0.3
             shock_accel_deviation_threshold: 8.0    # 8.0 m/s^2 deviation from gravity; raise to avoid false positives
             shock_process_noise_scale: 25.0           # 25.0 temporary IMU process-noise multiplier during a shock
             # Catches fast rotations (e.g. an in-place spin) that
@@ -166,6 +169,29 @@
             # not have fully reconverged yet -- that's what was causing the duplicated
             # floor/wall layer right at bumps.
             shock_cooldown: 0.3 # seconds to keep rejecting scans after a shock
+
+            # --- Jump-gated rollback (replaces the old "reject = IMU-only" behavior) ---
+            # The filter is rolled back to the IMU-predicted pose ONLY when the LiDAR
+            # correction itself is implausibly large, and never more than
+            # max_consecutive_rollbacks times in a row. A suspect scan whose correction
+            # is sane keeps its LiDAR update (it is only held out of the map): on a
+            # consumer MEMS IMU like the ZED2i, IMU-only dead reckoning diverges faster
+            # than a slightly distorted LiDAR correction ever would. Unconditional
+            # rollback was a death spiral: reject -> drift on IMU -> next scan's residual
+            # higher -> rejected too -> odometry flies away.
+            max_pose_jump: 0.10              # m; per-scan LiDAR position-correction limit
+            max_rot_jump: 0.15               # rad (~8.6 deg); per-scan rotation-correction limit
+            max_consecutive_rollbacks: 3     # after this many rollbacks in a row, accept the LiDAR correction to re-converge
+
+            # --- Degeneracy (localizability) detection, Zhang & Singh ICRA 2016 ---
+            # Warns when the scan geometry does not constrain translation along some
+            # direction (min normalized eigenvalue of the plane-normal Gramian below
+            # this threshold): corridors / single dominant plane. Raise toward 0.1 if
+            # you want earlier warnings. degeneracy_hold_map: true additionally keeps
+            # degenerate scans out of the map (prevents smearing the map along the
+            # sliding direction, at the cost of not extending the map while degenerate).
+            degeneracy_min_eig: 0.05
+            degeneracy_hold_map: false
 
         # Absolute path for the final full-map PCD save (on shutdown or /map_save
         # service call). Used as-is since it starts with "/". Leave empty ("") to

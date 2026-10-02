@@ -1,55 +1,31 @@
 # ═════════════════════════════════════════════════════════════════════════
-# lio_ekf.yaml — STANDALONE robot_localization EKF: odom -> base_footprint
+# lio_ekf_zed_primary.yaml — A/B-TEST VARIANT of lio_ekf.yaml: ZED-primary
 # ═════════════════════════════════════════════════════════════════════════
-# STATUS: wired into launch/lio_ekf.launch.py:
-#   ros2 launch fast_lio_ros2 lio_ekf.launch.py
-# or run directly:
-#   ros2 run robot_localization ekf_node --ros-args \
-#     --params-file src/diy_localization/fast_lio_ros2/config/lio_ekf.yaml \
-#     -r /odometry/filtered:=/odom
+# Same EKF, same sensors, but the absolute x/y/yaw backbone is ZED visual
+# odometry instead of FAST-LIO2. Use this variant if, driving your outdoor
+# course with the default (LIO-primary) config, FAST-LIO2 logs frequent
+#   "Degenerate scan geometry ..."
+# warnings — that means the arena leaves too little structure inside the
+# QT64's used 3-5 m range and VO is the better backbone there.
 #
-# DO NOT run this at the same time as diy_state_estimate's ekf_fusion.yaml
-# (diy_state_estimate/launch/ekf_fusion.launch.py). Both nodes publish the
-# odom -> base_footprint transform; running both means two publishers
-# fight over the same TF edge and localization breaks. Pick one.
-# Also keep common.publish_tf: false in qt64.yaml while this EKF runs.
+# Run it with:
+#   ros2 launch fast_lio_ros2 lio_ekf.launch.py \
+#     ekf_config:=<path-to>/share/fast_lio_ros2/config/lio_ekf_zed_primary.yaml
 #
-# DESIGN (LIO-primary, outdoor arena)
-#   FAST-LIO2's /Odometry is the absolute-pose backbone (x, y, yaw):
-#   geometric scan-to-map odometry with internal jump gating, rollback cap
-#   and degeneracy detection (see qt64.yaml frontend: section) is the most
-#   trustworthy odom-frame pose source on this robot. The remaining sensors
-#   are fused as INCREMENTS/TWISTS only, so they stabilize the filter and
-#   carry it through LIO-degenerate stretches (open outdoor ground with few
-#   returns inside the QT64's used 3-5 m range) without ever yanking the
-#   absolute pose:
-#     * /zed/zed_node/odom is fused DIFFERENTIALLY (x, y). Two reasons it
-#       must not be an absolute source: it is the CAMERA's pose, not
-#       base_footprint's (~0.30 m lever-arm error after a 90 deg turn on
-#       this robot's 0.21 m offset), and ZED VO can jump/teleport on
-#       relocalization events -- as an ungated absolute input those jumps
-#       went straight into odom->base_footprint.
-#     * /wheel_odom contributes body twist (vx, vy) only.
-#     * The ZED gyro contributes vyaw only. Its SDK-fused ABSOLUTE yaw is
-#       in the ZED's own reference frame and fights both VO and LIO yaw,
-#       so it is not fused.
+# REQUIRED ZED-side settings for this to be safe as an absolute source:
+#   * pos_tracking.area_memory: false  (ZED wrapper) — otherwise the ZED
+#     silently teleports its pose on relocalization events, and an absolute
+#     ungated backbone sends that jump straight into odom->base_footprint.
+#   * Known limitation: /zed/zed_node/odom is the CAMERA's pose, not
+#     base_footprint's (~0.30 m lever-arm error after a 90 deg turn on this
+#     robot's 0.21 m camera offset, measured in this repo's bag tests). If
+#     that error matters, run diy_state_estimate's zed_base_odom_relay node
+#     standalone and point odom0 at its corrected output topic instead.
 #
-# GATING NOTE (learned the hard way): robot_localization ignores
-#   odomN_pose_rejection_threshold when odomN_differential is true -- the
-#   pose is converted to a twist and only odomN_twist_rejection_threshold
-#   applies. The previous revision's "very tight pose gate (1.0)" on the
-#   differential FAST-LIO input was therefore dead config.
-#   /Odometry (odom0) is deliberately NOT gated here: FAST-LIO publishes a
-#   very small covariance once converged, so a Mahalanobis pose gate would
-#   reject legitimate corrections after any disagreement and diverge.
-#   Jump protection for LIO lives inside FAST-LIO itself
-#   (frontend.max_pose_jump / max_consecutive_rollbacks in qt64.yaml).
-#
-# TRUST LEVELS -> IMPLEMENTATION
-#   odom0 /Odometry (FAST-LIO2)     HIGH     absolute x, y, yaw; no gate
-#   odom1 /zed/zed_node/odom        MEDIUM   differential x, y; twist gate 2.0
-#   odom2 /wheel_odom               MEDIUM   vx, vy twist; twist gate 2.5
-#   imu0  /zed/zed_node/imu/data    MEDIUM   vyaw only; twist gate 3.0
+# Only ONE input may be the absolute x/y/yaw source — FAST-LIO2 is demoted
+# here to differential x/y increments (twist-gated; remember that
+# robot_localization ignores pose_rejection_threshold for differential
+# inputs, only the twist threshold applies).
 #
 # Fused state order (every *_config vector and both covariance matrices):
 #   [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
@@ -74,47 +50,44 @@ ekf_filter_node:
     base_link_frame: base_footprint
     world_frame: odom
 
-    # FAST-LIO2 (odom0) can arrive after the scan time it describes; let the
+    # FAST-LIO2 (odom1) can arrive after the scan time it describes; let the
     # filter re-run from that point instead of dropping/misordering it.
     smooth_lagged_data: true
     history_length: 1.0
 
-    # -- odom0: FAST-LIO2 -- HIGH TRUST (absolute pose backbone) ------------
-    # Absolute x, y, yaw. Non-differential: this is the only sensor whose
-    # pose is directly expressed in the odom frame against the LiDAR map.
-    # Not gated here -- see GATING NOTE in the header; jump protection is
-    # implemented inside FAST-LIO itself (qt64.yaml frontend: section).
-    odom0: /Odometry
+    # -- odom0: ZED visual odometry -- HIGH TRUST (absolute pose backbone) --
+    # Absolute x, y, yaw. Ungated: an absolute backbone with a Mahalanobis
+    # gate can lock itself out after any disagreement and diverge. See the
+    # REQUIRED ZED-side settings in the header (area_memory off, lever arm).
+    odom0: /zed/zed_node/odom
     odom0_config: [true,  true,  false,
                    false, false, true,
                    false, false, false,
                    false, false, false,
                    false, false, false]
-    odom0_queue_size: 10
+    odom0_queue_size: 20
     odom0_nodelay: true
     odom0_differential: false
     odom0_relative: false
 
-    # -- odom1: ZED visual odometry -- MEDIUM TRUST, differential x,y -------
-    # Differential so it contributes pose INCREMENTS (converted to twist by
-    # robot_localization) instead of its absolute camera-frame pose: that
-    # removes the ZED relocalization teleports and most of the camera
-    # lever-arm error from the fused state. Yaw increments are left out --
-    # the gyro (imu0 vyaw) is a better rotation-rate source. Gated as twist
-    # (the only gate that applies to differential data).
-    odom1: /zed/zed_node/odom
+    # -- odom1: FAST-LIO2 -- MEDIUM TRUST, differential x,y -----------------
+    # Pose increments only (converted to twist internally). Still valuable:
+    # LiDAR increments are immune to lighting/glare and carry the filter
+    # through VO dropouts. Gated as twist -- the only gate that applies to
+    # differential data.
+    odom1: /Odometry
     odom1_config: [true,  true,  false,
                    false, false, false,
                    false, false, false,
                    false, false, false,
                    false, false, false]
-    odom1_queue_size: 20
+    odom1_queue_size: 10
     odom1_nodelay: true
     odom1_differential: true
     odom1_relative: false
     odom1_twist_rejection_threshold: 2.0
 
-    # -- odom2: wheel odometry -- MEDIUM TRUST, vx/vy only (as requested) --
+    # -- odom2: wheel odometry -- MEDIUM TRUST, vx/vy only ------------------
     odom2: /wheel_odom
     odom2_config: [false, false, false,
                    false, false, false,
@@ -128,11 +101,10 @@ ekf_filter_node:
     odom2_twist_rejection_threshold: 2.5
 
     # -- imu0: ZED IMU -- MEDIUM TRUST, gyro rate only -----------------------
-    # vyaw only. The SDK-fused ABSOLUTE orientation lives in the ZED's own
-    # reference frame and fights the LIO/VO yaw, so it is not fused (same
-    # conclusion as ekf_fusion.yaml for this physical gyro). Roll/pitch are
-    # ignored by two_d_mode anyway. No linear acceleration (raw ax/ay are
-    # gravity-contaminated on slopes -- relevant outdoors).
+    # vyaw only; the SDK-fused absolute yaw lives in the ZED's own reference
+    # frame and would fight odom0's visual yaw. Roll/pitch are ignored by
+    # two_d_mode anyway. No linear acceleration (gravity-contaminated on
+    # slopes).
     imu0: /zed/zed_node/imu/data
     imu0_config: [false, false, false,
                   false, false, false,
@@ -149,8 +121,7 @@ ekf_filter_node:
     use_control: false
 
     # -- Process noise Q (diagonal) -----------------------------------------
-    # Copied from diy_state_estimate/config/ekf_fusion.yaml as this repo's
-    # established starting point.
+    # Identical to lio_ekf.yaml (this repo's established starting point).
     process_noise_covariance: [0.05, 0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                 0.0,  0.05,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                 0.0,  0.0,   0.06, 0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
@@ -167,11 +138,8 @@ ekf_filter_node:
                                 0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,
                                 0.0,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.015]
 
-    # NOTE: robot_localization's template ships this diagonal as 1e-9 (an
-    # extremely confident "I know the initial state exactly" prior), which
-    # is a known trigger for immediate NaN on the first update with
-    # two_d_mode: true (confirmed in ekf_fusion.yaml's own testing). 1.0 is
-    # the standard, safer starting uncertainty.
+    # 1e-9 here is a known trigger for immediate NaN on the first update with
+    # two_d_mode: true; 1.0 is the standard, safer starting uncertainty.
     initial_estimate_covariance: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                                    0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                                    0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,

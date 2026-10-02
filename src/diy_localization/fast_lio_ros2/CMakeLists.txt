@@ -17,22 +17,24 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 message("Current CPU archtecture: ${CMAKE_SYSTEM_PROCESSOR}")
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
-  include(ProcessorCount)
-  ProcessorCount(N)
-  message("Processer number:  ${N}")
+# Enable OpenMP-parallel sections (scan-to-map matching, map update, cloud
+# publishing) on every architecture with enough cores -- previously this was
+# x86-only, leaving ARM boards (e.g. Jetson) fully single-threaded, and was
+# hard-capped at 3 threads. Two cores are reserved for the ROS executor
+# threads (sensor callbacks + scan processing).
+include(ProcessorCount)
+ProcessorCount(N)
+message("Processor number: ${N}")
 
-  if(N GREATER 4)
-    add_definitions(-DMP_EN)
-    add_definitions(-DMP_PROC_NUM=3)
-    message("core for MP: 3")
-  elseif(N GREATER 3)
-    add_definitions(-DMP_EN)
-    add_definitions(-DMP_PROC_NUM=2)
-    message("core for MP: 2")
-  else()
-    add_definitions(-DMP_PROC_NUM=1)
+if(N GREATER 3)
+  math(EXPR MP_PROC "${N} - 2")
+  if(MP_PROC GREATER 6)
+    # Diminishing returns past ~6 threads for these per-scan loops.
+    set(MP_PROC 6)
   endif()
+  add_definitions(-DMP_EN)
+  add_definitions(-DMP_PROC_NUM=${MP_PROC})
+  message("OpenMP threads for parallel sections: ${MP_PROC}")
 else()
   add_definitions(-DMP_PROC_NUM=1)
 endif()
@@ -40,9 +42,6 @@ endif()
 find_package(OpenMP QUIET)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}   ${OpenMP_C_FLAGS}")
-
-find_package(PythonLibs REQUIRED)
-find_path(MATPLOTLIB_CPP_INCLUDE_DIRS "matplotlibcpp.h")
 
 # ROS dependencies
 find_package(ament_cmake REQUIRED)
@@ -99,8 +98,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64|arm64|ARM64)")
   target_compile_options(fastlio_mapping PRIVATE -O1 -g0)
 endif()
 
-target_link_libraries(fastlio_mapping ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} Eigen3::Eigen)
-target_include_directories(fastlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
+target_link_libraries(fastlio_mapping ${PCL_LIBRARIES} Eigen3::Eigen)
 
 list(APPEND EOL_LIST "foxy" "galactic" "eloquent" "dashing" "crystal")
 

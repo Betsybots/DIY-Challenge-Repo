@@ -58,10 +58,10 @@
 #include <chrono>
 #include <iomanip>
 #include <unistd.h>
-#include <Python.h>
 #include <so3_math.h>
 #include <rclcpp/rclcpp.hpp>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 #include "IMU_Processing.hpp"
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
@@ -93,14 +93,6 @@ int    kdtree_size_st = 0, kdtree_size_end = 0, add_point_size = 0, kdtree_delet
 bool   runtime_pos_log = false, pcd_save_en = false, time_sync_en = false, extrinsic_est_en = true, path_en = true, publish_tf = true;
 /**************************/
 
-bool   filtered_cloud_pub_en = false;
-int    filtered_cloud_scan_line = 32;
-int    filtered_cloud_ring_min = 5;
-int    filtered_cloud_ring_max = 36;
-double filtered_cloud_detection_range = 3.0;
-double filtered_cloud_fov_min_angle = 30.0;
-double filtered_cloud_fov_max_angle = 150.0;
-
 // Frontend scan-quality gating: keeps a shock-damaged or feature-starved scan
 // out of the persistent ikd-tree map and off the published clouds, without
 // disrupting odometry/TF continuity for downstream consumers (loop_pgo).
@@ -112,6 +104,25 @@ double shock_process_noise_scale = 25.0;
 double shock_gyro_threshold = 2.5;
 double max_imu_gap = 0.05;
 double shock_cooldown = 0.3;
+// Jump-gated rollback: roll the filter back to the IMU-predicted pose only when
+// the LiDAR correction itself is physically implausible, and never more than
+// max_consecutive_rollbacks times in a row. Unconditional rollback of every
+// "suspect" scan turns one bad event into a death spiral on a consumer IMU:
+// IMU-only dead reckoning diverges within a scan or two, which drives the next
+// scan's residual even higher, which gets it rejected too, and so on until the
+// odometry has flown off completely.
+double max_pose_jump = 0.10;             // m; max plausible per-scan LiDAR position correction
+double max_rot_jump = 0.15;              // rad; max plausible per-scan LiDAR rotation correction
+int    max_consecutive_rollbacks = 3;
+int    consecutive_rollback_count = 0;
+// Degeneracy (localizability) detection, after Zhang & Singh, ICRA 2016 ("On
+// Degeneracy of Optimization-based State Estimation"): monitors the smallest
+// eigenvalue of the normalized plane-normal Gramian sum(n n^T)/N -- the
+// translation block of the point-to-plane Gauss-Newton Hessian. Near-zero means
+// the environment does not constrain translation along that eigenvector (long
+// corridor, single dominant plane) and the pose can silently slide.
+double degeneracy_min_eig = 0.05;        // normalized eigenvalue threshold (0..1)
+bool   degeneracy_hold_map = false;      // if true, degenerate scans are kept out of the map
 bool   recovery_enable = true;
 double recovery_lidar_gap = 0.75;
 int    recovery_good_scans = 3;
@@ -151,12 +162,10 @@ vector<double>       extrinT(3, 0.0);
 vector<double>       extrinR(9, 0.0);
 deque<double>                     time_buffer;
 deque<PointCloudXYZI::Ptr>        lidar_buffer;
-deque<PointCloudXYZI::Ptr>        lidar_buffer_filtered;
 deque<sensor_msgs::msg::Imu::ConstSharedPtr> imu_buffer;
 
 PointCloudXYZI::Ptr featsFromMap(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_undistort(new PointCloudXYZI());
-PointCloudXYZI::Ptr feats_undistort_filtered(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_down_body(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_down_world(new PointCloudXYZI());
 PointCloudXYZI::Ptr normvec(new PointCloudXYZI(100000, 1));
@@ -188,7 +197,6 @@ geometry_msgs::msg::Quaternion geoQuat;
 geometry_msgs::msg::PoseStamped msg_body_pose;
 
 shared_ptr<Preprocess> p_pre(new Preprocess());
-shared_ptr<Preprocess> p_pre_filtered(new Preprocess());
 shared_ptr<ImuProcess> p_imu(new ImuProcess());
 
 // No custom SIGINT handler is installed (see file header comment above):
@@ -276,31 +284,6 @@ void RGBpointBodyLidarToIMU(PointType const * const pi, PointType * const po)
     po->intensity = pi->intensity;
 }
 
-static bool keep_filtered_body_point(const PointType &point)
-{
-    if (filtered_cloud_detection_range > 0.0)
-    {
-        const double range = std::sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
-        if (range > filtered_cloud_detection_range)
-        {
-            return false;
-        }
-    }
-
-    double angle_deg = std::atan2(point.y, point.x) * 180.0 / M_PI;
-    if (angle_deg < 0.0)
-    {
-        angle_deg += 360.0;
-    }
-
-    if (filtered_cloud_fov_min_angle <= filtered_cloud_fov_max_angle)
-    {
-        return angle_deg >= filtered_cloud_fov_min_angle && angle_deg <= filtered_cloud_fov_max_angle;
-    }
-
-    return angle_deg >= filtered_cloud_fov_min_angle || angle_deg <= filtered_cloud_fov_max_angle;
-}
-
 void points_cache_collect()
 {
     PointVector points_history;
@@ -378,14 +361,6 @@ void standard_pcl_cbk(const sensor_msgs::msg::PointCloud2::UniquePtr msg)
     auto msg_full = std::make_unique<sensor_msgs::msg::PointCloud2>(*msg);
     p_pre->process(msg_full, ptr);
     lidar_buffer.push_back(ptr);
-
-    if (filtered_cloud_pub_en)
-    {
-        PointCloudXYZI::Ptr ptr_filtered(new PointCloudXYZI());
-        auto msg_filtered = std::make_unique<sensor_msgs::msg::PointCloud2>(*msg);
-        p_pre_filtered->process(msg_filtered, ptr_filtered);
-        lidar_buffer_filtered.push_back(ptr_filtered);
-    }
 
     time_buffer.push_back(cur_time);
     last_timestamp_lidar = cur_time;
@@ -517,19 +492,6 @@ bool sync_packages(MeasureGroup &meas)
     }
 
     lidar_buffer.pop_front();
-    if (filtered_cloud_pub_en)
-    {
-        if (lidar_buffer_filtered.empty())
-        {
-            return false;
-        }
-        meas.lidar_filtered = lidar_buffer_filtered.front();
-        lidar_buffer_filtered.pop_front();
-    }
-    else
-    {
-        meas.lidar_filtered->clear();
-    }
     time_buffer.pop_front();
     lidar_pushed = false;
     return true;
@@ -542,6 +504,17 @@ void map_incremental()
     PointVector PointNoNeedDownsample;
     PointToAdd.reserve(feats_down_size);
     PointNoNeedDownsample.reserve(feats_down_size);
+
+    // Phase 1 (parallel): world-frame transform + per-point insertion decision.
+    // Each iteration only reads shared state and writes to its own index, so it
+    // is safe to run on all OpenMP worker threads.
+    // Decision codes: 0 = skip, 1 = add with ikd-tree downsampling, 2 = add as-is.
+    static std::vector<uint8_t> add_decision;
+    add_decision.assign(feats_down_size, 1);
+    #ifdef MP_EN
+        omp_set_num_threads(MP_PROC_NUM);
+        #pragma omp parallel for
+    #endif
     for (int i = 0; i < feats_down_size; i++)
     {
         /* transform to world frame */
@@ -550,32 +523,34 @@ void map_incremental()
         if (!Nearest_Points[i].empty() && flg_EKF_inited)
         {
             const PointVector &points_near = Nearest_Points[i];
-            bool need_add = true;
-            BoxPointType Box_of_Point;
-            PointType downsample_result, mid_point; 
+            PointType mid_point;
             mid_point.x = floor(feats_down_world->points[i].x/filter_size_map_min)*filter_size_map_min + 0.5 * filter_size_map_min;
             mid_point.y = floor(feats_down_world->points[i].y/filter_size_map_min)*filter_size_map_min + 0.5 * filter_size_map_min;
             mid_point.z = floor(feats_down_world->points[i].z/filter_size_map_min)*filter_size_map_min + 0.5 * filter_size_map_min;
             float dist  = calc_dist(feats_down_world->points[i],mid_point);
             if (fabs(points_near[0].x - mid_point.x) > 0.5 * filter_size_map_min && fabs(points_near[0].y - mid_point.y) > 0.5 * filter_size_map_min && fabs(points_near[0].z - mid_point.z) > 0.5 * filter_size_map_min){
-                PointNoNeedDownsample.push_back(feats_down_world->points[i]);
+                add_decision[i] = 2;
                 continue;
             }
+            uint8_t decision = 1;
             for (int readd_i = 0; readd_i < NUM_MATCH_POINTS; readd_i ++)
             {
-                if (points_near.size() < NUM_MATCH_POINTS) break;
+                if ((int)points_near.size() < NUM_MATCH_POINTS) break;
                 if (calc_dist(points_near[readd_i], mid_point) < dist)
                 {
-                    need_add = false;
+                    decision = 0;
                     break;
                 }
             }
-            if (need_add) PointToAdd.push_back(feats_down_world->points[i]);
+            add_decision[i] = decision;
         }
-        else
-        {
-            PointToAdd.push_back(feats_down_world->points[i]);
-        }
+    }
+
+    // Phase 2 (serial): collect points in deterministic order.
+    for (int i = 0; i < feats_down_size; i++)
+    {
+        if (add_decision[i] == 1)      PointToAdd.push_back(feats_down_world->points[i]);
+        else if (add_decision[i] == 2) PointNoNeedDownsample.push_back(feats_down_world->points[i]);
     }
 
     double st_time = omp_get_wtime();
@@ -596,6 +571,10 @@ void publish_frame_world(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Share
         PointCloudXYZI::Ptr laserCloudWorld( \
                         new PointCloudXYZI(size, 1));
 
+        // Independent per-index writes: safe to parallelize.
+        #ifdef MP_EN
+            #pragma omp parallel for
+        #endif
         for (int i = 0; i < size; i++)
         {
             RGBpointBodyToWorld(&laserCloudFullRes->points[i], \
@@ -620,6 +599,9 @@ void publish_frame_world(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Share
         PointCloudXYZI::Ptr laserCloudWorld( \
                         new PointCloudXYZI(size, 1));
 
+        #ifdef MP_EN
+            #pragma omp parallel for
+        #endif
         for (int i = 0; i < size; i++)
         {
             RGBpointBodyToWorld(&feats_undistort->points[i], \
@@ -647,6 +629,9 @@ void publish_frame_body(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Shared
     int size = feats_undistort->points.size();
     PointCloudXYZI::Ptr laserCloudIMUBody(new PointCloudXYZI(size, 1));
 
+    #ifdef MP_EN
+        #pragma omp parallel for
+    #endif
     for (int i = 0; i < size; i++)
     {
         RGBpointBodyLidarToIMU(&feats_undistort->points[i], \
@@ -659,30 +644,6 @@ void publish_frame_body(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Shared
     laserCloudmsg.header.frame_id = "base_footprint";
     pubLaserCloudFull_body->publish(laserCloudmsg);
     publish_count -= PUBFRAME_PERIOD;
-}
-
-void publish_frame_body_filtered(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudFull_body_filtered)
-{
-    int size = feats_undistort_filtered->points.size();
-    PointCloudXYZI::Ptr laserCloudIMUBodyFiltered(new PointCloudXYZI());
-    laserCloudIMUBodyFiltered->points.reserve(size);
-
-    for (int i = 0; i < size; i++)
-    {
-        PointType point_in_body;
-        RGBpointBodyLidarToIMU(&feats_undistort_filtered->points[i], &point_in_body);
-        if (!keep_filtered_body_point(point_in_body))
-        {
-            continue;
-        }
-        laserCloudIMUBodyFiltered->points.push_back(point_in_body);
-    }
-
-    sensor_msgs::msg::PointCloud2 laserCloudmsg;
-    pcl::toROSMsg(*laserCloudIMUBodyFiltered, laserCloudmsg);
-    laserCloudmsg.header.stamp = get_ros_time(lidar_end_time);
-    laserCloudmsg.header.frame_id = "base_footprint";
-    pubLaserCloudFull_body_filtered->publish(laserCloudmsg);
 }
 
 void publish_effect_world(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudEffect)
@@ -997,7 +958,6 @@ public:
         this->declare_parameter<bool>("publish.scan_publish_en", true);
         this->declare_parameter<bool>("publish.dense_publish_en", true);
         this->declare_parameter<bool>("publish.scan_bodyframe_pub_en", true);
-        this->declare_parameter<bool>("publish.filtered_cloud_pub_en", true);
         this->declare_parameter<bool>("publish.tf_en", false);
         this->declare_parameter<int>("max_iteration", 4);
         this->declare_parameter<string>("map_file_path", "");
@@ -1024,12 +984,6 @@ public:
         this->declare_parameter<int>("preprocess.ring_max", 63);
         this->declare_parameter<int>("preprocess.timestamp_unit", US);
         this->declare_parameter<int>("preprocess.scan_rate", 10);
-        this->declare_parameter<int>("preprocess.filtered_cloud_scan_line", 32);
-        this->declare_parameter<int>("preprocess.filtered_cloud_ring_min", 5);
-        this->declare_parameter<int>("preprocess.filtered_cloud_ring_max", 36);
-        this->declare_parameter<double>("preprocess.filtered_cloud_detection_range", 3.0);
-        this->declare_parameter<double>("preprocess.filtered_cloud_fov_min_angle", 30.0);
-        this->declare_parameter<double>("preprocess.filtered_cloud_fov_max_angle", 150.0);
         this->declare_parameter<int>("point_filter_num", 2);
         this->declare_parameter<bool>("feature_extract_enable", false);
         this->declare_parameter<bool>("runtime_pos_log_enable", false);
@@ -1046,6 +1000,11 @@ public:
         this->declare_parameter<double>("frontend.shock_gyro_threshold", 2.5);
         this->declare_parameter<double>("frontend.max_imu_gap", 0.05);
         this->declare_parameter<double>("frontend.shock_cooldown", 0.3);
+        this->declare_parameter<double>("frontend.max_pose_jump", 0.10);
+        this->declare_parameter<double>("frontend.max_rot_jump", 0.15);
+        this->declare_parameter<int>("frontend.max_consecutive_rollbacks", 3);
+        this->declare_parameter<double>("frontend.degeneracy_min_eig", 0.05);
+        this->declare_parameter<bool>("frontend.degeneracy_hold_map", false);
         this->declare_parameter<bool>("frontend.recovery_enable", true);
         this->declare_parameter<double>("frontend.recovery_lidar_gap", 0.75);
         this->declare_parameter<int>("frontend.recovery_good_scans", 3);
@@ -1055,7 +1014,6 @@ public:
         this->get_parameter_or<bool>("publish.scan_publish_en", scan_pub_en, true);
         this->get_parameter_or<bool>("publish.dense_publish_en", dense_pub_en, true);
         this->get_parameter_or<bool>("publish.scan_bodyframe_pub_en", scan_body_pub_en, true);
-        this->get_parameter_or<bool>("publish.filtered_cloud_pub_en", filtered_cloud_pub_en, true);
         this->get_parameter_or<int>("max_iteration", NUM_MAX_ITERATIONS, 4);
         this->get_parameter_or<string>("map_file_path", map_file_path, "");
         this->get_parameter_or<string>("common.lid_topic", lid_topic, "/lidar_points");
@@ -1092,24 +1050,6 @@ public:
         }
         this->get_parameter_or<int>("point_filter_num", p_pre->point_filter_num, 2);
         this->get_parameter_or<bool>("feature_extract_enable", p_pre->feature_enabled, false);
-        p_pre_filtered->set(false, p_pre->lidar_type, p_pre->blind, p_pre->point_filter_num);
-                this->get_parameter_or<int>("preprocess.filtered_cloud_scan_line", filtered_cloud_scan_line, 32);
-                this->get_parameter_or<int>("preprocess.filtered_cloud_ring_min", filtered_cloud_ring_min, 5);
-                this->get_parameter_or<int>("preprocess.filtered_cloud_ring_max", filtered_cloud_ring_max, 36);
-        this->get_parameter_or<double>("preprocess.filtered_cloud_detection_range", filtered_cloud_detection_range, 3.0);
-        this->get_parameter_or<double>("preprocess.filtered_cloud_fov_min_angle", filtered_cloud_fov_min_angle, 30.0);
-        this->get_parameter_or<double>("preprocess.filtered_cloud_fov_max_angle", filtered_cloud_fov_max_angle, 150.0);
-                p_pre_filtered->N_SCANS = filtered_cloud_scan_line;
-                p_pre_filtered->ring_min = filtered_cloud_ring_min;
-                p_pre_filtered->ring_max = filtered_cloud_ring_max;
-                p_pre_filtered->time_unit = p_pre->time_unit;
-                p_pre_filtered->SCAN_RATE = p_pre->SCAN_RATE;
-                if (p_pre_filtered->ring_max - p_pre_filtered->ring_min + 1 != p_pre_filtered->N_SCANS) {
-                    RCLCPP_WARN(this->get_logger(),
-                        "preprocess.filtered_cloud_scan_line (%d) does not match filtered_cloud_ring_max-filtered_cloud_ring_min+1 (%d) -- "
-                        "some retained LiDAR rings will be dropped or under-allocated.",
-                        p_pre_filtered->N_SCANS, p_pre_filtered->ring_max - p_pre_filtered->ring_min + 1);
-                }
         this->get_parameter_or<bool>("runtime_pos_log_enable", runtime_pos_log, 0);
         this->get_parameter_or<bool>("mapping.extrinsic_est_en", extrinsic_est_en, true);
         this->get_parameter_or<bool>("pcd_save.pcd_save_en", pcd_save_en, false);
@@ -1124,6 +1064,11 @@ public:
         this->get_parameter_or<double>("frontend.shock_gyro_threshold", shock_gyro_threshold, 2.5);
         this->get_parameter_or<double>("frontend.max_imu_gap", max_imu_gap, 0.05);
         this->get_parameter_or<double>("frontend.shock_cooldown", shock_cooldown, 0.3);
+        this->get_parameter_or<double>("frontend.max_pose_jump", max_pose_jump, 0.10);
+        this->get_parameter_or<double>("frontend.max_rot_jump", max_rot_jump, 0.15);
+        this->get_parameter_or<int>("frontend.max_consecutive_rollbacks", max_consecutive_rollbacks, 3);
+        this->get_parameter_or<double>("frontend.degeneracy_min_eig", degeneracy_min_eig, 0.05);
+        this->get_parameter_or<bool>("frontend.degeneracy_hold_map", degeneracy_hold_map, false);
         this->get_parameter_or<bool>("frontend.recovery_enable", recovery_enable, true);
         this->get_parameter_or<double>("frontend.recovery_lidar_gap", recovery_lidar_gap, 0.75);
         this->get_parameter_or<int>("frontend.recovery_good_scans", recovery_good_scans, 3);
@@ -1197,7 +1142,6 @@ public:
         sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, rclcpp::QoS(200), imu_cbk, sensor_sub_opts);
         pubLaserCloudFull_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
         pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
-        pubLaserCloudFull_body_filtered_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body_filtered", 20);
         pubLaserCloudEffect_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
         pubLaserCloudMap_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/Laser_map", 20);
         pubOdomAftMapped_ = this->create_publisher<nav_msgs::msg::Odometry>("/Odometry", 20);
@@ -1250,7 +1194,7 @@ private:
             svd_time   = 0;
             t0 = omp_get_wtime();
 
-            p_imu->Process(Measures, kf, feats_undistort, feats_undistort_filtered);
+            p_imu->Process(Measures, kf, feats_undistort);
             state_point = kf.get_x();
             pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
             // Snapshot the pure IMU-propagated (pre-measurement-update) state/covariance
@@ -1355,28 +1299,71 @@ private:
                                       state_point.offset_T_L_I(0), state_point.offset_T_L_I(1), state_point.offset_T_L_I(2));
             }
 
-            // Frontend scan-quality gate: a scan captured during an IMU shock or with too
-            // few reliable point-to-plane correspondences is kept out of the persistent
+            // ---------- Scan-quality assessment ----------
+            // Frontend scan-quality gate. Low-quality scans are kept out of the persistent
             // ikd-tree map and off the published clouds (loop_pgo/map_localizer never see
-            // it). Odometry/TF still publish every cycle so downstream consumers stay in
-            // sync - but (see the rollback below) they now publish the pre-update, IMU-only
-            // PREDICTED pose for a low-quality scan, not this scan's untrustworthy LiDAR
-            // correction. Previously this gate only protected the persistent map from a bad
-            // scan; the actual pose handed to RViz/Nav2/map_localizer/the motion controller
-            // was NOT protected, and a single shock-damaged correction could still slip into
-            // odom->base_footprint and appear as a pose jump/teleport downstream.
-            // shock_cooldown keeps this gate closed for a settling window *after* a shock
+            // them); odometry/TF still publish every cycle so downstream consumers stay in
+            // sync. The pose handling is jump-gated (see the rollback decision below).
+            // shock_cooldown keeps the map closed for a settling window *after* a shock
             // clears too -- the scan right after a bump can look individually "clean"
-            // (good feature count/residual) while the pose still hasn't fully reconverged,
-            // and without this, that scan's geometry gets trusted into the map immediately,
-            // producing a duplicated/misaligned floor-and-wall seam right at the bump.
+            // (good feature count/residual) while the pose still hasn't fully reconverged.
+            //
+            // (1) "Suspect" criteria: conditions under which this scan's geometry may be
+            // distorted or under-constrained (shock, IMU gap, feature starvation, high
+            // residual). Suspect alone no longer discards the LiDAR correction -- it only
+            // keeps the scan out of the persistent map and off the published clouds.
             const bool in_shock_cooldown = (lidar_end_time - p_imu->getLastShockTime()) < shock_cooldown;
-            const bool scan_is_low_quality = reject_low_quality_scans &&
+            const bool scan_is_suspect = reject_low_quality_scans &&
                 (effct_feat_num < min_effective_features ||
                  res_mean_last > max_mean_residual ||
                  p_imu->hadShock() ||
                  in_shock_cooldown ||
                  p_imu->getMaxImuGap() > max_imu_gap);
+
+            // (2) Correction-magnitude (jump) check: how far did the LiDAR measurement
+            // update move the state away from the IMU-predicted prior? After healthy IMU
+            // propagation a correction is small (mm-cm); a large one means either this
+            // scan is mis-registered (-> roll back) or the prior has already diverged
+            // (-> rollback cap below lets the LiDAR pull the filter back).
+            const double pos_correction = (state_point.pos - predicted_state_for_rollback.pos).norm();
+            const M3D rot_correction_mat = predicted_state_for_rollback.rot.toRotationMatrix().transpose() *
+                                           state_point.rot.toRotationMatrix();
+            const double rot_correction = Log(rot_correction_mat).norm();
+            const bool correction_jump = reject_low_quality_scans &&
+                (pos_correction > max_pose_jump || rot_correction > max_rot_jump);
+
+            // (3) Degeneracy (localizability) check, after Zhang & Singh (ICRA 2016): the
+            // translation block of the point-to-plane Gauss-Newton Hessian is sum(n n^T)
+            // over the matched plane normals. A near-zero smallest eigenvalue of the
+            // normalized Gramian means the scan does not constrain translation along that
+            // eigenvector (corridor axis, single dominant plane): the pose can silently
+            // slide there no matter how low the residual looks.
+            double min_normal_eig = 1.0;
+            V3D weak_direction = V3D::Zero();
+            if (effct_feat_num > 0)
+            {
+                M3D normal_gram = M3D::Zero();
+                for (int i = 0; i < effct_feat_num; i++)
+                {
+                    V3D n(corr_normvect->points[i].x, corr_normvect->points[i].y, corr_normvect->points[i].z);
+                    normal_gram += n * n.transpose();
+                }
+                normal_gram /= double(effct_feat_num);
+                Eigen::SelfAdjointEigenSolver<M3D> eig_solver(normal_gram);
+                min_normal_eig = eig_solver.eigenvalues()(0);
+                weak_direction = eig_solver.eigenvectors().col(0);
+            }
+            const bool scan_is_degenerate = min_normal_eig < degeneracy_min_eig;
+            if (scan_is_degenerate)
+            {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                    "Degenerate scan geometry: min normal-Gramian eigenvalue %.4f < %.4f; "
+                    "translation weakly constrained along [%.2f, %.2f, %.2f] (odom frame)",
+                    min_normal_eig, degeneracy_min_eig,
+                    weak_direction(0), weak_direction(1), weak_direction(2));
+            }
+
+            const bool scan_is_low_quality = scan_is_suspect || correction_jump;
 
             const bool lidar_gap_triggered_recovery = recovery_enable &&
                 last_processed_lidar_end_time > 0.0 &&
@@ -1397,27 +1384,47 @@ private:
             if (scan_is_low_quality)
             {
                 rejected_scan_count++;
-                RCLCPP_WARN(this->get_logger(),
-                            "Rejecting low-quality scan #%d: features=%d residual=%.3f shock=%d(accel=%d gyro=%d) cooldown=%d max_imu_gap=%.4f "
-                            "- rolling odometry back to pre-update predicted state",
-                            rejected_scan_count, effct_feat_num, res_mean_last,
-                            p_imu->hadShock(), p_imu->hadAccelShock(), p_imu->hadGyroShock(), in_shock_cooldown, p_imu->getMaxImuGap());
 
-                // Discard this scan's (untrustworthy) measurement update: restore the filter
-                // to the state/covariance it had right after pure IMU propagation, before
-                // this scan's correction was applied. Without this, a shock-damaged or
-                // feature-starved scan's bad correction still got published as real
-                // odometry/TF, even though it had already been identified as unreliable a
-                // few lines above.
-                kf.change_x(predicted_state_for_rollback);
-                kf.change_P(predicted_cov_for_rollback);
-                state_point = kf.get_x();
-                euler_cur = SO3ToEuler(state_point.rot);
-                pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
-                geoQuat.x = state_point.rot.coeffs()[0];
-                geoQuat.y = state_point.rot.coeffs()[1];
-                geoQuat.z = state_point.rot.coeffs()[2];
-                geoQuat.w = state_point.rot.coeffs()[3];
+                // Roll back to the IMU-predicted pose ONLY when the correction itself is
+                // an implausible jump, and only up to max_consecutive_rollbacks in a row.
+                // - A suspect scan whose correction is sane keeps its LiDAR update: on a
+                //   consumer MEMS IMU (ZED2i), IMU-only dead reckoning diverges faster
+                //   than a slightly distorted LiDAR correction ever would, and discarding
+                //   several corrections in a row (e.g. for the whole shock cooldown) was
+                //   the death spiral that lost the odometry outright.
+                // - Once the cap is hit, the (large) LiDAR correction is accepted anyway:
+                //   at that point the prior is what's wrong, and snapping back to the map
+                //   is the only way to re-converge.
+                const bool do_rollback = correction_jump &&
+                    consecutive_rollback_count < max_consecutive_rollbacks;
+
+                RCLCPP_WARN(this->get_logger(),
+                            "Low-quality scan #%d: features=%d residual=%.3f shock=%d(accel=%d gyro=%d) cooldown=%d imu_gap=%.4f "
+                            "correction(pos=%.3fm rot=%.3frad) jump=%d min_eig=%.3f -> %s; map update held",
+                            rejected_scan_count, effct_feat_num, res_mean_last,
+                            p_imu->hadShock(), p_imu->hadAccelShock(), p_imu->hadGyroShock(),
+                            in_shock_cooldown, p_imu->getMaxImuGap(),
+                            pos_correction, rot_correction, correction_jump, min_normal_eig,
+                            do_rollback ? "rolling back to IMU-predicted pose"
+                                        : "keeping LiDAR correction");
+
+                if (do_rollback)
+                {
+                    consecutive_rollback_count++;
+                    kf.change_x(predicted_state_for_rollback);
+                    kf.change_P(predicted_cov_for_rollback);
+                    state_point = kf.get_x();
+                    euler_cur = SO3ToEuler(state_point.rot);
+                    pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
+                    geoQuat.x = state_point.rot.coeffs()[0];
+                    geoQuat.y = state_point.rot.coeffs()[1];
+                    geoQuat.z = state_point.rot.coeffs()[2];
+                    geoQuat.w = state_point.rot.coeffs()[3];
+                }
+                else
+                {
+                    consecutive_rollback_count = 0;
+                }
 
                 if (recovery_enable)
                 {
@@ -1425,19 +1432,24 @@ private:
                     recovery_good_scan_count = 0;
                 }
             }
-            else if (recovery_enable && recovery_mode_active)
+            else
             {
-                recovery_good_scan_count++;
-                if (recovery_good_scan_count >= recovery_good_scans)
+                consecutive_rollback_count = 0;
+                if (recovery_enable && recovery_mode_active)
                 {
-                    recovery_mode_active = false;
-                    RCLCPP_INFO(this->get_logger(),
-                                "Recovery mode cleared after %d consecutive good scan(s)",
-                                recovery_good_scan_count);
+                    recovery_good_scan_count++;
+                    if (recovery_good_scan_count >= recovery_good_scans)
+                    {
+                        recovery_mode_active = false;
+                        RCLCPP_INFO(this->get_logger(),
+                                    "Recovery mode cleared after %d consecutive good scan(s)",
+                                    recovery_good_scan_count);
+                    }
                 }
             }
 
-            const bool hold_map_updates = scan_is_low_quality || recovery_settling;
+            const bool hold_map_updates = scan_is_low_quality || recovery_settling ||
+                                          (degeneracy_hold_map && scan_is_degenerate);
 
             /******* Publish odometry *******/
             publish_odometry(pubOdomAftMapped_, tf_broadcaster_);
@@ -1451,7 +1463,6 @@ private:
             if (path_en)                                                  publish_path(pubPath_);
             if (!scan_is_low_quality && (scan_pub_en || pcd_save_en))     publish_frame_world(pubLaserCloudFull_);
             if (!scan_is_low_quality && scan_pub_en && scan_body_pub_en)  publish_frame_body(pubLaserCloudFull_body_);
-            if (!scan_is_low_quality && filtered_cloud_pub_en)            publish_frame_body_filtered(pubLaserCloudFull_body_filtered_);
             if (!scan_is_low_quality && effect_pub_en)                    publish_effect_world(pubLaserCloudEffect_);
             // if (map_pub_en) publish_map(pubLaserCloudMap_);
 
@@ -1538,7 +1549,6 @@ private:
 private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudFull_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudFull_body_;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudFull_body_filtered_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudEffect_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudMap_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pubOdomAftMapped_;
@@ -1567,10 +1577,13 @@ int main(int argc, char** argv)
 {
     rclcpp::init(argc, argv);
 
-    // Multi-threaded so the sensor callback group (imu_cbk/standard_pcl_cbk) can keep
-    // draining IMU/LiDAR messages while the default group's timer_callback is busy
-    // doing ICP/map_incremental for the current scan (see callback group setup above).
-    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
+    // Multi-threaded so the sensor callbacks (imu_cbk/standard_pcl_cbk, reentrant
+    // group -- they may run concurrently with each other) can keep draining IMU/
+    // LiDAR messages while the default group's timer_callback is busy doing
+    // ICP/map_incremental for the current scan. 3 threads: one for the heavy
+    // timer_callback plus one each for the two sensor streams, so a long scan
+    // update can never starve either sensor callback.
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 3);
     auto node = std::make_shared<LaserMappingNode>();
     executor.add_node(node);
     executor.spin();
