@@ -62,7 +62,7 @@ def generate_launch_description():
             {'common.publish_tf': publish_tf}
         ],
         output='screen',
-        remappings=[('/Odometry', '/Odometry_fastlio')]
+        remappings=[('/Odometry', '/odom')]
     )
 
     rviz_node = Node(

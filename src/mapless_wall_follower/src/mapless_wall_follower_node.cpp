@@ -149,7 +149,7 @@ public:
       state_topic_.c_str());
     RCLCPP_INFO(
       get_logger(),
-      "Expected cloud frame/axes: base_link, +x forward, +y left, +z up");
+      "Expected cloud frame/axes: base_footprint, +x forward, +y left, +z up");
   }
 
 private:
