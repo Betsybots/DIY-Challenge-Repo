@@ -4,7 +4,7 @@ scan_resolution: 0.1
 max_range: 6.0    # drop patch points farther than this from the sensor (m); <= 0 disables
 sor_mean_k: 20    # StatisticalOutlierRemoval neighbors on the saved map; <= 0 disables
 sor_std_mul: 1.0  # SOR stddev multiplier (lower = more aggressive removal)
-z_removal: false  # true = remove the ground plane from the saved refined_map.pcd
+z_removal: true  # true = remove the ground plane from the saved refined_map.pcd
 ground_dist_thresh: 0.1 # points within this distance (m) of the fitted ground plane are removed
 
 window_size: 20

@@ -109,6 +109,19 @@
             scan_publish_en: true
             dense_publish_en: false
             scan_bodyframe_pub_en: true # Publish the scan in the body frame of the vehicle
+            # --- Ground-plane (z) removal for /cloud_registered_body ---------
+            # nav2's local costmap was marking the robot's own ground returns as
+            # obstacles when fed the raw body-frame cloud. When true, points at
+            # or below z_removal_min_z are dropped from /cloud_registered_body
+            # before publishing. The cloud is in the body frame (published as
+            # base_footprint), which rides with the robot, so ground always sits
+            # near the same z regardless of where the robot is -- a fixed cutoff
+            # works. Tune z_removal_min_z in RViz: set it just above where the
+            # ground returns appear but below the lowest obstacle you must still
+            # see. Only this topic is affected; the world-frame clouds and the
+            # internal ikd-tree map keep every point (odometry quality unchanged).
+            z_removal: false
+            z_removal_min_z: 0.05       # m; keep only points with z above this
 
         pcd_save:
             pcd_save_en: false

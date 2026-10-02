@@ -187,6 +187,14 @@ int    iterCount = 0, feats_down_size = 0, NUM_MAX_ITERATIONS = 0, laserCloudVal
 bool   point_selected_surf[100000] = {0};
 bool   lidar_pushed, flg_first_scan = true, flg_EKF_inited;
 bool   scan_pub_en = false, dense_pub_en = false, scan_body_pub_en = false;
+// Ground (z) removal for /cloud_registered_body: nav2's local costmap marks
+// the robot's own ground returns as obstacles when fed the raw body-frame
+// scan. When enabled, points at or below z_removal_min_z (in the published
+// body frame, where ground sits near a fixed z since the frame rides with
+// the robot) are dropped before publishing. Only /cloud_registered_body is
+// affected -- the world-frame clouds and the ikd-tree map keep all points.
+bool   z_removal = false;
+double z_removal_min_z = 0.05;      // m; keep only points with z above this
 bool    is_first_lidar = true;
 bool    imu_gyr_is_deg = false;
 
@@ -684,6 +692,18 @@ void publish_frame_body(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Shared
                             &laserCloudIMUBody->points[i]);
     }
 
+    // Ground-plane (z) removal for nav2 local costmap -- see z_removal above.
+    if (z_removal)
+    {
+        PointCloudXYZI::Ptr laserCloudFiltered(new PointCloudXYZI());
+        laserCloudFiltered->reserve(size);
+        for (const auto &pt : laserCloudIMUBody->points)
+        {
+            if (pt.z > z_removal_min_z) laserCloudFiltered->push_back(pt);
+        }
+        laserCloudIMUBody = laserCloudFiltered;
+    }
+
     sensor_msgs::msg::PointCloud2 laserCloudmsg;
     pcl::toROSMsg(*laserCloudIMUBody, laserCloudmsg);
     laserCloudmsg.header.stamp = get_ros_time(lidar_end_time);
@@ -1004,6 +1024,8 @@ public:
         this->declare_parameter<bool>("publish.scan_publish_en", true);
         this->declare_parameter<bool>("publish.dense_publish_en", true);
         this->declare_parameter<bool>("publish.scan_bodyframe_pub_en", true);
+        this->declare_parameter<bool>("publish.z_removal", false);
+        this->declare_parameter<double>("publish.z_removal_min_z", 0.05);
         this->declare_parameter<bool>("publish.tf_en", false);
         this->declare_parameter<int>("max_iteration", 4);
         this->declare_parameter<string>("map_file_path", "");
@@ -1069,6 +1091,8 @@ public:
         this->get_parameter_or<bool>("publish.scan_publish_en", scan_pub_en, true);
         this->get_parameter_or<bool>("publish.dense_publish_en", dense_pub_en, true);
         this->get_parameter_or<bool>("publish.scan_bodyframe_pub_en", scan_body_pub_en, true);
+        this->get_parameter_or<bool>("publish.z_removal", z_removal, false);
+        this->get_parameter_or<double>("publish.z_removal_min_z", z_removal_min_z, 0.05);
         this->get_parameter_or<int>("max_iteration", NUM_MAX_ITERATIONS, 4);
         this->get_parameter_or<string>("map_file_path", map_file_path, "");
         this->get_parameter_or<string>("common.lid_topic", lid_topic, "/lidar_points");
