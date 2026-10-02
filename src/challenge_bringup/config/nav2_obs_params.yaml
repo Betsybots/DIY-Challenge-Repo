@@ -1,0 +1,506 @@
+# =============================================================================
+# nav2_obs_params.yaml — Ackermann MPPI, narrow-terrain obstacle course
+# =============================================================================
+# STANDALONE parameter file (no base/override chaining) for nav2_obs.launch.py.
+#
+# SYSTEM CONTRACT
+# - Localization: EXTERNAL (mcl_3dl). NO AMCL here. mcl_3dl publishes
+#   map -> odom; the ZED odom relay / EKF publishes odom -> base_footprint;
+#   robot_state_publisher provides base_footprint -> base_link (see
+#   robot.urdf.xacro).
+# - Maps: map_server serves the pgm+yaml occupancy grid (static_layer).
+#   mcl_3dl additionally publishes its refined_map.pcd-derived map cloud on
+#   /updated_map (PointCloud2, map frame, transient_local) — fed into
+#   the global costmap as a persistent marking source so navigation sees the
+#   same world mcl_3dl localizes against.
+# - Drive: the Ackermann drivetrain subscribes /cmd_vel_smoothed. Chain:
+#   MPPI -> cmd_vel_nav -> velocity_smoother -> /cmd_vel_smoothed.
+#   Recovery BackUp bypasses the (forward-only) smoother and publishes
+#   straight to /cmd_vel_smoothed (wired in nav2_obs.launch.py).
+#
+# COURSE BASELINE (FIELD-TUNE-OBS quick index)
+# - Terrain path width: 20–24 in (0.508–0.610 m). Robot footprint is
+#   0.36 m wide x 0.56 m long -> only 0.074–0.125 m clearance PER SIDE when
+#   perfectly centered. Centering is everything; tune inflation first.
+# - Robot (robot.urdf.xacro): chassis 0.4318 L x ~0.36 W (with wheels),
+#   wheel radius 0.0762 m; measured full-lock turning radius 0.371 m.
+# - Forward-only course (ramps, gravel, potholes): start at 0.4 m/s.
+#   FIELD-TUNE-OBS-01: speed & steering limits
+#   FIELD-TUNE-OBS-02: MPPI horizon & sampling
+#   FIELD-TUNE-OBS-03: inflation / corridor centering
+#   FIELD-TUNE-OBS-04: path tracking vs. obstacle deviation
+#   FIELD-TUNE-OBS-05: acceleration & braking
+# Change ONE group at a time; record 3+ clean runs before the next change.
+# =============================================================================
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_footprint   # mcl_3dl tracks base_footprint
+    odom_topic: /odom                  # zed_base_odom_relay output
+    bt_loop_duration: 10
+    default_server_timeout: 20
+    wait_for_service_timeout: 1000
+    default_nav_to_pose_bt_xml: "$(find-pkg-share challenge_bringup)/behavior_trees/navigate_to_pose_obstacle_course_mppi_ackermann.xml"
+    default_nav_through_poses_bt_xml: "$(find-pkg-share challenge_bringup)/behavior_trees/navigate_through_poses_obstacle_course_mppi_ackermann.xml"
+    plugin_lib_names:
+      # Path planning (core)
+      - nav2_compute_path_to_pose_action_bt_node
+      - nav2_compute_path_through_poses_action_bt_node
+      - nav2_follow_path_action_bt_node
+      - nav2_remove_passed_goals_action_bt_node
+      # Recovery/clearing (used by the no-spin / obstacle-course BTs)
+      - nav2_wait_action_bt_node
+      - nav2_back_up_action_bt_node
+      - nav2_clear_costmap_service_bt_node
+      # Conditions
+      - nav2_goal_updated_condition_bt_node
+      - nav2_is_stuck_condition_bt_node
+      # Control flow (RoundRobin is REQUIRED by the recovery fallback)
+      - nav2_recovery_node_bt_node
+      - nav2_pipeline_sequence_bt_node
+      - nav2_rate_controller_bt_node
+      - nav2_round_robin_node_bt_node
+
+bt_navigator_navigate_through_poses_rclcpp_node:
+  ros__parameters:
+    use_sim_time: False
+
+bt_navigator_navigate_to_pose_rclcpp_node:
+  ros__parameters:
+    use_sim_time: False
+
+controller_server:
+  ros__parameters:
+    use_sim_time: False
+    odom_topic: /odom
+    controller_frequency: 20.0   # TUNE: raise only if the Jetson holds this rate.
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.0    # Ackermann: no lateral motion
+    min_theta_velocity_threshold: 0.0
+    failure_tolerance: 0.3
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.15   # slow course: small but steady progress
+      movement_time_allowance: 10.0    # gravel/ramps can be slow; was 8.0
+
+    general_goal_checker:
+      stateful: true
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.20
+      yaw_goal_tolerance: 0.35
+
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+
+      # FIELD-TUNE-OBS-02 PREDICTION
+      # Horizon = time_steps * model_dt = 64 * 0.05 = 3.2 s.
+      # At 0.4 m/s that evaluates ~1.3 m ahead — enough to settle into the
+      # 0.51–0.61 m lane without wasting samples on far-field exploration.
+      time_steps: 64        # TUNE: drop to 56 if the controller misses 20 Hz.
+      model_dt: 0.05        # Must equal 1/controller_frequency.
+      batch_size: 2000      # TUNE: reduce to 1500 before shortening horizon.
+      iteration_count: 1    # Keep 1; increase batch_size before this.
+      vx_std: 0.12          # TUNE: modest speed exploration on rough terrain.
+      vy_std: 0.0           # Ackermann: never non-zero.
+      wz_std: 0.40          # TUNE: steering exploration; lane is too narrow for big swings.
+
+      # FIELD-TUNE-OBS-01 SPEED AND STEERING
+      # wz_max = vx_max / min_turning_r = 0.40 / 0.371 = 1.08 rad/s.
+      # Keep synchronized with velocity_smoother at the bottom of this file.
+      vx_max: 0.40          # TUNE: whole-course speed; 20–24 in lane + gravel/ramps.
+      vx_min: 0.0           # Forward-only; recovery backup is handled by behavior_server.
+      vy_max: 0.0
+      wz_max: 1.08          # TUNE: keep = vx_max / 0.371.
+
+      motion_model: "Ackermann"
+      AckermannConstraints:
+        min_turning_r: 0.371   # Measured full-lock path radius. Never fake it lower.
+
+      prune_distance: 2.0      # Keep beyond the ~1.3 m prediction distance.
+      transform_tolerance: 0.10
+      temperature: 0.30        # TUNE: lower = picks best trajectories more greedily.
+      gamma: 0.015             # TUNE: higher = smoother, lower-energy commands.
+      visualize: false         # true only for debugging (CPU cost).
+      retry_attempt_limit: 1
+      reset_period: 1.0
+      regenerate_noises: false
+
+      # Forward-only route; Dubins planner never emits reverse segments.
+      enforce_path_inversion: false
+      inversion_xy_tolerance: 0.20
+      inversion_yaw_tolerance: 0.40
+
+      TrajectoryVisualizer:
+        trajectory_step: 5
+        time_step: 3
+
+      critics:
+        - "ConstraintCritic"
+        - "CostCritic"
+        - "GoalCritic"
+        - "GoalAngleCritic"
+        - "PathAlignCritic"
+        - "PathFollowCritic"
+        - "PathAngleCritic"
+        - "PreferForwardCritic"
+
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 6.0    # Strong Ackermann feasibility in tight turns.
+
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 1.4
+
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        threshold_to_consider: 0.5
+
+      PreferForwardCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 10.0   # Course direction is mandatory; punish reverse sampling.
+        threshold_to_consider: 0.5
+
+      # FIELD-TUNE-OBS-03 OBSTACLE CLEARANCE
+      # Footprint collision checks are the hard safety boundary; the inflation
+      # gradient (0.35 m / scale 6.0 below) makes the lane centerline the cost
+      # minimum. Never shrink the footprint to "create" clearance.
+      CostCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0          # TUNE: raise if wall clearance is low; lower if it freezes.
+        critical_cost: 300.0      # >255: only true footprint collisions are rejected hard;
+                                  # the whole lane carries inflated cost, so a lower value
+                                  # would make MPPI refuse valid centered trajectories.
+        consider_footprint: true  # Rectangular 0.36 x 0.56 m collision checks. Keep true.
+        collision_cost: 1000000.0
+        near_goal_distance: 0.5
+        inflation_layer_name: "inflation_layer"
+
+      # FIELD-TUNE-OBS-04 PATH VERSUS AVOIDANCE
+      # In a 0.51–0.61 m lane there is almost no room to deviate: track the
+      # Smac path (already cost-centered) HARD. PathAlign auto-disengages when
+      # enough of the path is occupied, letting CostCritic steer around a
+      # newly seen obstacle.
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 14.0              # Higher than the 32-in-course value (8.0) on purpose.
+        max_path_occupancy_ratio: 0.05 # Give up alignment early when the lane is blocked.
+        trajectory_point_step: 3
+        threshold_to_consider: 0.5
+        offset_from_furthest: 20
+        use_path_orientations: true    # Keep true for Hybrid-A*/Dubins directional paths.
+
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        offset_from_furthest: 5
+        threshold_to_consider: 1.4
+
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+        offset_from_furthest: 4
+        threshold_to_consider: 0.5
+        max_angle_to_furthest: 1.0
+        forward_preference: true
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: False
+      global_frame: odom
+      robot_base_frame: base_footprint
+      rolling_window: true
+      width: 5
+      height: 5
+      # 0.025: side clearance in the 20-in lane is only 0.074 m (~1.5 cells at
+      # 0.05); finer cells stop wall discretization from eating 2–3 cm of it.
+      # TUNE: revert to 0.05 if the Jetson can't hold update_frequency 10 Hz.
+      resolution: 0.025
+      # Measured outer footprint: 0.36 m wide, 0.56 m long, origin at the AR
+      # reference (rear-biased). Matches the proven obstacle-course value.
+      footprint: "[[-0.12, -0.18], [-0.12, 0.18], [0.44, 0.18], [0.44, -0.18]]"
+      # Default padding (0.01) silently widens the robot to 0.38 m, cutting the
+      # 20-in-lane clearance to 0.064 m/side. The inflation gradient is the
+      # safety buffer; keep the footprint exact.
+      footprint_padding: 0.0
+      update_frequency: 10.0   # TUNE: fast reaction in the narrow lane.
+      publish_frequency: 5.0
+      plugins: ["voxel_layer", "inflation_layer"]
+
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: true
+        publish_voxel_map: true
+        origin_z: 0.0
+        z_resolution: 0.125
+        z_voxels: 16
+        # Hoop arches start ~0.36 m above the floor: ignore anything above
+        # 0.33 m so arches don't close the gates; walls/buckets/posts still
+        # mark via their lower parts. TUNE: restore 1.8 if this course has no
+        # overhead structures the robot must pass under.
+        max_obstacle_height: 0.33
+        # Noise guard vs. detection: the usable band (0.10–0.33 m) spans only
+        # ~2 voxel layers at z_resolution 0.125, so requiring 2 marked voxels
+        # (as the wide-band base config does) would miss low obstacles.
+        # 1 still rejects empty columns; raise to 2 ONLY with max_obstacle_height >= 1.0.
+        mark_threshold: 1
+        # Split mark/clear sources: t
+        observation_sources: lidar_mark lidar_clear
+        lidar_mark:
+          topic: /cloud_registered_body
+          # Gravel/pothole lips and ramp pitch push ground returns up; 0.10
+          # keeps the lane floor from marking. TUNE down to 0.05 only if low
+          # obstacles (bucket bases) are being missed.
+          min_obstacle_height: 0.10
+          max_obstacle_height: 0.33
+          clearing: false
+          marking: true
+          data_type: "PointCloud2"
+          obstacle_max_range: 3.5
+          obstacle_min_range: 0.0
+        lidar_clear:
+          topic: /cloud_registered_body
+          # Keep min at 0.10 so ground-grazing returns on ramp pitch don't
+          # carve clearing rays along the floor.
+          min_obstacle_height: 0.10
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: false
+          data_type: "PointCloud2"
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.0
+
+      # FIELD-TUNE-OBS-03 CORRIDOR CENTERING
+      # Lane is 0.508–0.610 m. radius 0.35 >= half of the widest lane (0.305),
+      # so the cost gradients from BOTH walls overlap everywhere and the
+      # centerline is the unique cost minimum — the planner and MPPI self-center.
+      # Gentle scale 6.0 keeps the centerline cost (~120–160) below Smac's
+      # analytic_expansion_max_cost and CostCritic's critical_cost.
+      # Inscribed zone (0.18 m half-width) still leaves 0.07–0.12 m of
+      # traversable band at lane center — do NOT raise cost_scaling_factor and
+      # inflation_radius together without rechecking that math.
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
+        inflation_radius: 0.35     # TUNE: >= half lane width; lower only if valid gaps vanish.
+        cost_scaling_factor: 6.0   # TUNE: higher = cost decays faster off the walls.
+
+      always_send_full_costmap: true
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: False
+      global_frame: map
+      robot_base_frame: base_footprint
+      update_frequency: 2.0
+      publish_frequency: 1.0
+      # 0.05 matches the pgm map resolution; Smac's SE2 footprint check still
+      # uses the exact (unpadded) rectangle. Fine in-lane fidelity lives in
+      # the 0.025 local costmap that MPPI executes against.
+      resolution: 0.05
+      track_unknown_space: true
+      footprint: "[[-0.12, -0.18], [-0.12, 0.18], [0.44, 0.18], [0.44, -0.18]]"
+      footprint_padding: 0.0   # Keep IDENTICAL to local_costmap (see note there).
+      plugins: ["static_layer", "mcl_map_layer", "obstacle_layer", "inflation_layer"]
+
+      # Baseline course geometry from the pgm+yaml served by map_server.
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        enabled: true
+        map_subscribe_transient_local: true
+        subscribe_to_updates: true
+
+      # mcl_3dl's refined/updated map cloud (/updated_map, map frame,
+      # transient_local, republished on every internal map update) marked as a
+      # persistent layer: navigation plans against the exact geometry mcl_3dl
+      # localizes with. Marking only — never clears the static layer.
+      mcl_map_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: mcl_updated_map
+        mcl_updated_map:
+          topic: /updated_map
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          # Map floor sits at z ~ -0.12 (cropped; wall band starts ~ -0.08):
+          # band [-0.05, 0.33] keeps walls/obstacles, skips residual floor and
+          # overhead hoop arches.
+          min_obstacle_height: -0.05
+          max_obstacle_height: 0.33
+          # Cloud origin is the map origin; large range marks the whole course.
+          obstacle_max_range: 60.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 0.0
+          raytrace_min_range: 0.0
+          expected_update_rate: 0.0   # latched topic: arrives rarely; never time out.
+
+      # Live lidar: newly placed obstacles get into the GLOBAL plan too.
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        # Split mark/clear sources. 
+        observation_sources: lidar_mark lidar_clear
+        lidar_mark:
+          topic: /cloud_registered_body
+          min_obstacle_height: 0.10
+          max_obstacle_height: 0.33   # below hoop arches; see local_costmap note.
+          clearing: false
+          marking: true
+          data_type: "PointCloud2"
+          obstacle_max_range: 3.5
+          obstacle_min_range: 0.0
+        lidar_clear:
+          topic: /cloud_registered_body
+          min_obstacle_height: 0.10
+          max_obstacle_height: 0.33   # capped: 2D raytrace would clear under hoops.
+          clearing: true
+          marking: false
+          data_type: "PointCloud2"
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.0
+
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
+        inflation_radius: 0.35     # Keep IDENTICAL to local_costmap.
+        cost_scaling_factor: 6.0   # Keep IDENTICAL to local_costmap.
+
+      always_send_full_costmap: true
+
+map_server:
+  ros__parameters:
+    use_sim_time: False
+    # Overridden by the 'map' launch argument in nav2_obs.launch.py.
+    yaml_filename: "/home/juggernauts/DIY-Challenge-Repo/src/diy_localization/map/Obstacle_course/obstacle_course_clean.yaml"
+
+map_saver:
+  ros__parameters:
+    use_sim_time: False
+    save_map_timeout: 5.0
+    free_thresh_default: 0.25
+    occupied_thresh_default: 0.65
+    map_subscribe_transient_local: True
+
+planner_server:
+  ros__parameters:
+    use_sim_time: False
+    expected_planner_frequency: 5.0
+    planner_plugins: ["GridBased"]
+    GridBased:
+      # Forward-only course: Dubins forbids reverse path segments.
+      plugin: "nav2_smac_planner/SmacPlannerHybrid"
+      downsample_costmap: false
+      downsampling_factor: 1
+      motion_model_for_search: "DUBIN"
+      minimum_turning_radius: 0.371  # Measured full-lock path radius.
+      tolerance: 0.15
+      allow_unknown: false
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 5.0
+      angle_quantization_bins: 72
+      analytic_expansion_ratio: 3.5
+      analytic_expansion_max_length: 2.0
+      # Lane centerline carries ~120–165 inflated cost (see inflation note):
+      # must stay above that or Smac refuses analytic goal connections inside
+      # the narrow sections. Was 200 on the 32-in course.
+      analytic_expansion_max_cost: 220.0
+      analytic_expansion_max_cost_override: false
+      reverse_penalty: 2.0
+      change_penalty: 0.0
+      non_straight_penalty: 1.2
+      # Modest: with the whole lane inflated, a high cost_penalty makes narrow
+      # sections look like walls. TUNE up toward 2.5 only if plans hug edges.
+      cost_penalty: 2.0
+      retrospective_penalty: 0.015
+      lookup_table_size: 20.0
+      cache_obstacle_heuristic: true
+      debug_visualizations: false
+      use_quadratic_cost_penalty: false
+      downsample_obstacle_heuristic: true
+      allow_primitive_interpolation: false
+      smooth_path: true
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10
+        do_refinement: true
+
+smoother_server:
+  ros__parameters:
+    use_sim_time: False
+    smoother_plugins: ["simple_smoother"]
+    simple_smoother:
+      plugin: "nav2_smoother::SimpleSmoother"
+      tolerance: 1.0e-10
+      max_its: 1000
+      do_refinement: True
+
+behavior_server:
+  ros__parameters:
+    use_sim_time: False
+    costmap_topic: local_costmap/costmap_raw
+    footprint_topic: local_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins: ["backup", "wait"]   # No Spin: Ackermann cannot rotate in place.
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+    global_frame: odom
+    robot_base_frame: base_footprint
+    transform_tolerance: 0.1
+    simulate_ahead_time: 2.0
+
+robot_state_publisher:
+  ros__parameters:
+    use_sim_time: False
+
+waypoint_follower:
+  ros__parameters:
+    use_sim_time: False
+    loop_rate: 20
+    stop_on_failure: false
+    waypoint_task_executor_plugin: "wait_at_waypoint"
+    wait_at_waypoint:
+      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
+      enabled: True
+      waypoint_pause_duration: 200
+
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: False
+    smoothing_frequency: 20.0
+    scale_velocities: False
+    # OPEN_LOOP: gravel wheel slip makes closed-loop /odom feedback jumpy.
+    feedback: "OPEN_LOOP"
+    # FIELD-TUNE-OBS-01: must match MPPI vx_max / wz_max above.
+    max_velocity: [0.40, 0.0, 1.08]
+    min_velocity: [0.0, 0.0, -1.08]   # Forward-only; BackUp bypasses this node.
+    # FIELD-TUNE-OBS-05 ACCELERATION AND BRAKING
+    max_accel: [0.35, 0.0, 1.5]       # Gentle launch for gravel/ramps/potholes.
+    max_decel: [-0.80, 0.0, -1.5]     # Measured safe braking only.
+    odom_topic: /odom
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
