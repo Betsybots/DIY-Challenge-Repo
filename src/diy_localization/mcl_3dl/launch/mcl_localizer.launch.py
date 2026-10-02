@@ -17,7 +17,8 @@ def generate_launch_description():
             ]),
         ),
         DeclareLaunchArgument("use_rviz", default_value="false"),
-        DeclareLaunchArgument("cloud_topic", default_value="/cloud_registered_body"),
+        # LiDAR-frame scan; /cloud_registered_body is IMU-frame data mislabelled base_footprint.
+        DeclareLaunchArgument("cloud_topic", default_value="/cloud_deskewed"),
         # Default is the real IMU (Aceinna, on the Raspberry Pi) - frame_id "imu_link",
         # which has a static TF from base_link/base_footprint. The ZED's own IMU
         # (/zed/zed_node/imu/data, frame_id "zed_imu_link") has NO such static TF
@@ -26,7 +27,8 @@ def generate_launch_description():
         # applied, plus a spurious periodic "Detected time jump in imu" warning
         # every ~5s (imu_last_ never advances while the lookup keeps failing).
         DeclareLaunchArgument("imu_topic", default_value="/imu/data"),
-        DeclareLaunchArgument("odom_topic", default_value="/zed/zed_node/odom"),
+        # lio_ekf output; must match the odom -> base_footprint TF publisher.
+        DeclareLaunchArgument("odom_topic", default_value="/odom"),
         # Optional lidar gate (default off = unchanged behaviour). When true,
         # mcl_3dl stops lidar matching inside the zones of lidar_gate_zones_file
         # (ramp/bridge, helix, tunnel, car wash) and follows odometry there.

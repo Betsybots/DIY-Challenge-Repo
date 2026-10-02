@@ -4,8 +4,8 @@ mcl_3dl:
     map_downsample_x: 0.05
     map_downsample_y: 0.05
     map_downsample_z: 0.05
-    # /odom comes from zed_base_odom_relay: the pose of base_footprint, with TF
-    # odom -> base_footprint. The particles must track that same frame, otherwise
+    # /odom comes from lio_ekf (fast_lio_ros2/lio_ekf.launch.py): the pose of base_footprint,
+    # with TF odom -> base_footprint. The particles must track that same frame, otherwise
     # map -> odom absorbs the base_footprint -> base_link (or camera) offset.
     odom_frame: "odom"
     robot_frame: "base_footprint"

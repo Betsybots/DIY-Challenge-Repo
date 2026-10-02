@@ -122,6 +122,11 @@
             # internal ikd-tree map keep every point (odometry quality unchanged).
             z_removal: false
             z_removal_min_z: 0.05       # m; keep only points with z above this
+            # /cloud_deskewed: undistorted scan in the LiDAR TF frame (URDF link
+            # hesai_lidar) for mcl_3dl. /cloud_registered_body is NOT usable there:
+            # it is in the extrinsic_T-defined IMU frame but stamped base_footprint.
+            scan_lidarframe_pub_en: true
+            lidar_frame_id: "hesai_lidar"
 
         pcd_save:
             pcd_save_en: false

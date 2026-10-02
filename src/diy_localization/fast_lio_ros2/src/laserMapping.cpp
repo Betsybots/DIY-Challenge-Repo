@@ -195,6 +195,10 @@ bool   scan_pub_en = false, dense_pub_en = false, scan_body_pub_en = false;
 // affected -- the world-frame clouds and the ikd-tree map keep all points.
 bool   z_removal = false;
 double z_removal_min_z = 0.05;      // m; keep only points with z above this
+// /cloud_deskewed: the motion-undistorted scan in the LiDAR's own TF frame, so
+// consumers (mcl_3dl) get the true sensor pose from TF, independent of extrinsic_T.
+bool   scan_lidarframe_pub_en = false;
+string lidar_frame_id = "hesai_lidar";
 bool    is_first_lidar = true;
 bool    imu_gyr_is_deg = false;
 
@@ -712,6 +716,15 @@ void publish_frame_body(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Shared
     publish_count -= PUBFRAME_PERIOD;
 }
 
+void publish_frame_lidar(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudLidar)
+{
+    sensor_msgs::msg::PointCloud2 laserCloudmsg;
+    pcl::toROSMsg(*feats_undistort, laserCloudmsg);
+    laserCloudmsg.header.stamp = get_ros_time(lidar_end_time);
+    laserCloudmsg.header.frame_id = lidar_frame_id;
+    pubLaserCloudLidar->publish(laserCloudmsg);
+}
+
 void publish_effect_world(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudEffect)
 {
     PointCloudXYZI::Ptr laserCloudWorld( \
@@ -1026,6 +1039,8 @@ public:
         this->declare_parameter<bool>("publish.scan_bodyframe_pub_en", true);
         this->declare_parameter<bool>("publish.z_removal", false);
         this->declare_parameter<double>("publish.z_removal_min_z", 0.05);
+        this->declare_parameter<bool>("publish.scan_lidarframe_pub_en", false);
+        this->declare_parameter<string>("publish.lidar_frame_id", "hesai_lidar");
         this->declare_parameter<bool>("publish.tf_en", false);
         this->declare_parameter<int>("max_iteration", 4);
         this->declare_parameter<string>("map_file_path", "");
@@ -1093,6 +1108,8 @@ public:
         this->get_parameter_or<bool>("publish.scan_bodyframe_pub_en", scan_body_pub_en, true);
         this->get_parameter_or<bool>("publish.z_removal", z_removal, false);
         this->get_parameter_or<double>("publish.z_removal_min_z", z_removal_min_z, 0.05);
+        this->get_parameter_or<bool>("publish.scan_lidarframe_pub_en", scan_lidarframe_pub_en, false);
+        this->get_parameter_or<string>("publish.lidar_frame_id", lidar_frame_id, "hesai_lidar");
         this->get_parameter_or<int>("max_iteration", NUM_MAX_ITERATIONS, 4);
         this->get_parameter_or<string>("map_file_path", map_file_path, "");
         this->get_parameter_or<string>("common.lid_topic", lid_topic, "/lidar_points");
@@ -1236,6 +1253,7 @@ public:
         }
         pubLaserCloudFull_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
         pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
+        pubLaserCloudLidar_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_deskewed", 20);
         pubLaserCloudEffect_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
         pubLaserCloudMap_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/Laser_map", 20);
         pubOdomAftMapped_ = this->create_publisher<nav_msgs::msg::Odometry>("/Odometry", 20);
@@ -1610,6 +1628,7 @@ private:
             if (path_en)                                                  publish_path(pubPath_);
             if (!scan_is_low_quality && (scan_pub_en || pcd_save_en))     publish_frame_world(pubLaserCloudFull_);
             if (!scan_is_low_quality && scan_pub_en && scan_body_pub_en)  publish_frame_body(pubLaserCloudFull_body_);
+            if (!scan_is_low_quality && scan_lidarframe_pub_en)           publish_frame_lidar(pubLaserCloudLidar_);
             if (!scan_is_low_quality && effect_pub_en)                    publish_effect_world(pubLaserCloudEffect_);
             // if (map_pub_en) publish_map(pubLaserCloudMap_);
 
@@ -1696,6 +1715,7 @@ private:
 private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudFull_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudFull_body_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudLidar_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudEffect_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pubLaserCloudMap_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pubOdomAftMapped_;
